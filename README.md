@@ -1,2 +1,67 @@
 # lets-go-gaffer
+
 Go + RAG assistant for Fantasy Premier League: pgvector news retrieval, concurrent ingestion, and a constraint-validated squad optimizer.
+
+> **Status: early development.** Only the FPL API client exists so far. Everything under "Planned" below is not built yet.
+
+## Design principles
+
+- **The LLM never does math or rule checking.** Squad validation and optimization are plain, tested Go. The LLM only narrates results and retrieves news.
+- **Stdlib first.** Dependencies are added only when justified.
+- **Small interfaces, defined where used.** `FPLClient`, and later `Embedder` and `LLMClient`, so each can be faked in tests.
+- **Costs are integers.** Prices are stored in tenths of millions (`65` = £6.5m) as in the FPL API, so budget math never touches floats.
+
+## Planned architecture
+
+```text
+FPL API ──► ingest ──► Postgres (stats + pgvector embeddings)
+                            │
+news feeds ──► embed ───────┘
+                            │
+                        retrieval ◄── query
+                            │
+                         router ──► LLM (tool calls) ──► HTTP / SSE
+                            │
+                        optimizer  (pure Go, no LLM)
+```
+
+## Layout
+
+```text
+cmd/gaffer/        entry point
+internal/fpl/      FPL API client and types      (implemented)
+internal/db/       Postgres + pgvector           (planned)
+internal/ingest/   concurrent worker pool        (planned)
+internal/optimizer/ squad validation + optimizer (planned)
+internal/embed/    embedding interface           (planned)
+internal/retrieval/ vector search                (planned)
+internal/router/   LLM tool-calling router       (planned)
+internal/server/   HTTP API + SSE                (planned)
+```
+
+## Getting started
+
+Requires Go 1.23+.
+
+```bash
+go run ./cmd/gaffer/
+```
+
+This fetches the live `bootstrap-static` data from the FPL API and prints player, team, and gameweek counts plus the first player.
+
+## Development
+
+```bash
+go vet ./... && go test -race ./...
+```
+
+## Roadmap
+
+1. **Core data and optimizer:** hardened FPL client, Postgres + pgvector, worker-pool ingestion, `Validate(squad)`, greedy and DP optimizers
+2. **RAG and router:** embeddings, retrieval with recency and player filters, LLM interface with citations, tool-calling router, eval harness
+3. **Service:** HTTP API + SSE, Docker, structured logging, metrics
+4. **Deploy:** Helm, Terraform, CI, dashboards
+
+## License
+
+See [LICENSE](LICENSE).
