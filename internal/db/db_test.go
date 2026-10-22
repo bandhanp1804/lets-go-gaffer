@@ -237,6 +237,50 @@ func TestStore_UpsertHistory(t *testing.T) {
 	}
 }
 
+func TestStore_ListPlayersAndTeams(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+
+	// Empty database: empty results, not an error.
+	if ps, err := s.ListPlayers(ctx); err != nil || len(ps) != 0 {
+		t.Fatalf("empty ListPlayers = %v, %v; want none", ps, err)
+	}
+
+	pct := 50
+	doubtful := player(2, 100)
+	doubtful.ChanceOfPlayingNextRound = &pct
+	teams := []fpl.Team{{ID: 2, Name: "Brighton", ShortName: "BHA"}, {ID: 1, Name: "Arsenal", ShortName: "ARS"}}
+	if err := s.UpsertTeams(ctx, teams); err != nil {
+		t.Fatal(err)
+	}
+	// Inserted out of id order on purpose.
+	if err := s.UpsertPlayers(ctx, []fpl.Player{doubtful, player(1, 61)}); err != nil {
+		t.Fatal(err)
+	}
+
+	ps, err := s.ListPlayers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ps) != 2 || ps[0].ID != 1 || ps[1].ID != 2 {
+		t.Fatalf("players = %+v, want ids [1 2] in ascending order", ps)
+	}
+	if ps[0].NowCost != 61 || ps[0].Form != "6.0" || ps[0].Position != fpl.MID || ps[0].ChanceOfPlayingNextRound != nil {
+		t.Errorf("player 1 round trip lost data: %+v", ps[0])
+	}
+	if ps[1].ChanceOfPlayingNextRound == nil || *ps[1].ChanceOfPlayingNextRound != 50 {
+		t.Errorf("player 2 chance = %v, want 50", ps[1].ChanceOfPlayingNextRound)
+	}
+
+	ts, err := s.ListTeams(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ts) != 2 || ts[0].ShortName != "ARS" || ts[1].ShortName != "BHA" {
+		t.Errorf("teams = %+v, want ARS then BHA (by id)", ts)
+	}
+}
+
 func TestStore_EmptyUpsertsAreNoOps(t *testing.T) {
 	s, _ := newStore(t)
 	ctx := context.Background()

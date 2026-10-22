@@ -16,7 +16,7 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/ingest"
 )
 
-const usage = "usage: gaffer sync    (env: GAFFER_DSN required, GAFFER_MIGRATIONS default ./migrations)"
+const usage = "usage: gaffer sync | gaffer squad    (env: GAFFER_DSN required, GAFFER_MIGRATIONS default ./migrations)"
 
 func main() {
 	// Ctrl-C / SIGTERM cancels ctx; workers and the pool unwind before we exit.
@@ -31,10 +31,16 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) error {
-	if len(args) != 1 || args[0] != "sync" {
+	if len(args) != 1 {
 		return errors.New(usage)
 	}
-	return runSync(ctx)
+	switch args[0] {
+	case "sync":
+		return runSync(ctx)
+	case "squad":
+		return runSquad(ctx)
+	}
+	return errors.New(usage)
 }
 
 // runSync pulls the FPL season into Postgres.
