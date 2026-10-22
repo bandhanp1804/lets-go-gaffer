@@ -116,3 +116,44 @@ type Squad struct {
 	Captain     int   // player ID
 	ViceCaptain int   // player ID
 }
+
+// Entry is a manager's team as returned by /api/entry/{id}/.
+type Entry struct {
+	ID           int    `json:"id"`
+	Name         string `json:"name"` // the team name
+	FirstName    string `json:"player_first_name"`
+	LastName     string `json:"player_last_name"`
+	CurrentEvent int    `json:"current_event"` // latest gameweek with a visible squad; 0 before the first
+}
+
+// Pick is one of a manager's 15 players for a gameweek. Position 1-11 is the
+// starting XI in order, 12-15 the bench; Multiplier is 2 for the captain.
+type Pick struct {
+	Element       int      `json:"element"` // player id
+	Position      int      `json:"position"`
+	Multiplier    int      `json:"multiplier"`
+	IsCaptain     bool     `json:"is_captain"`
+	IsViceCaptain bool     `json:"is_vice_captain"`
+	ElementType   Position `json:"element_type"`
+}
+
+// EntryHistory summarises a manager's gameweek. Bank and Value are in tenths of £m.
+type EntryHistory struct {
+	Event              int `json:"event"`
+	Points             int `json:"points"`
+	TotalPoints        int `json:"total_points"`
+	OverallRank        int `json:"overall_rank"`
+	Bank               int `json:"bank"`
+	Value              int `json:"value"`
+	EventTransfers     int `json:"event_transfers"`
+	EventTransfersCost int `json:"event_transfers_cost"`
+	PointsOnBench      int `json:"points_on_bench"`
+}
+
+// Picks is a manager's squad for one gameweek, as of that gameweek's deadline,
+// from /api/entry/{id}/event/{gw}/picks/.
+type Picks struct {
+	ActiveChip   *string      `json:"active_chip"` // nil when no chip was played
+	EntryHistory EntryHistory `json:"entry_history"`
+	Picks        []Pick       `json:"picks"`
+}

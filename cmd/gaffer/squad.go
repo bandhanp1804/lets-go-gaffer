@@ -50,6 +50,16 @@ func formatPrice(tenths int) string {
 }
 
 func printSquad(w io.Writer, s fpl.Squad, teams []fpl.Team) {
+	printSquadTable(w, s, teams)
+	total := 0
+	for _, p := range s.Players {
+		total += p.NowCost
+	}
+	fmt.Fprintf(w, "\nSquad cost %s of %s\n", formatPrice(total), formatPrice(optimizer.Budget))
+}
+
+// printSquadTable prints the starting XI and bench with captaincy markers.
+func printSquadTable(w io.Writer, s fpl.Squad, teams []fpl.Team) {
 	short := make(map[int]string, len(teams))
 	for _, t := range teams {
 		short[t.ID] = t.ShortName
@@ -57,11 +67,6 @@ func printSquad(w io.Writer, s fpl.Squad, teams []fpl.Team) {
 	starting := make(map[int]bool, len(s.Starting))
 	for _, id := range s.Starting {
 		starting[id] = true
-	}
-
-	total := 0
-	for _, p := range s.Players {
-		total += p.NowCost
 	}
 
 	fmt.Fprintf(w, "%-4s %-16s %-4s %7s %6s  %s\n", "POS", "PLAYER", "TEAM", "PRICE", "FORM", "")
@@ -85,5 +90,4 @@ func printSquad(w io.Writer, s fpl.Squad, teams []fpl.Team) {
 				p.Position, p.WebName, short[p.TeamID], formatPrice(p.NowCost), p.Form, role)
 		}
 	}
-	fmt.Fprintf(w, "\nSquad cost %s of %s\n", formatPrice(total), formatPrice(optimizer.Budget))
 }

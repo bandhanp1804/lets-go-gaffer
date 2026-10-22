@@ -6,6 +6,7 @@ package optimizer
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -67,10 +68,19 @@ func (e *ValidationError) Error() string {
 	return "invalid squad: " + strings.Join(parts, "; ")
 }
 
-// Validate checks s against the FPL rules and returns a *ValidationError listing
-// every violation, or nil if the squad is legal. All checks are independent, so
-// one problem never hides another. It does not modify s.
-func Validate(s fpl.Squad) error {
+// NoBudgetLimit disables the budget rule in ValidateWithBudget.
+const NoBudgetLimit = math.MaxInt
+
+// Validate checks s against the FPL rules, with the standard £100.0m budget, and
+// returns a *ValidationError listing every violation, or nil if the squad is
+// legal. All checks are independent, so one problem never hides another. It does
+// not modify s.
+func Validate(s fpl.Squad) error { return ValidateWithBudget(s, Budget) }
+
+// ValidateWithBudget is Validate with a custom budget in tenths of £m. A squad
+// that already exists can be worth more than £100.0m once prices have risen, so
+// pass that manager's real funds, or NoBudgetLimit to skip the budget rule.
+func ValidateWithBudget(s fpl.Squad, budget int) error {
 	var vs []Violation
 	add := func(r Rule, format string, args ...any) {
 		vs = append(vs, Violation{Rule: r, Detail: fmt.Sprintf(format, args...)})
@@ -102,8 +112,8 @@ func Validate(s fpl.Squad) error {
 	}
 
 	// Budget, in tenths of millions: integers only.
-	if cost > Budget {
-		add(RuleBudget, "squad costs %d, budget is %d (tenths of £m); over by %d", cost, Budget, cost-Budget)
+	if cost > budget {
+		add(RuleBudget, "squad costs %d, budget is %d (tenths of £m); over by %d", cost, budget, cost-budget)
 	}
 
 	clubs := make([]int, 0, len(perClub))

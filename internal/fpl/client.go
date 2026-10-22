@@ -57,6 +57,28 @@ func (c *HTTPClient) FetchPlayerHistory(ctx context.Context, playerID int) ([]Pl
 	return resp.History, nil
 }
 
+// FetchEntry retrieves a manager's team: its name and the latest gameweek with a
+// visible squad. It is public, so no login is needed.
+func (c *HTTPClient) FetchEntry(ctx context.Context, teamID int) (*Entry, error) {
+	var e Entry
+	if err := c.get(ctx, fmt.Sprintf("/entry/%d/", teamID), &e); err != nil {
+		return nil, fmt.Errorf("fetch entry %d: %w", teamID, err)
+	}
+	return &e, nil
+}
+
+// FetchPicks retrieves a manager's 15 players, captaincy, bank and value for a
+// gameweek, as of that gameweek's deadline. A gameweek whose deadline has not
+// passed is a 404; transfers made since the last deadline need a logged-in
+// session and are not available here.
+func (c *HTTPClient) FetchPicks(ctx context.Context, teamID, gameweek int) (*Picks, error) {
+	var p Picks
+	if err := c.get(ctx, fmt.Sprintf("/entry/%d/event/%d/picks/", teamID, gameweek), &p); err != nil {
+		return nil, fmt.Errorf("fetch picks for team %d, gameweek %d: %w", teamID, gameweek, err)
+	}
+	return &p, nil
+}
+
 // get performs a GET request and JSON-decodes the response into dst.
 func (c *HTTPClient) get(ctx context.Context, path string, dst any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
