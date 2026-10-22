@@ -47,11 +47,11 @@ Requires Go 1.23+.
 
 ```bash
 docker compose -f deploy/docker/docker-compose.yml up -d --wait
-export GAFFER_DSN='postgres://gaffer:gaffer@localhost:5433/gaffer?sslmode=disable'
+cp .env.example .env   # then fill in API keys; .env is gitignored
 go run ./cmd/gaffer sync
 ```
 
-`sync` applies migrations, then pulls all teams, players, and per-gameweek history from the live FPL API into Postgres. A full run takes about a minute: 8 workers fetch concurrently, paced to 10 requests/second so the API isn't hammered. Ctrl-C cancels cleanly.
+`sync` applies migrations, then pulls all teams, players, and per-gameweek history from the live FPL API into Postgres. A full run takes about a minute: 8 workers fetch concurrently, paced to 10 requests/second so the API isn't hammered. Ctrl-C cancels cleanly. Configuration is read from `.env` (see `.env.example`); real environment variables take precedence.
 
 ```bash
 go run ./cmd/gaffer squad
