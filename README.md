@@ -105,10 +105,20 @@ It beats form in every one of the five gameweeks. Settings were tuned and then r
 
 ## Roadmap
 
-1. **Core data and optimizer:** hardened FPL client, Postgres + pgvector, worker-pool ingestion, `Validate(squad)`, greedy and DP optimizers
-2. **RAG and router:** embeddings, retrieval with recency and player filters, LLM interface with citations, tool-calling router, eval harness
-3. **Service:** HTTP API + SSE, Docker, structured logging, metrics
-4. **Deploy:** Helm, Terraform, CI, dashboards
+Done:
+- **Core data:** hardened FPL client, Postgres + pgvector, worker-pool ingestion, news ingestion and semantic search, your real squad, free-transfer and selling-price modelling.
+- **Decisions:** backtested expected-points model, exact squad optimizer, transfer and Wildcard suggestions.
+
+Planned, in order:
+1. **Lineup advisor** (`gaffer lineup`): the best starting XI, captain, vice-captain, and bench order from *your actual 15* for the upcoming gameweek, ranked by expected points. It uses the same projection model with a one-gameweek horizon (a lineup is picked for one match week, unlike a transfer), accounts for each player's fixture and chance of playing, and shows the close calls (for example "Palmer over Rogers by 0.2 xP") so a toss-up is visible as a toss-up.
+2. **LLM layer:** Claude behind a small interface, streaming, answers that must cite retrieved stories; a tool-calling router so Go computes (`get_my_team`, `search_news`, `build_squad`, `suggest_transfers`, `best_lineup`) and the model only narrates; an eval harness.
+3. **HTTP API and web UI:**
+   - A JSON API in Go on the standard library (`net/http`), bound to localhost, with graceful shutdown, request logging, and short caches for expensive endpoints. The CLI commands and the API share one service layer instead of duplicating logic.
+   - A **Next.js (React, TypeScript) UI** in `web/` that calls it through a Next.js rewrite, so there is no CORS and no keys in the browser. One frontend only: Next.js is React, so a second Angular app would mean building every screen twice.
+   - Screens: dashboard (gameweek, data freshness); **my team** on a pitch with availability flags; **best XI for the next gameweek**; **transfers and Wildcard** with the hit and selling prices shown; squad builder; players table with xP; news search with filters; model page with the backtest.
+   - Docker image, structured logging, metrics.
+4. **Deploy:** Helm, Terraform on Azure AKS (student credit), CI, dashboards.
+5. **Stretch:** Temporal to run the daily ingest as durable workflows.
 
 ## License
 
