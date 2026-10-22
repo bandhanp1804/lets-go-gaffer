@@ -36,6 +36,7 @@ internal/db/       Postgres + pgvector storage   (implemented)
 internal/ingest/   concurrent worker pool + sync (implemented)
 internal/optimizer/ squad rules, greedy baseline, exact optimizer (implemented)
 internal/projection/ expected-points model + backtest   (implemented)
+internal/lineup/   best XI, captain, bench, close calls (implemented)
 internal/transfers/ transfer search with free-transfer and hit costs (implemented)
 internal/myteam/   your squad, free transfers, selling prices (implemented)
 internal/embed/    Voyage AI client + offline test embedder (implemented)
@@ -62,13 +63,14 @@ go run ./cmd/gaffer sync
 go run ./cmd/gaffer news    # needs VOYAGE_API_KEY in .env
 go run ./cmd/gaffer search -player Saka "when will he be back"
 go run ./cmd/gaffer team 12345      # your FPL team id, or set GAFFER_TEAM_ID in .env
+go run ./cmd/gaffer lineup         # best XI, captain and bench for the next gameweek
 go run ./cmd/gaffer transfers      # best moves for your real squad this week
 go run ./cmd/gaffer transfers -wildcard
 go run ./cmd/gaffer squad
 go run ./cmd/gaffer backtest        # how well does the scoring model predict past gameweeks?
 ```
 
-`news` pulls BBC Sport and Sky Sports football RSS plus FPL's official per-player injury/availability notes, links stories to players, embeds anything new with Voyage AI, and stores it in pgvector. Stored stories are never embedded twice, and progress is saved in chunks, so an interrupted or rate-limited run resumes where it stopped. `team` pulls a manager's public squad (as of the last gameweek deadline; transfers made since need a login and are not read), checks it against the FPL rules, and flags players with injury or availability news. Find your team id in the address bar of the Points page on the FPL site (`.../entry/<TEAM_ID>/event/<N>`). `transfers` suggests this week's best moves for your real squad under FPL's actual transfer rules: one free transfer per gameweek (unused ones bank, up to five), each extra transfer costs 4 points, and the money available is what your players *sell* for, not their market price. Free transfers are replayed from your season history (and cross-checked against every hit FPL applied); selling prices are computed from FPL's rule using what you actually paid. `-wildcard` plans a Wildcard or Free Hit with no limit and no hit. `-free N` overrides the free-transfer count, `-prices` prints each player's computed selling price so you can check it on the FPL site. Players are ranked by **expected points** (see below), shown as `xP` next to form so the reasoning is visible. `-wildcard` solves the rebuild exactly (dynamic programming over budget with branch-and-bound on the club limit), where a kept player costs his selling price. `search` ranks stored stories by semantic similarity (`-player NAME`, `-days N`, `-k N`), so retrieval quality can be judged directly before any LLM is involved. FPL's player notes are treated as state: only a player's current note is returned, so a recovered player is never reported as injured. Accounts without a payment method are limited to 3 requests/minute (`VOYAGE_RPM`), so a first run takes a few minutes.
+`news` pulls BBC Sport and Sky Sports football RSS plus FPL's official per-player injury/availability notes, links stories to players, embeds anything new with Voyage AI, and stores it in pgvector. Stored stories are never embedded twice, and progress is saved in chunks, so an interrupted or rate-limited run resumes where it stopped. `team` pulls a manager's public squad (as of the last gameweek deadline; transfers made since need a login and are not read), checks it against the FPL rules, and flags players with injury or availability news. Find your team id in the address bar of the Points page on the FPL site (`.../entry/<TEAM_ID>/event/<N>`). `lineup` picks the best starting XI from your real 15 for the upcoming gameweek by expected points in that gameweek alone (a lineup is chosen for one match week, unlike a transfer), with captain, vice-captain, bench order, each player's opponent and difficulty, the cost of every other formation, and the changes from the lineup you set at the last deadline. It reports **close calls**: a bench player 0.1 xP behind a starter is a toss-up and is shown as one, and a near tie for the captain's armband (whose points count twice) is called out explicitly. It is exact, proven against enumeration of every legal XI. `transfers` suggests this week's best moves for your real squad under FPL's actual transfer rules: one free transfer per gameweek (unused ones bank, up to five), each extra transfer costs 4 points, and the money available is what your players *sell* for, not their market price. Free transfers are replayed from your season history (and cross-checked against every hit FPL applied); selling prices are computed from FPL's rule using what you actually paid. `-wildcard` plans a Wildcard or Free Hit with no limit and no hit. `-free N` overrides the free-transfer count, `-prices` prints each player's computed selling price so you can check it on the FPL site. Players are ranked by **expected points** (see below), shown as `xP` next to form so the reasoning is visible. `-wildcard` solves the rebuild exactly (dynamic programming over budget with branch-and-bound on the club limit), where a kept player costs his selling price. `search` ranks stored stories by semantic similarity (`-player NAME`, `-days N`, `-k N`), so retrieval quality can be judged directly before any LLM is involved. FPL's player notes are treated as state: only a player's current note is returned, so a recovered player is never reported as injured. Accounts without a payment method are limited to 3 requests/minute (`VOYAGE_RPM`), so a first run takes a few minutes.
 
 `squad` builds the best legal squad from the stored players: it respects the £100.0m budget, the 3-per-club limit, and the position split, then picks the highest-scoring starting XI and a captain. Squads are validated in plain Go; the LLM never checks rules.
 
@@ -107,18 +109,17 @@ It beats form in every one of the five gameweeks. Settings were tuned and then r
 
 Done:
 - **Core data:** hardened FPL client, Postgres + pgvector, worker-pool ingestion, news ingestion and semantic search, your real squad, free-transfer and selling-price modelling.
-- **Decisions:** backtested expected-points model, exact squad optimizer, transfer and Wildcard suggestions.
+- **Decisions:** backtested expected-points model, exact squad optimizer, transfer and Wildcard suggestions, and the **lineup advisor** (best XI, captain, bench order, close calls).
 
 Planned, in order:
-1. **Lineup advisor** (`gaffer lineup`): the best starting XI, captain, vice-captain, and bench order from *your actual 15* for the upcoming gameweek, ranked by expected points. It uses the same projection model with a one-gameweek horizon (a lineup is picked for one match week, unlike a transfer), accounts for each player's fixture and chance of playing, and shows the close calls (for example "Palmer over Rogers by 0.2 xP") so a toss-up is visible as a toss-up.
-2. **LLM layer:** Claude behind a small interface, streaming, answers that must cite retrieved stories; a tool-calling router so Go computes (`get_my_team`, `search_news`, `build_squad`, `suggest_transfers`, `best_lineup`) and the model only narrates; an eval harness.
-3. **HTTP API and web UI:**
+1. **LLM layer:** Claude behind a small interface, streaming, answers that must cite retrieved stories; a tool-calling router so Go computes (`get_my_team`, `search_news`, `build_squad`, `suggest_transfers`, `best_lineup`) and the model only narrates; an eval harness.
+2. **HTTP API and web UI:**
    - A JSON API in Go on the standard library (`net/http`), bound to localhost, with graceful shutdown, request logging, and short caches for expensive endpoints. The CLI commands and the API share one service layer instead of duplicating logic.
    - A **Next.js (React, TypeScript) UI** in `web/` that calls it through a Next.js rewrite, so there is no CORS and no keys in the browser. One frontend only: Next.js is React, so a second Angular app would mean building every screen twice.
    - Screens: dashboard (gameweek, data freshness); **my team** on a pitch with availability flags; **best XI for the next gameweek**; **transfers and Wildcard** with the hit and selling prices shown; squad builder; players table with xP; news search with filters; model page with the backtest.
    - Docker image, structured logging, metrics.
-4. **Deploy:** Helm, Terraform on Azure AKS (student credit), CI, dashboards.
-5. **Stretch:** Temporal to run the daily ingest as durable workflows.
+3. **Deploy:** Helm, Terraform on Azure AKS (student credit), CI, dashboards.
+4. **Stretch:** Temporal to run the daily ingest as durable workflows.
 
 ## License
 

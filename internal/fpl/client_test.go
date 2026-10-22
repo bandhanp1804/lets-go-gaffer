@@ -358,3 +358,27 @@ func TestFixtures_DifficultiesForATeamInAGameweek(t *testing.T) {
 		})
 	}
 }
+
+func TestFixtures_OpponentsForATeamInAGameweek(t *testing.T) {
+	fs := fpl.Fixtures{
+		{ID: 1, Event: 8, HomeTeam: 7, AwayTeam: 3, HomeDifficulty: 3, AwayDifficulty: 4},
+		{ID: 2, Event: 8, HomeTeam: 1, AwayTeam: 3, HomeDifficulty: 2, AwayDifficulty: 5}, // team 3 plays twice
+		{ID: 3, Event: 9, HomeTeam: 3, AwayTeam: 1, HomeDifficulty: 3, AwayDifficulty: 3},
+	}
+
+	got := fs.Opponents(3, 8)
+
+	want := []fpl.Opponent{
+		{Team: 7, Home: false, Difficulty: 4},
+		{Team: 1, Home: false, Difficulty: 5},
+	}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("away side = %+v, want %+v", got, want)
+	}
+	if home := fs.Opponents(7, 8); len(home) != 1 || home[0] != (fpl.Opponent{Team: 3, Home: true, Difficulty: 3}) {
+		t.Errorf("home side = %+v, want the away team marked as the opponent, at home", home)
+	}
+	if none := fs.Opponents(7, 9); len(none) != 0 {
+		t.Errorf("a blank gameweek gave %+v", none)
+	}
+}
