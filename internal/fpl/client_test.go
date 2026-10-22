@@ -145,3 +145,93 @@ func TestHTTPClient_Errors(t *testing.T) {
 		})
 	}
 }
+
+// entryFixture and picksFixture follow the shape of the live endpoints.
+const entryFixture = `{
+  "id": 4321, "name": "Gaffer FC", "player_first_name": "Pat", "player_last_name": "Doe",
+  "current_event": 7, "last_deadline_bank": 1, "last_deadline_value": 1018
+}`
+
+const picksFixture = `{
+  "active_chip": "wildcard",
+  "automatic_subs": [],
+  "entry_history": {"event": 7, "points": 69, "total_points": 463, "rank": 2550245, "overall_rank": 1757258,
+                    "bank": 1, "value": 1018, "event_transfers": 2, "event_transfers_cost": 4, "points_on_bench": 6},
+  "picks": [
+    {"element": 82, "position": 1, "multiplier": 1, "is_captain": false, "is_vice_captain": false, "element_type": 1},
+    {"element": 8, "position": 2, "multiplier": 2, "is_captain": true, "is_vice_captain": false, "element_type": 2},
+    {"element": 114, "position": 3, "multiplier": 1, "is_captain": false, "is_vice_captain": true, "element_type": 2}
+  ]
+}`
+
+func TestHTTPClient_FetchEntry(t *testing.T) {
+	c, hit := newServer(t, "/entry/4321/", 200, entryFixture)
+
+	e, err := c.FetchEntry(context.Background(), 4321)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(*hit) != 1 || (*hit)[0] != "/entry/4321/" {
+		t.Errorf("paths hit = %v", *hit)
+	}
+	want := fpl.Entry{ID: 4321, Name: "Gaffer FC", FirstName: "Pat", LastName: "Doe", CurrentEvent: 7}
+	if *e != want {
+		t.Errorf("entry = %+v, want %+v", *e, want)
+	}
+}
+
+func TestHTTPClient_FetchPicks(t *testing.T) {
+	c, hit := newServer(t, "/entry/4321/event/7/picks/", 200, picksFixture)
+
+	p, err := c.FetchPicks(context.Background(), 4321, 7)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(*hit) != 1 || (*hit)[0] != "/entry/4321/event/7/picks/" {
+		t.Errorf("paths hit = %v", *hit)
+	}
+	if p.ActiveChip == nil || *p.ActiveChip != "wildcard" {
+		t.Errorf("chip = %v, want wildcard", p.ActiveChip)
+	}
+	h := p.EntryHistory
+	if h.Event != 7 || h.Points != 69 || h.TotalPoints != 463 || h.OverallRank != 1757258 ||
+		h.Bank != 1 || h.Value != 1018 || h.EventTransfers != 2 || h.EventTransfersCost != 4 || h.PointsOnBench != 6 {
+		t.Errorf("entry history = %+v", h)
+	}
+	if len(p.Picks) != 3 {
+		t.Fatalf("picks = %d, want 3", len(p.Picks))
+	}
+	want := fpl.Pick{Element: 8, Position: 2, Multiplier: 2, IsCaptain: true, ElementType: fpl.DEF}
+	if p.Picks[1] != want || !p.Picks[2].IsViceCaptain {
+		t.Errorf("picks[1] = %+v (want %+v), picks[2].vice = %v", p.Picks[1], want, p.Picks[2].IsViceCaptain)
+	}
+}
+
+func TestHTTPClient_NoActiveChipIsNil(t *testing.T) {
+	c, _ := newServer(t, "/entry/1/event/1/picks/", 200, `{"active_chip": null, "entry_history": {}, "picks": []}`)
+
+	p, err := c.FetchPicks(context.Background(), 1, 1)
+
+	if err != nil || p.ActiveChip != nil {
+		t.Errorf("chip = %v, err = %v; want nil chip", p.ActiveChip, err)
+	}
+}
+
+func TestHTTPClient_EntryAndPicksErrors(t *testing.T) {
+	c, _ := newServer(t, "/something-else/", 200, `{}`) // every real path 404s
+
+	_, entryErr := c.FetchEntry(context.Background(), 99)
+	_, picksErr := c.FetchPicks(context.Background(), 99, 8)
+
+	for name, err := range map[string]error{"entry": entryErr, "picks": picksErr} {
+		var se *httpx.StatusError
+		if !errors.As(err, &se) || se.StatusCode != 404 {
+			t.Errorf("%s err = %v, want *httpx.StatusError{404}", name, err)
+		}
+	}
+	if !strings.Contains(entryErr.Error(), "99") || !strings.Contains(picksErr.Error(), "99") {
+		t.Errorf("errors should name the team: %q / %q", entryErr, picksErr)
+	}
+}

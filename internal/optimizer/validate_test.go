@@ -174,3 +174,32 @@ func TestValidate_DoesNotMutateTheSquad(t *testing.T) {
 		t.Error("Validate modified its input")
 	}
 }
+
+func TestValidateWithBudget(t *testing.T) {
+	// A real squad's price can exceed the £100.0m starting budget once prices rise,
+	// so a pulled squad must be checkable against its owner's actual funds.
+	rich := validSquad()
+	for i := range rich.Players {
+		rich.Players[i].NowCost = 68 // 15 x 68 = 1020
+	}
+
+	if err := optimizer.Validate(rich); err == nil {
+		t.Fatal("Validate should reject 1020 against the fixed 1000 budget")
+	}
+	if err := optimizer.ValidateWithBudget(rich, 1020); err != nil {
+		t.Errorf("exactly at a 1020 budget: %v", err)
+	}
+	if err := optimizer.ValidateWithBudget(rich, 1019); err == nil {
+		t.Error("one tenth over a 1019 budget should fail")
+	}
+	if err := optimizer.ValidateWithBudget(rich, optimizer.NoBudgetLimit); err != nil {
+		t.Errorf("no budget limit: %v", err)
+	}
+
+	// Skipping the budget never skips the other rules.
+	rich.Players[14].TeamID = 1 // a fourth player from club 1
+	err := optimizer.ValidateWithBudget(rich, optimizer.NoBudgetLimit)
+	if got := rulesOf(t, err); !slices.Equal(got, []optimizer.Rule{optimizer.RuleClubLimit}) {
+		t.Errorf("rules = %v, want only the club limit", got)
+	}
+}
