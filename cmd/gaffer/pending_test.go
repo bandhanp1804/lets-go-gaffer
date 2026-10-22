@@ -54,13 +54,20 @@ func TestApplyPending(t *testing.T) {
 	market = append(market, fpl.Player{ID: 300, WebName: "Newbie", TeamID: 9, Position: fpl.FWD, NowCost: 60, Status: "a"})
 	var b strings.Builder
 
-	t.Run("no swaps changes nothing and prints nothing", func(t *testing.T) {
+	t.Run("no swaps changes nothing but warns the squad may be stale", func(t *testing.T) {
 		b.Reset()
 
 		got, changes, err := applyPending(&b, team, market, nil)
 
-		if err != nil || len(changes) != 0 || got.Squad.Players[0].ID != team.Squad.Players[0].ID || b.Len() != 0 {
-			t.Errorf("err=%v changes=%d output=%q", err, len(changes), b.String())
+		if err != nil || len(changes) != 0 || got.Squad.Players[0].ID != team.Squad.Players[0].ID {
+			t.Fatalf("err=%v changes=%d", err, len(changes))
+		}
+		// FPL hides transfers made after the deadline; silence would pass the old squad off as current.
+		out := b.String()
+		for _, want := range []string{"GW7 deadline", "transfers made since", "-swap"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("notice missing %q: %q", want, out)
+			}
 		}
 	})
 	t.Run("a swap is applied and announced as user-supplied", func(t *testing.T) {
@@ -75,6 +82,9 @@ func TestApplyPending(t *testing.T) {
 			t.Errorf("the new player is not in the sold player's slot: %v", got.Squad.Players[14])
 		}
 		out := b.String()
+		if strings.Contains(out, "GW7 deadline") {
+			t.Errorf("once swaps are given the stale-squad warning no longer applies: %q", out)
+		}
 		for _, want := range []string{"PlayerO → Newbie", "pending", "not read from FPL"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("notice missing %q: %q", want, out)
