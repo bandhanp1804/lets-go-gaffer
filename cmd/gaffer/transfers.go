@@ -14,7 +14,7 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/db"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/myteam"
-	"github.com/bandhanpatel/lets-go-gaffer/internal/optimizer"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/projection"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/transfers"
 )
 
@@ -102,6 +102,20 @@ func runTransfers(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w (run `gaffer sync` so starting prices are stored)", err)
 	}
 
+	// Rank by expected points over the horizon, not raw form (see `gaffer backtest`).
+	history, err := store.ListHistory(ctx)
+	if err != nil {
+		return err
+	}
+	fixtures, err := client.FetchFixtures(ctx)
+	if err != nil {
+		return err
+	}
+	model, err := projection.New(players, history, fixtures, projection.Default, team.Event+1)
+	if err != nil {
+		return err
+	}
+
 	view := transfersView{Team: team, Teams: teams, Fin: fin, Horizon: *horizon, Wildcard: *wildcard, ShowPrices: *prices}
 	view.Free, view.FreeSource = fin.Free.Next, "replayed from your history"
 	if *free >= 0 {
@@ -110,7 +124,7 @@ func runTransfers(ctx context.Context, args []string) error {
 
 	in := transfers.Input{Squad: team.Squad.Players, Sell: fin.Sell, Bank: fin.Bank, Pool: players}
 	opts := transfers.Options{
-		Score: optimizer.AvailabilityScore, FreeTransfers: view.Free, MaxTransfers: *maxMoves,
+		Score: model.Score(*horizon), FreeTransfers: view.Free, MaxTransfers: *maxMoves,
 		Horizon: *horizon, TopN: *topN,
 	}
 	if *wildcard {
@@ -141,7 +155,9 @@ func printTransfers(w io.Writer, v transfersView) {
 		fmt.Fprintf(w, "Free transfers: %d (%s) · bank %s · horizon %d gameweeks\n",
 			v.Free, v.FreeSource, formatPrice(v.Fin.Bank), v.Horizon)
 	}
-	fmt.Fprintln(w, "Score: recent form, discounted by the chance of playing (a rough proxy for expected points)")
+	fmt.Fprintln(w, "Score: expected points per gameweek (season record weighted to recent form, shrunk toward the position norm,")
+	fmt.Fprintln(w, "scaled by fixture difficulty and the chance of playing)")
+	fmt.Fprintln(w, "xP is expected points per gameweek over the horizon: the number moves are ranked by, which can differ a lot from form.")
 	fmt.Fprintln(w, "Selling prices are computed from FPL's rule (you keep half of any price rise, rounded down);")
 	fmt.Fprintln(w, "check them on the FPL transfers page before relying on a move.")
 	if m := v.Fin.Free.Mismatches; len(m) > 0 {
@@ -179,10 +195,10 @@ func printTransfers(w io.Writer, v transfersView) {
 				i+1, s.Net, s.Transfers, noun, hit, s.ScoreGain, v.Horizon)
 		}
 		for _, m := range s.Moves {
-			fmt.Fprintf(w, "   OUT %-13s %-4s %-3s sells %-7s form %s\n",
-				m.Out.WebName, short[m.Out.TeamID], m.Out.Position, formatPrice(m.SellPrice), m.Out.Form)
-			fmt.Fprintf(w, "   IN  %-13s %-4s %-3s costs %-7s form %s\n",
-				m.In.WebName, short[m.In.TeamID], m.In.Position, formatPrice(m.In.NowCost), m.In.Form)
+			fmt.Fprintf(w, "   OUT %-13s %-4s %-3s sells %-7s xP %4.1f  (form %s)\n",
+				m.Out.WebName, short[m.Out.TeamID], m.Out.Position, formatPrice(m.SellPrice), m.OutScore, m.Out.Form)
+			fmt.Fprintf(w, "   IN  %-13s %-4s %-3s costs %-7s xP %4.1f  (form %s)\n",
+				m.In.WebName, short[m.In.TeamID], m.In.Position, formatPrice(m.In.NowCost), m.InScore, m.In.Form)
 		}
 		fmt.Fprintf(w, "   bank after %s\n\n", formatPrice(s.BankAfter))
 	}

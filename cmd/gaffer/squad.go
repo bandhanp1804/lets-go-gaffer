@@ -5,13 +5,19 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/db"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/optimizer"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/projection"
 )
 
-// runSquad builds the best squad from the stored players and prints it.
+// squadHorizon is how many gameweeks ahead the squad builder looks.
+const squadHorizon = 4
+
+// runSquad builds the best squad from scratch under the £100.0m budget and the
+// FPL rules, ranking players by expected points over the next few gameweeks.
 func runSquad(ctx context.Context) error {
 	dsn := os.Getenv("GAFFER_DSN")
 	if dsn == "" {
@@ -32,15 +38,46 @@ func runSquad(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if len(players) == 0 {
-		return fmt.Errorf("no players stored; run `gaffer sync` first")
+	history, err := store.ListHistory(ctx)
+	if err != nil {
+		return err
 	}
+	if len(players) == 0 || len(history) == 0 {
+		return fmt.Errorf("no players or history stored; run `gaffer sync` first")
+	}
+	fixtures, err := fpl.NewHTTPClient(politeClient(100 * time.Millisecond)).FetchFixtures(ctx)
+	if err != nil {
+		return err
+	}
+	next := 1
+	for _, h := range history {
+		next = max(next, h.GameweekID+1)
+	}
+	model, err := projection.New(players, history, fixtures, projection.Default, next)
+	if err != nil {
+		return err
+	}
+	score := model.Score(squadHorizon)
 
-	squad, err := optimizer.Greedy(players, optimizer.Options{})
+	var cands []optimizer.Candidate
+	for _, p := range players {
+		if optimizer.Available(p) {
+			cands = append(cands, optimizer.Candidate{Player: p, Cost: p.NowCost, Score: score(p)})
+		}
+	}
+	best, err := optimizer.BestSquad(cands, optimizer.Budget)
 	if err != nil {
 		return fmt.Errorf("build squad: %w", err)
 	}
-	printSquad(os.Stdout, squad, teams)
+
+	fmt.Printf("Best squad for GW%d (expected points over the next %d gameweeks)\n\n", next, squadHorizon)
+	printSquad(os.Stdout, best.Squad, teams)
+	fmt.Printf("\nExpected points per gameweek: %.1f", best.Value)
+	if greedy, gerr := optimizer.Greedy(players, optimizer.Options{Score: score}); gerr == nil {
+		g := optimizer.TeamValue(greedy.Players, score)
+		fmt.Printf("  (the greedy baseline finds %.1f: exact is %+.1f better)", g, best.Value-g)
+	}
+	fmt.Println()
 	return nil
 }
 

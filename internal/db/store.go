@@ -236,3 +236,30 @@ func (s *Store) StartingPrices(ctx context.Context, playerIDs []int) (map[int]in
 	}
 	return out, nil
 }
+
+// ListHistory returns every stored player-gameweek row, ordered by player, then
+// gameweek, then fixture (a double gameweek has two rows for one player).
+func (s *Store) ListHistory(ctx context.Context) ([]fpl.PlayerHistory, error) {
+	rows, err := s.pool.Query(ctx, `SELECT player_id, gameweek, fixture, total_points, minutes,
+			goals_scored, assists, clean_sheets, yellow_cards, red_cards, value
+		FROM player_history ORDER BY player_id, gameweek, fixture`)
+	if err != nil {
+		return nil, fmt.Errorf("list history: %w", err)
+	}
+	defer rows.Close()
+
+	var out []fpl.PlayerHistory
+	for rows.Next() {
+		var h fpl.PlayerHistory
+		err := rows.Scan(&h.PlayerID, &h.GameweekID, &h.Fixture, &h.TotalPoints, &h.Minutes,
+			&h.GoalsScored, &h.Assists, &h.CleanSheets, &h.YellowCards, &h.RedCards, &h.Value)
+		if err != nil {
+			return nil, fmt.Errorf("scan history: %w", err)
+		}
+		out = append(out, h)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list history: %w", err)
+	}
+	return out, nil
+}

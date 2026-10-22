@@ -264,25 +264,28 @@ func pickLineup(picked []fpl.Player, scores map[int]float64) (fpl.Squad, float64
 	return squad, total, true
 }
 
-// AvailabilityScore is form discounted by the chance of playing: a fit player
-// scores his form, a 50% doubt half of it, and an injured, suspended, or
-// unavailable player nothing. Form alone is backward-looking and blind to the
-// fact that a hurt player will not score, which matters most when deciding
-// whom to sell.
-func AvailabilityScore(p fpl.Player) float64 {
-	form := FormScore(p)
+// AvailabilityFactor is the share of a normal gameweek a player is expected to
+// contribute: 1 for a fit player, FPL's stated chance of playing for a doubt (a
+// coin flip when it gives none), and 0 for anyone injured, suspended, or
+// unavailable.
+func AvailabilityFactor(p fpl.Player) float64 {
 	switch p.Status {
 	case "a":
 		// fit, unless FPL has put a chance on it
 	case "d":
 		if p.ChanceOfPlayingNextRound == nil {
-			return form * 0.5
+			return 0.5
 		}
 	default:
 		return 0
 	}
 	if p.ChanceOfPlayingNextRound != nil {
-		return form * float64(*p.ChanceOfPlayingNextRound) / 100
+		return float64(*p.ChanceOfPlayingNextRound) / 100
 	}
-	return form
+	return 1
 }
+
+// AvailabilityScore is form discounted by AvailabilityFactor. Form alone is
+// backward-looking and blind to the fact that a hurt player will not score, which
+// matters most when deciding whom to sell.
+func AvailabilityScore(p fpl.Player) float64 { return FormScore(p) * AvailabilityFactor(p) }

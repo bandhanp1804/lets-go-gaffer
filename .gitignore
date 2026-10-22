@@ -31,5 +31,5 @@ go.work.sum
 !.env.example
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/

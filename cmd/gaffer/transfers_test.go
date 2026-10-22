@@ -27,7 +27,7 @@ func transferFixture() transfersView {
 		Fin:  myteam.Finances{Bank: 2, Free: myteam.FreeTransferState{Next: 1}, Buy: buy, Sell: sell},
 		Free: 1, FreeSource: "replayed from your history",
 		Suggestions: []transfers.Suggestion{{
-			Moves:     []transfers.Move{{Out: team.Squad.Players[2], In: in, SellPrice: 70}},
+			Moves:     []transfers.Move{{Out: team.Squad.Players[2], In: in, SellPrice: 70, OutScore: 1.2, InScore: 3.4}},
 			Transfers: 1, Hit: 0, CostChange: 2, BankAfter: 0, ScoreGain: 1.9, Net: 7.6,
 		}},
 	}
@@ -41,7 +41,7 @@ func TestPrintTransfers_ShowsTheMoveItsMoneyAndItsWorth(t *testing.T) {
 	out := b.String()
 	for _, want := range []string{
 		"Gaffer FC", "Free transfers: 1", "replayed from your history", "bank £0.2m", "4 gameweeks",
-		"OUT Hughes", "sells £7.0m", "IN  Foden", "£7.2m", "bank after £0.0m",
+		"OUT Hughes", "sells £7.0m", "xP  1.2", "IN  Foden", "£7.2m", "xP  3.4", "bank after £0.0m",
 		"+7.6 net", "1 transfer, no hit", "+1.9 a gameweek",
 	} {
 		if !strings.Contains(out, want) {

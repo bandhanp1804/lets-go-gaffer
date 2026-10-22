@@ -9,7 +9,6 @@ package transfers
 import (
 	"errors"
 	"fmt"
-	"math"
 	"sort"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
@@ -22,16 +21,14 @@ const (
 	// MaxBankedFreeTransfers is how many unused free transfers can be saved
 	// (FPL 2026/27: five; it was two in earlier seasons).
 	MaxBankedFreeTransfers = 5
-	// BenchWeight is how much a bench player's score counts next to a starter's:
-	// bench players only score when a starter does not play.
-	BenchWeight = 0.1
+	// BenchWeight is how much a bench player's score counts next to a starter's.
+	BenchWeight = optimizer.BenchWeight
 
 	defaultMaxTransfers = 2
 	defaultTopN         = 5
 	defaultCandidates   = 30
 	squadSize           = 15
 	maxPerClub          = 3
-	maxWildcardRounds   = 30
 	epsilon             = 1e-9
 )
 
@@ -73,7 +70,9 @@ type Options struct {
 type Move struct {
 	Out       fpl.Player
 	In        fpl.Player
-	SellPrice int // what Out sells for
+	SellPrice int     // what Out sells for
+	OutScore  float64 // the score the search ranked Out by
+	InScore   float64 // the score the search ranked In by
 }
 
 // Suggestion is a set of moves and what they are worth.
@@ -91,23 +90,7 @@ type Suggestion struct {
 // TeamScore is how much a squad is expected to score in a gameweek: its best
 // starting XI with the captain counted twice, plus a small share of the bench.
 func TeamScore(players []fpl.Player, score func(fpl.Player) float64) float64 {
-	squad, total, ok := optimizer.Lineup(players, score)
-	if !ok {
-		return math.Inf(-1)
-	}
-	var all, xi float64
-	started := map[int]bool{}
-	for _, id := range squad.Starting {
-		started[id] = true
-	}
-	for _, p := range players {
-		s := score(p)
-		all += s
-		if started[p.ID] {
-			xi += s
-		}
-	}
-	return total + BenchWeight*(all-xi)
+	return optimizer.TeamValue(players, score)
 }
 
 // Suggest ranks the best transfer plans of up to MaxTransfers moves, best first.
@@ -151,50 +134,42 @@ func Suggest(in Input, o Options) ([]Suggestion, error) {
 }
 
 // Wildcard rebuilds the squad with no limit on transfers and no hit, as a
-// Wildcard (or Free Hit) allows. It starts from the current squad and keeps
-// applying the best available improvement until none remains, so it never makes
-// a change that does not help and never overspends. That is a local search, not
-// a proof of optimality.
+// Wildcard (or Free Hit) allows, and returns the best squad the money can buy.
+//
+// The funds are the bank plus what the whole squad would sell for. A player kept
+// costs his selling price, not his market price; anyone new costs the market
+// price. The search is exact (see optimizer.BestSquad), so unlike a step-by-step
+// improvement it does not stall with money unspent.
 func Wildcard(in Input, o Options) (Suggestion, error) {
 	s, err := newSearch(in, o)
 	if err != nil {
 		return Suggestion{}, err
 	}
-	squad := append([]fpl.Player(nil), in.Squad...)
-	sell := make(map[int]int, len(in.Sell))
-	for k, v := range in.Sell {
-		sell[k] = v
-	}
-	bank := in.Bank
-	base := s.teamScore(squad)
-	cur := base
 
-	for round := 0; round < maxWildcardRounds; round++ {
-		var best *candidate
-		s.enumerate(squad, sell, bank, defaultMaxTransfers, func(c candidate) {
-			if c.score-cur <= epsilon {
-				return
-			}
-			if best == nil || c.score > best.score+epsilon ||
-				(math.Abs(c.score-best.score) <= epsilon && lessCandidate(squad, c, *best)) {
-				cp := c
-				best = &cp
-			}
-		})
-		if best == nil {
-			break
+	funds := in.Bank
+	var cands []optimizer.Candidate
+	owned := make(map[int]bool, squadSize)
+	for _, p := range in.Squad {
+		owned[p.ID] = true
+		funds += in.Sell[p.ID]
+		cands = append(cands, optimizer.Candidate{Player: p, Cost: in.Sell[p.ID], Score: s.score(p)})
+	}
+	eligible := o.Eligible
+	if eligible == nil {
+		eligible = optimizer.Available
+	}
+	for _, p := range in.Pool {
+		if !owned[p.ID] && eligible(p) {
+			cands = append(cands, optimizer.Candidate{Player: p, Cost: p.NowCost, Score: s.score(p)})
 		}
-		for k, idx := range best.outs {
-			bank += sell[squad[idx].ID]
-			in := best.ins[k]
-			bank -= in.NowCost
-			sell[in.ID] = in.NowCost // bought today at market price: no profit to share yet
-			squad[idx] = in
-		}
-		cur = best.score
 	}
 
-	return s.diff(in, squad, bank, base, cur), nil
+	best, err := optimizer.BestSquad(cands, funds)
+	if err != nil {
+		return Suggestion{}, fmt.Errorf("transfers: wildcard: %w", err)
+	}
+	base := s.teamScore(in.Squad)
+	return s.diff(in, best.Squad.Players, funds-best.Cost, base, best.Value), nil
 }
 
 // candidate is one set of simultaneous swaps found by the search.
@@ -378,7 +353,10 @@ func (s *search) suggestion(in Input, c candidate, base float64, hit int, net fl
 	moves := make([]Move, len(c.outs))
 	bought, sold := 0, 0
 	for k, i := range c.outs {
-		moves[k] = Move{Out: in.Squad[i], In: c.ins[k], SellPrice: in.Sell[in.Squad[i].ID]}
+		moves[k] = Move{
+			Out: in.Squad[i], In: c.ins[k], SellPrice: in.Sell[in.Squad[i].ID],
+			OutScore: s.score(in.Squad[i]), InScore: s.score(c.ins[k]),
+		}
 		next[i] = c.ins[k]
 		bought += c.ins[k].NowCost
 		sold += moves[k].SellPrice
@@ -420,7 +398,10 @@ func (s *search) diff(in Input, final []fpl.Player, bank int, base, score float6
 		sort.Slice(gone, func(i, j int) bool { return gone[i].ID < gone[j].ID })
 		sort.Slice(came, func(i, j int) bool { return came[i].ID < came[j].ID })
 		for k := range gone {
-			moves = append(moves, Move{Out: gone[k], In: came[k], SellPrice: in.Sell[gone[k].ID]})
+			moves = append(moves, Move{
+				Out: gone[k], In: came[k], SellPrice: in.Sell[gone[k].ID],
+				OutScore: s.score(gone[k]), InScore: s.score(came[k]),
+			})
 			bought += came[k].NowCost
 			sold += in.Sell[gone[k].ID]
 		}
@@ -488,19 +469,4 @@ func compareIDs(a, b []int) int {
 		}
 	}
 	return len(a) - len(b)
-}
-
-// lessCandidate breaks score ties between candidates deterministically.
-func lessCandidate(squad []fpl.Player, a, b candidate) bool {
-	key := func(c candidate) []int {
-		ids := make([]int, 0, 2*len(c.outs))
-		for _, i := range c.outs {
-			ids = append(ids, squad[i].ID)
-		}
-		for _, p := range c.ins {
-			ids = append(ids, p.ID)
-		}
-		return ids
-	}
-	return compareIDs(key(a), key(b)) < 0
 }

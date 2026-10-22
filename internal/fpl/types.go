@@ -193,3 +193,37 @@ type Transfer struct {
 	PlayerOutCost int       `json:"element_out_cost"`
 	Time          time.Time `json:"time"`
 }
+
+// Fixture is one scheduled or played match. Difficulty is FPL's rating of how
+// hard the match is for that side, 1 (easiest) to 5. Event is the gameweek, or 0
+// while the match is unscheduled.
+type Fixture struct {
+	ID             int  `json:"id"`
+	Event          int  `json:"event"`
+	HomeTeam       int  `json:"team_h"`
+	AwayTeam       int  `json:"team_a"`
+	HomeDifficulty int  `json:"team_h_difficulty"`
+	AwayDifficulty int  `json:"team_a_difficulty"`
+	Finished       bool `json:"finished"`
+}
+
+// Fixtures is a season's schedule.
+type Fixtures []Fixture
+
+// Difficulties returns the difficulty of each match a team plays in a gameweek,
+// in fixture order. A blank gameweek gives none; a double gameweek gives two.
+func (fs Fixtures) Difficulties(team, event int) []int {
+	var out []int
+	for _, f := range fs {
+		if f.Event != event {
+			continue
+		}
+		switch team {
+		case f.HomeTeam:
+			out = append(out, f.HomeDifficulty)
+		case f.AwayTeam:
+			out = append(out, f.AwayDifficulty)
+		}
+	}
+	return out
+}
