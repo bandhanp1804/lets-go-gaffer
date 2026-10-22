@@ -66,8 +66,9 @@ func (s *Store) UpsertTeams(ctx context.Context, teams []fpl.Team) error {
 func (s *Store) UpsertPlayers(ctx context.Context, players []fpl.Player) error {
 	// form arrives as text ("6.0"); the cast keeps pgx from guessing an encoding.
 	const q = `INSERT INTO players (id, first_name, last_name, web_name, team_id, position,
-			now_cost, total_points, form, minutes, status, chance_of_playing_next_round)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE(NULLIF($9::text, ''), '0')::numeric, $10, $11, $12)
+			now_cost, total_points, form, minutes, status, chance_of_playing_next_round,
+			news, news_added)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE(NULLIF($9::text, ''), '0')::numeric, $10, $11, $12, $13, $14)
 		ON CONFLICT (id) DO UPDATE SET
 			first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name,
 			web_name = EXCLUDED.web_name, team_id = EXCLUDED.team_id,
@@ -75,11 +76,13 @@ func (s *Store) UpsertPlayers(ctx context.Context, players []fpl.Player) error {
 			total_points = EXCLUDED.total_points, form = EXCLUDED.form,
 			minutes = EXCLUDED.minutes, status = EXCLUDED.status,
 			chance_of_playing_next_round = EXCLUDED.chance_of_playing_next_round,
+			news = EXCLUDED.news, news_added = EXCLUDED.news_added,
 			updated_at = now()`
 	err := s.execBatch(ctx, q, len(players), func(i int) []any {
 		p := players[i]
 		return []any{p.ID, p.FirstName, p.LastName, p.WebName, p.TeamID, int(p.Position),
-			p.NowCost, p.TotalPoints, p.Form, p.Minutes, p.Status, p.ChanceOfPlayingNextRound}
+			p.NowCost, p.TotalPoints, p.Form, p.Minutes, p.Status, p.ChanceOfPlayingNextRound,
+			p.News, p.NewsAdded}
 	})
 	if err != nil {
 		return fmt.Errorf("upsert players: %w", err)
@@ -119,10 +122,12 @@ func (s *Store) GetPlayer(ctx context.Context, id int) (fpl.Player, error) {
 	var p fpl.Player
 	var position int
 	err := s.pool.QueryRow(ctx, `SELECT id, first_name, last_name, web_name, team_id, position,
-			now_cost, total_points, form::text, minutes, status, chance_of_playing_next_round
+			now_cost, total_points, form::text, minutes, status, chance_of_playing_next_round,
+			news, news_added
 		FROM players WHERE id = $1`, id).Scan(
 		&p.ID, &p.FirstName, &p.LastName, &p.WebName, &p.TeamID, &position,
-		&p.NowCost, &p.TotalPoints, &p.Form, &p.Minutes, &p.Status, &p.ChanceOfPlayingNextRound)
+		&p.NowCost, &p.TotalPoints, &p.Form, &p.Minutes, &p.Status, &p.ChanceOfPlayingNextRound,
+		&p.News, &p.NewsAdded)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fpl.Player{}, fmt.Errorf("player %d: %w", id, ErrNotFound)
 	}
@@ -136,7 +141,8 @@ func (s *Store) GetPlayer(ctx context.Context, id int) (fpl.Player, error) {
 // ListPlayers returns every player, ascending by id.
 func (s *Store) ListPlayers(ctx context.Context) ([]fpl.Player, error) {
 	rows, err := s.pool.Query(ctx, `SELECT id, first_name, last_name, web_name, team_id, position,
-			now_cost, total_points, form::text, minutes, status, chance_of_playing_next_round
+			now_cost, total_points, form::text, minutes, status, chance_of_playing_next_round,
+			news, news_added
 		FROM players ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("list players: %w", err)
@@ -148,7 +154,8 @@ func (s *Store) ListPlayers(ctx context.Context) ([]fpl.Player, error) {
 		var p fpl.Player
 		var position int
 		err := rows.Scan(&p.ID, &p.FirstName, &p.LastName, &p.WebName, &p.TeamID, &position,
-			&p.NowCost, &p.TotalPoints, &p.Form, &p.Minutes, &p.Status, &p.ChanceOfPlayingNextRound)
+			&p.NowCost, &p.TotalPoints, &p.Form, &p.Minutes, &p.Status, &p.ChanceOfPlayingNextRound,
+			&p.News, &p.NewsAdded)
 		if err != nil {
 			return nil, fmt.Errorf("scan player: %w", err)
 		}

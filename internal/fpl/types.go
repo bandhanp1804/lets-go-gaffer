@@ -1,5 +1,7 @@
 package fpl
 
+import "time"
+
 // Position mirrors the FPL element_type IDs.
 type Position int
 
@@ -52,6 +54,11 @@ type Player struct {
 
 	// Null when FPL hasn't assessed the player yet.
 	ChanceOfPlayingNextRound *int `json:"chance_of_playing_next_round"`
+
+	// FPL's official note ("Hamstring injury - 75% chance of playing") and when it
+	// was written. Empty and nil when the player has no news.
+	News      string     `json:"news"`
+	NewsAdded *time.Time `json:"news_added"`
 }
 
 // Team maps the teams array in bootstrap-static.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -82,8 +83,9 @@ func TestMigrate_IsIdempotent(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM schema_migrations`).Scan(&applied); err != nil {
 		t.Fatal(err)
 	}
-	if applied != 1 {
-		t.Errorf("schema_migrations rows = %d, want 1 (one migration, applied once)", applied)
+	files, _ := filepath.Glob("../../migrations/*.up.sql")
+	if applied != len(files) || applied < 2 {
+		t.Errorf("schema_migrations rows = %d, want %d (each migration applied exactly once)", applied, len(files))
 	}
 
 	for _, table := range []string{"teams", "players", "player_history", "news_articles", "news_chunks", "chunk_players"} {
@@ -183,6 +185,41 @@ func TestStore_ChanceOfPlayingRoundTrip(t *testing.T) {
 	}
 	if gotDoubtful.ChanceOfPlayingNextRound == nil || *gotDoubtful.ChanceOfPlayingNextRound != 75 {
 		t.Errorf("doubtful chance = %v, want 75", gotDoubtful.ChanceOfPlayingNextRound)
+	}
+}
+
+func TestStore_PlayerNewsRoundTrip(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+	if err := s.UpsertTeams(ctx, arsenal()); err != nil {
+		t.Fatal(err)
+	}
+	added := time.Date(2026, 10, 21, 20, 12, 24, 123456000, time.UTC)
+	injured, fit := player(1, 100), player(2, 61)
+	injured.News, injured.NewsAdded = "Hamstring injury - 75% chance of playing", &added
+	if err := s.UpsertPlayers(ctx, []fpl.Player{injured, fit}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.GetPlayer(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.News != injured.News || got.NewsAdded == nil || !got.NewsAdded.Equal(added) {
+		t.Errorf("news = %q at %v, want %q at %v", got.News, got.NewsAdded, injured.News, added)
+	}
+	other, _ := s.GetPlayer(ctx, 2)
+	if other.News != "" || other.NewsAdded != nil {
+		t.Errorf("fit player news = %q at %v, want none", other.News, other.NewsAdded)
+	}
+
+	// The news is cleared when FPL clears it.
+	injured.News, injured.NewsAdded = "", nil
+	if err := s.UpsertPlayers(ctx, []fpl.Player{injured}); err != nil {
+		t.Fatal(err)
+	}
+	if cleared, _ := s.GetPlayer(ctx, 1); cleared.News != "" || cleared.NewsAdded != nil {
+		t.Errorf("after clearing: %q at %v, want none", cleared.News, cleared.NewsAdded)
 	}
 }
 
