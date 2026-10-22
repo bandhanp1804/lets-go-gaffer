@@ -377,3 +377,42 @@ func TestStore_StartingPrices(t *testing.T) {
 		t.Errorf("no ids = %v, %v", empty, err)
 	}
 }
+
+func TestStore_ListHistory(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+	if err := s.UpsertTeams(ctx, arsenal()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertPlayers(ctx, []fpl.Player{player(1, 60), player(2, 60)}); err != nil {
+		t.Fatal(err)
+	}
+	rows := []fpl.PlayerHistory{
+		{PlayerID: 2, GameweekID: 1, Fixture: 3, TotalPoints: 2, Minutes: 90, Value: 60},
+		{PlayerID: 1, GameweekID: 2, Fixture: 11, TotalPoints: 9, Minutes: 85, GoalsScored: 1, Value: 61},
+		{PlayerID: 1, GameweekID: 1, Fixture: 1, TotalPoints: 6, Minutes: 90, Value: 60},
+		{PlayerID: 1, GameweekID: 2, Fixture: 12, TotalPoints: 2, Minutes: 20, Value: 61}, // a double gameweek
+	}
+	if err := s.UpsertHistory(ctx, rows); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ListHistory(ctx)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 4 {
+		t.Fatalf("rows = %d, want 4", len(got))
+	}
+	// Ordered by player, then gameweek, then fixture, whatever the insert order.
+	order := [][3]int{{1, 1, 1}, {1, 2, 11}, {1, 2, 12}, {2, 1, 3}}
+	for i, want := range order {
+		if got[i].PlayerID != want[0] || got[i].GameweekID != want[1] || got[i].Fixture != want[2] {
+			t.Errorf("row %d = player %d gw %d fixture %d, want %v", i, got[i].PlayerID, got[i].GameweekID, got[i].Fixture, want)
+		}
+	}
+	if got[1].TotalPoints != 9 || got[1].Minutes != 85 || got[1].GoalsScored != 1 || got[1].Value != 61 {
+		t.Errorf("row lost data: %+v", got[1])
+	}
+}

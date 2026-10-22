@@ -293,3 +293,68 @@ func TestHTTPClient_FetchTransfers(t *testing.T) {
 		t.Errorf("time = %v, want %v", got.Time, want)
 	}
 }
+
+const fixturesFixture = `[
+  {"id": 1, "event": 1, "team_h": 1, "team_a": 7, "team_h_difficulty": 2, "team_a_difficulty": 5, "finished": true},
+  {"id": 2, "event": 8, "team_h": 7, "team_a": 3, "team_h_difficulty": 3, "team_a_difficulty": 4, "finished": false},
+  {"id": 3, "event": 8, "team_h": 1, "team_a": 3, "team_h_difficulty": 2, "team_a_difficulty": 4, "finished": false},
+  {"id": 4, "event": null, "team_h": 1, "team_a": 2, "team_h_difficulty": 3, "team_a_difficulty": 3, "finished": false}
+]`
+
+func TestHTTPClient_FetchFixtures(t *testing.T) {
+	c, hit := newServer(t, "/fixtures/", 200, fixturesFixture)
+
+	fs, err := c.FetchFixtures(context.Background())
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(*hit) != 1 || (*hit)[0] != "/fixtures/" {
+		t.Errorf("paths hit = %v", *hit)
+	}
+	if len(fs) != 4 {
+		t.Fatalf("fixtures = %d, want 4", len(fs))
+	}
+	want := fpl.Fixture{ID: 1, Event: 1, HomeTeam: 1, AwayTeam: 7, HomeDifficulty: 2, AwayDifficulty: 5, Finished: true}
+	if fs[0] != want {
+		t.Errorf("fixture 0 = %+v, want %+v", fs[0], want)
+	}
+	if fs[3].Event != 0 {
+		t.Errorf("an unscheduled fixture (event null) has Event %d, want 0", fs[3].Event)
+	}
+}
+
+func TestFixtures_DifficultiesForATeamInAGameweek(t *testing.T) {
+	fs := fpl.Fixtures{
+		{ID: 1, Event: 8, HomeTeam: 7, AwayTeam: 3, HomeDifficulty: 3, AwayDifficulty: 4},
+		{ID: 2, Event: 8, HomeTeam: 1, AwayTeam: 3, HomeDifficulty: 2, AwayDifficulty: 5}, // team 3 plays twice: a double gameweek
+		{ID: 3, Event: 9, HomeTeam: 3, AwayTeam: 1, HomeDifficulty: 3, AwayDifficulty: 3},
+	}
+
+	tests := []struct {
+		name        string
+		team, event int
+		want        []int
+	}{
+		{"home side gets the home difficulty", 7, 8, []int{3}},
+		{"away side gets the away difficulty", 1, 9, []int{3}},
+		{"a double gameweek yields both, in fixture order", 3, 8, []int{4, 5}},
+		{"a blank gameweek yields none", 7, 9, nil},
+		{"an unknown team yields none", 99, 8, nil},
+		{"a gameweek with no fixtures yields none", 3, 30, nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := fs.Difficulties(tc.team, tc.event)
+
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("got %v, want %v", got, tc.want)
+				}
+			}
+		})
+	}
+}

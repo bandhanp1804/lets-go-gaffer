@@ -98,6 +98,15 @@ func (c *HTTPClient) FetchTransfers(ctx context.Context, teamID int) ([]Transfer
 	return ts, nil
 }
 
+// FetchFixtures retrieves the whole season's schedule with FPL's difficulty ratings.
+func (c *HTTPClient) FetchFixtures(ctx context.Context) (Fixtures, error) {
+	var fs Fixtures
+	if err := c.get(ctx, "/fixtures/", &fs); err != nil {
+		return nil, fmt.Errorf("fetch fixtures: %w", err)
+	}
+	return fs, nil
+}
+
 // get performs a GET request and JSON-decodes the response into dst.
 func (c *HTTPClient) get(ctx context.Context, path string, dst any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)

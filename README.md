@@ -34,7 +34,8 @@ migrations/        SQL schema migrations
 internal/fpl/      FPL API client and types      (implemented)
 internal/db/       Postgres + pgvector storage   (implemented)
 internal/ingest/   concurrent worker pool + sync (implemented)
-internal/optimizer/ squad rules + greedy optimizer   (implemented)
+internal/optimizer/ squad rules, greedy baseline, exact optimizer (implemented)
+internal/projection/ expected-points model + backtest   (implemented)
 internal/transfers/ transfer search with free-transfer and hit costs (implemented)
 internal/myteam/   your squad, free transfers, selling prices (implemented)
 internal/embed/    Voyage AI client + offline test embedder (implemented)
@@ -64,9 +65,10 @@ go run ./cmd/gaffer team 12345      # your FPL team id, or set GAFFER_TEAM_ID in
 go run ./cmd/gaffer transfers      # best moves for your real squad this week
 go run ./cmd/gaffer transfers -wildcard
 go run ./cmd/gaffer squad
+go run ./cmd/gaffer backtest        # how well does the scoring model predict past gameweeks?
 ```
 
-`news` pulls BBC Sport and Sky Sports football RSS plus FPL's official per-player injury/availability notes, links stories to players, embeds anything new with Voyage AI, and stores it in pgvector. Stored stories are never embedded twice, and progress is saved in chunks, so an interrupted or rate-limited run resumes where it stopped. `team` pulls a manager's public squad (as of the last gameweek deadline; transfers made since need a login and are not read), checks it against the FPL rules, and flags players with injury or availability news. Find your team id in the address bar of the Points page on the FPL site (`.../entry/<TEAM_ID>/event/<N>`). `transfers` suggests this week's best moves for your real squad under FPL's actual transfer rules: one free transfer per gameweek (unused ones bank, up to five), each extra transfer costs 4 points, and the money available is what your players *sell* for, not their market price. Free transfers are replayed from your season history (and cross-checked against every hit FPL applied); selling prices are computed from FPL's rule using what you actually paid. `-wildcard` plans a Wildcard or Free Hit with no limit and no hit. `-free N` overrides the free-transfer count, `-prices` prints each player's computed selling price so you can check it on the FPL site. Scores are recent form discounted by the chance of playing, a rough proxy for expected points, so treat suggestions as a starting point. `search` ranks stored stories by semantic similarity (`-player NAME`, `-days N`, `-k N`), so retrieval quality can be judged directly before any LLM is involved. FPL's player notes are treated as state: only a player's current note is returned, so a recovered player is never reported as injured. Accounts without a payment method are limited to 3 requests/minute (`VOYAGE_RPM`), so a first run takes a few minutes.
+`news` pulls BBC Sport and Sky Sports football RSS plus FPL's official per-player injury/availability notes, links stories to players, embeds anything new with Voyage AI, and stores it in pgvector. Stored stories are never embedded twice, and progress is saved in chunks, so an interrupted or rate-limited run resumes where it stopped. `team` pulls a manager's public squad (as of the last gameweek deadline; transfers made since need a login and are not read), checks it against the FPL rules, and flags players with injury or availability news. Find your team id in the address bar of the Points page on the FPL site (`.../entry/<TEAM_ID>/event/<N>`). `transfers` suggests this week's best moves for your real squad under FPL's actual transfer rules: one free transfer per gameweek (unused ones bank, up to five), each extra transfer costs 4 points, and the money available is what your players *sell* for, not their market price. Free transfers are replayed from your season history (and cross-checked against every hit FPL applied); selling prices are computed from FPL's rule using what you actually paid. `-wildcard` plans a Wildcard or Free Hit with no limit and no hit. `-free N` overrides the free-transfer count, `-prices` prints each player's computed selling price so you can check it on the FPL site. Players are ranked by **expected points** (see below), shown as `xP` next to form so the reasoning is visible. `-wildcard` solves the rebuild exactly (dynamic programming over budget with branch-and-bound on the club limit), where a kept player costs his selling price. `search` ranks stored stories by semantic similarity (`-player NAME`, `-days N`, `-k N`), so retrieval quality can be judged directly before any LLM is involved. FPL's player notes are treated as state: only a player's current note is returned, so a recovered player is never reported as injured. Accounts without a payment method are limited to 3 requests/minute (`VOYAGE_RPM`), so a first run takes a few minutes.
 
 `squad` builds the best legal squad from the stored players: it respects the £100.0m budget, the 3-per-club limit, and the position split, then picks the highest-scoring starting XI and a captain. Squads are validated in plain Go; the LLM never checks rules.
 
@@ -86,6 +88,20 @@ go test -race ./...
 ```
 
 The tests truncate every table and refuse to run against a database whose name does not end in `_test`.
+
+## How players are scored
+
+Raw form is a poor forecast, so players are ranked by a projection model (`internal/projection`) built from the gameweek-by-gameweek record: points per 90 minutes with long memory and shrinkage toward the position norm, minutes with short memory (who is starting, who was just dropped), FPL's fixture difficulty for each match (blank gameweeks are worth nothing, doubles both matches), and the chance of playing.
+
+`gaffer backtest` measures it honestly: for each past gameweek it predicts using only earlier gameweeks and compares with what happened. On this season's data (GW3 to GW7):
+
+| Scorer | Rank correlation | Mean abs. error | Avg. points of its top 20 |
+|---|---|---|---|
+| Last-three-games form | 0.368 | 2.23 | 3.89 |
+| Season average | 0.413 | 2.08 | 4.10 |
+| Projection model | **0.534** | **1.88** | **4.76** |
+
+It beats form in every one of the five gameweeks. Settings were tuned and then re-checked walk-forward (tune on earlier gameweeks, score the next unseen one): about 0.52 out of sample against 0.38 for form. Five gameweeks is a small sample, so the backtest should be rerun as the season grows.
 
 ## Roadmap
 

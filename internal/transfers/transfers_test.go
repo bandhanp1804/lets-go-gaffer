@@ -105,6 +105,10 @@ func TestSuggest_FindsTheUpgradeThatFitsTheBudget(t *testing.T) {
 	if top.Transfers != 1 || top.Hit != 0 {
 		t.Errorf("transfers=%d hit=%d, want 1 and 0 (one free transfer)", top.Transfers, top.Hit)
 	}
+	// The report shows the scores the ranking used, so the reason for a move is visible.
+	if m := top.Moves[0]; m.OutScore != 5 || m.InScore != 9 {
+		t.Errorf("scores out %v in %v, want 5 and 9", m.OutScore, m.InScore)
+	}
 	if top.ScoreGain != 4 {
 		t.Errorf("gain = %v per gameweek, want 4 (a 5 becomes a 9)", top.ScoreGain)
 	}
@@ -386,6 +390,12 @@ func TestWildcard_RebuildsFreelyWithNoHit(t *testing.T) {
 	if w.Hit != 0 {
 		t.Errorf("a wildcard has no hit, got %d", w.Hit)
 	}
+	for _, m := range w.Moves {
+		if m.InScore <= m.OutScore {
+			t.Errorf("wildcard swapped %d (score %v) for %d (score %v), which is no improvement",
+				m.Out.ID, m.OutScore, m.In.ID, m.InScore)
+		}
+	}
 	if err := optimizer.ValidateWithBudget(w.Squad, optimizer.NoBudgetLimit); err != nil {
 		t.Errorf("wildcard squad illegal: %v", err)
 	}
@@ -417,5 +427,64 @@ func TestSuggest_SurfacesAnInfeasibleSquadClearly(t *testing.T) {
 
 	if err == nil || !errors.Is(err, transfers.ErrInvalidSquad) {
 		t.Errorf("err = %v, want ErrInvalidSquad", err)
+	}
+}
+
+func TestWildcard_KeptPlayersCostTheirSellingPriceAndTheMoneyAddsUp(t *testing.T) {
+	// Every owned player sells for 40 although the market price is 50, and the bank
+	// is empty. Keeping all fifteen costs 15 x 40 = 600, which is the whole budget.
+	in := input(0, player(101, 51, fpl.GKP, 40, 9), player(102, 52, fpl.GKP, 41, 12))
+	for id := range in.Sell {
+		in.Sell[id] = 40
+	}
+
+	w, err := transfers.Wildcard(in, opts(1, 4))
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 101 costs exactly what a goalkeeper sells for: a clear upgrade. 102 costs one tenth more and cannot be afforded.
+	if !slices.Contains(ins(w), 101) || slices.Contains(ins(w), 102) {
+		t.Errorf("bought %v; want the affordable 101 and not the 41 goalkeeper", ins(w))
+	}
+	var sold, bought int
+	for _, m := range w.Moves {
+		sold += m.SellPrice
+		bought += m.In.NowCost
+	}
+	if w.BankAfter != in.Bank+sold-bought || w.BankAfter < 0 {
+		t.Errorf("bank after = %d, want %d (bank + sold - bought) and not negative", w.BankAfter, in.Bank+sold-bought)
+	}
+	if w.CostChange != bought-sold {
+		t.Errorf("cost change = %d, want %d", w.CostChange, bought-sold)
+	}
+}
+
+func TestWildcard_SpendsEverythingItCanOnTheBestRebuild(t *testing.T) {
+	// A leftover-money regression: a local search that only swaps one or two players
+	// at a time stalls with money unspent. The exact rebuild must find the better squad.
+	in := input(0)
+	for i := range in.Squad {
+		if in.Squad[i].ID != 10 {
+			in.Squad[i].TotalPoints = 1
+		}
+	}
+	id := 300
+	// Fourteen strong players, each costing 60 where the incumbent sells for 50, so
+	// every swap needs 10 more than it frees: only a pooled budget can fund them.
+	for _, pos := range []fpl.Position{fpl.GKP, fpl.GKP, fpl.DEF, fpl.DEF, fpl.DEF, fpl.DEF, fpl.DEF, fpl.MID, fpl.MID, fpl.MID, fpl.MID, fpl.FWD, fpl.FWD, fpl.FWD} {
+		in.Pool = append(in.Pool, player(id, id, pos, 60, 10))
+		id++
+	}
+	// 15 x 50 = 750 sells; the bank tops it up to buy as many 60s as the money allows.
+	in.Bank = 90 // nine swaps' worth of the 10 difference
+
+	w, err := transfers.Wildcard(in, opts(1, 4))
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.BankAfter < 0 || w.BankAfter >= 10 {
+		t.Errorf("bank after = %d: with swaps costing 10 each, less than one swap's worth should be left unspent", w.BankAfter)
 	}
 }
