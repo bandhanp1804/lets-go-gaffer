@@ -342,3 +342,70 @@ func TestGreedy_AlwaysReturnsALegalSquad(t *testing.T) {
 		t.Errorf("only %d of %d random pools produced a squad; the property was barely exercised", built, seeds)
 	}
 }
+
+func TestLineup_MatchesGreedyAndReportsTheXIScore(t *testing.T) {
+	pool := ample()
+	for i := range pool {
+		if pool[i].ID == 22 {
+			pool[i].TotalPoints = 900 // a clear captain
+		}
+	}
+	built := mustGreedy(t, pool, byPoints)
+
+	squad, total, ok := optimizer.Lineup(built.Players, byPoints.Score)
+
+	if !ok {
+		t.Fatal("a legal squad must have a lineup")
+	}
+	if !slices.Equal(squad.Starting, built.Starting) || squad.Captain != built.Captain || squad.ViceCaptain != built.ViceCaptain {
+		t.Errorf("lineup = %v c%d vc%d, want what Greedy chose: %v c%d vc%d",
+			squad.Starting, squad.Captain, squad.ViceCaptain, built.Starting, built.Captain, built.ViceCaptain)
+	}
+	// The XI's points, with the captain's counted a second time (captains score double).
+	byID := map[int]fpl.Player{}
+	for _, p := range built.Players {
+		byID[p.ID] = p
+	}
+	want := float64(byID[built.Captain].TotalPoints)
+	for _, id := range built.Starting {
+		want += float64(byID[id].TotalPoints)
+	}
+	if total != want {
+		t.Errorf("total = %v, want %v (XI plus the captain again)", total, want)
+	}
+}
+
+func TestLineup_ReportsFailureInsteadOfPanicking(t *testing.T) {
+	noKeeper := slices.DeleteFunc(ample()[:15], func(p fpl.Player) bool { return p.Position == fpl.GKP })
+
+	if _, _, ok := optimizer.Lineup(noKeeper, byPoints.Score); ok {
+		t.Error("a squad with no goalkeeper cannot field a legal XI")
+	}
+	if _, _, ok := optimizer.Lineup(nil, byPoints.Score); ok {
+		t.Error("an empty squad cannot field a legal XI")
+	}
+}
+
+func TestAvailabilityScore(t *testing.T) {
+	pct := func(n int) *int { return &n }
+	tests := []struct {
+		name string
+		p    fpl.Player
+		want float64
+	}{
+		{"fit player scores his form", fpl.Player{Status: "a", Form: "6.0"}, 6},
+		{"fit with a full chance", fpl.Player{Status: "a", Form: "6.0", ChanceOfPlayingNextRound: pct(100)}, 6},
+		{"a 50% doubt counts half", fpl.Player{Status: "d", Form: "6.0", ChanceOfPlayingNextRound: pct(50)}, 3},
+		{"a 75% doubt counts three quarters", fpl.Player{Status: "d", Form: "8.0", ChanceOfPlayingNextRound: pct(75)}, 6},
+		{"doubtful with no stated chance is a coin flip", fpl.Player{Status: "d", Form: "6.0"}, 3},
+		{"injured scores nothing", fpl.Player{Status: "i", Form: "9.0", ChanceOfPlayingNextRound: pct(0)}, 0},
+		{"suspended scores nothing", fpl.Player{Status: "s", Form: "9.0"}, 0},
+		{"unavailable scores nothing", fpl.Player{Status: "u", Form: "9.0"}, 0},
+		{"unparseable form is zero", fpl.Player{Status: "a", Form: "n/a"}, 0},
+	}
+	for _, tc := range tests {
+		if got := optimizer.AvailabilityScore(tc.p); got != tc.want {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

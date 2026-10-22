@@ -35,6 +35,8 @@ internal/fpl/      FPL API client and types      (implemented)
 internal/db/       Postgres + pgvector storage   (implemented)
 internal/ingest/   concurrent worker pool + sync (implemented)
 internal/optimizer/ squad rules + greedy optimizer   (implemented)
+internal/transfers/ transfer search with free-transfer and hit costs (implemented)
+internal/myteam/   your squad, free transfers, selling prices (implemented)
 internal/embed/    Voyage AI client + offline test embedder (implemented)
 internal/httpx/    retry, rate limit, typed HTTP errors (implemented)
 internal/news/     RSS + FPL news, player linking, embed pipeline (implemented)
@@ -59,10 +61,12 @@ go run ./cmd/gaffer sync
 go run ./cmd/gaffer news    # needs VOYAGE_API_KEY in .env
 go run ./cmd/gaffer search -player Saka "when will he be back"
 go run ./cmd/gaffer team 12345      # your FPL team id, or set GAFFER_TEAM_ID in .env
+go run ./cmd/gaffer transfers      # best moves for your real squad this week
+go run ./cmd/gaffer transfers -wildcard
 go run ./cmd/gaffer squad
 ```
 
-`news` pulls BBC Sport and Sky Sports football RSS plus FPL's official per-player injury/availability notes, links stories to players, embeds anything new with Voyage AI, and stores it in pgvector. Stored stories are never embedded twice, and progress is saved in chunks, so an interrupted or rate-limited run resumes where it stopped. `team` pulls a manager's public squad (as of the last gameweek deadline; transfers made since need a login and are not read), checks it against the FPL rules, and flags players with injury or availability news. Find your team id in the address bar of the Points page on the FPL site (`.../entry/<TEAM_ID>/event/<N>`). `search` ranks stored stories by semantic similarity (`-player NAME`, `-days N`, `-k N`), so retrieval quality can be judged directly before any LLM is involved. FPL's player notes are treated as state: only a player's current note is returned, so a recovered player is never reported as injured. Accounts without a payment method are limited to 3 requests/minute (`VOYAGE_RPM`), so a first run takes a few minutes.
+`news` pulls BBC Sport and Sky Sports football RSS plus FPL's official per-player injury/availability notes, links stories to players, embeds anything new with Voyage AI, and stores it in pgvector. Stored stories are never embedded twice, and progress is saved in chunks, so an interrupted or rate-limited run resumes where it stopped. `team` pulls a manager's public squad (as of the last gameweek deadline; transfers made since need a login and are not read), checks it against the FPL rules, and flags players with injury or availability news. Find your team id in the address bar of the Points page on the FPL site (`.../entry/<TEAM_ID>/event/<N>`). `transfers` suggests this week's best moves for your real squad under FPL's actual transfer rules: one free transfer per gameweek (unused ones bank, up to five), each extra transfer costs 4 points, and the money available is what your players *sell* for, not their market price. Free transfers are replayed from your season history (and cross-checked against every hit FPL applied); selling prices are computed from FPL's rule using what you actually paid. `-wildcard` plans a Wildcard or Free Hit with no limit and no hit. `-free N` overrides the free-transfer count, `-prices` prints each player's computed selling price so you can check it on the FPL site. Scores are recent form discounted by the chance of playing, a rough proxy for expected points, so treat suggestions as a starting point. `search` ranks stored stories by semantic similarity (`-player NAME`, `-days N`, `-k N`), so retrieval quality can be judged directly before any LLM is involved. FPL's player notes are treated as state: only a player's current note is returned, so a recovered player is never reported as injured. Accounts without a payment method are limited to 3 requests/minute (`VOYAGE_RPM`), so a first run takes a few minutes.
 
 `squad` builds the best legal squad from the stored players: it respects the £100.0m budget, the 3-per-club limit, and the position split, then picks the highest-scoring starting XI and a captain. Squads are validated in plain Go; the LLM never checks rules.
 

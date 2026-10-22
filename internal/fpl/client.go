@@ -79,6 +79,25 @@ func (c *HTTPClient) FetchPicks(ctx context.Context, teamID, gameweek int) (*Pic
 	return &p, nil
 }
 
+// FetchHistory retrieves a manager's finished gameweeks and the chips they played.
+func (c *HTTPClient) FetchHistory(ctx context.Context, teamID int) (*History, error) {
+	var h History
+	if err := c.get(ctx, fmt.Sprintf("/entry/%d/history/", teamID), &h); err != nil {
+		return nil, fmt.Errorf("fetch history for team %d: %w", teamID, err)
+	}
+	return &h, nil
+}
+
+// FetchTransfers retrieves every transfer a manager has made, newest first,
+// with the buy and sell price of each.
+func (c *HTTPClient) FetchTransfers(ctx context.Context, teamID int) ([]Transfer, error) {
+	var ts []Transfer
+	if err := c.get(ctx, fmt.Sprintf("/entry/%d/transfers/", teamID), &ts); err != nil {
+		return nil, fmt.Errorf("fetch transfers for team %d: %w", teamID, err)
+	}
+	return ts, nil
+}
+
 // get performs a GET request and JSON-decodes the response into dst.
 func (c *HTTPClient) get(ctx context.Context, path string, dst any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)

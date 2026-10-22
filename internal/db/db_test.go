@@ -344,3 +344,36 @@ func TestStore_CancelledContextFails(t *testing.T) {
 		t.Errorf("err = %v, want context.Canceled", err)
 	}
 }
+
+func TestStore_StartingPrices(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+	if err := s.UpsertTeams(ctx, arsenal()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertPlayers(ctx, []fpl.Player{player(1, 60), player(2, 60), player(3, 60)}); err != nil {
+		t.Fatal(err)
+	}
+	err := s.UpsertHistory(ctx, []fpl.PlayerHistory{
+		{PlayerID: 1, GameweekID: 1, Fixture: 1, Value: 60},
+		{PlayerID: 1, GameweekID: 2, Fixture: 11, Value: 61}, // a later, higher price must not win
+		{PlayerID: 2, GameweekID: 1, Fixture: 2, Value: 45},
+		{PlayerID: 3, GameweekID: 4, Fixture: 3, Value: 80}, // no gameweek 1 row
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.StartingPrices(ctx, []int{1, 2, 3, 99})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The price in gameweek 1 is the launch price: what an original squad paid.
+	if len(got) != 2 || got[1] != 60 || got[2] != 45 {
+		t.Errorf("prices = %v, want map[1:60 2:45] (3 has no gameweek 1 row, 99 is unknown)", got)
+	}
+	if empty, err := s.StartingPrices(ctx, nil); err != nil || len(empty) != 0 {
+		t.Errorf("no ids = %v, %v", empty, err)
+	}
+}
