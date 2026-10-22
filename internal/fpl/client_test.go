@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/httpx"
 )
 
 const bootstrapFixture = `{
@@ -123,9 +124,9 @@ func TestHTTPClient_Errors(t *testing.T) {
 				t.Errorf("err = %q, want it to mention %q", err, tc.wantMsg)
 			}
 			if tc.status != 200 {
-				var se *fpl.StatusError
+				var se *httpx.StatusError
 				if !errors.As(err, &se) || se.StatusCode != tc.status {
-					t.Errorf("err = %v, want *fpl.StatusError{%d}", err, tc.status)
+					t.Errorf("err = %v, want *httpx.StatusError{%d}", err, tc.status)
 				}
 			}
 			// CLAUDE.md: errors carry context about the operation that failed.

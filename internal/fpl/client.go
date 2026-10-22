@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/bandhanpatel/lets-go-gaffer/internal/httpx"
 )
 
 const baseURL = "https://fantasy.premierleague.com/api"
@@ -69,8 +71,8 @@ func (c *HTTPClient) get(ctx context.Context, path string, dst any) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		drainAndClose(resp.Body) // let the connection be reused
-		return fmt.Errorf("GET %s: %w", path, &StatusError{StatusCode: resp.StatusCode})
+		httpx.DrainAndClose(resp.Body) // let the connection be reused
+		return fmt.Errorf("GET %s: %w", path, &httpx.StatusError{StatusCode: resp.StatusCode})
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
