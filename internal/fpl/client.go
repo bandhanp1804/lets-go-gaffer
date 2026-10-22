@@ -18,16 +18,22 @@ type FPLClient interface {
 
 // HTTPClient implements FPLClient against the real FPL API.
 type HTTPClient struct {
-	http *http.Client
+	http    *http.Client
+	baseURL string
 }
 
 // NewHTTPClient returns an FPLClient backed by a real HTTP connection.
 // Pass a custom *http.Client to control timeouts, transport, etc.
 func NewHTTPClient(hc *http.Client) *HTTPClient {
+	return NewHTTPClientWithBaseURL(hc, baseURL)
+}
+
+// NewHTTPClientWithBaseURL is NewHTTPClient against a different host (tests).
+func NewHTTPClientWithBaseURL(hc *http.Client, url string) *HTTPClient {
 	if hc == nil {
 		hc = http.DefaultClient
 	}
-	return &HTTPClient{http: hc}
+	return &HTTPClient{http: hc, baseURL: url}
 }
 
 // FetchBootstrap retrieves the full season snapshot: all players, teams, and gameweeks.
@@ -51,7 +57,7 @@ func (c *HTTPClient) FetchPlayerHistory(ctx context.Context, playerID int) ([]Pl
 
 // get performs a GET request and JSON-decodes the response into dst.
 func (c *HTTPClient) get(ctx context.Context, path string, dst any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
@@ -63,7 +69,8 @@ func (c *HTTPClient) get(ctx context.Context, path string, dst any) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status %d for %s", resp.StatusCode, path)
+		drainAndClose(resp.Body) // let the connection be reused
+		return fmt.Errorf("GET %s: %w", path, &StatusError{StatusCode: resp.StatusCode})
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {

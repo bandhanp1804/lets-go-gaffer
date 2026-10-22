@@ -15,7 +15,13 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	client := fpl.NewHTTPClient(&http.Client{Timeout: 15 * time.Second})
+	// Retry wraps the rate limiter so every attempt, including retries, is paced.
+	// No http.Client.Timeout: it would cut off backoff; ctx bounds the whole call.
+	transport := fpl.NewRetryTransport(
+		fpl.NewRateLimitTransport(http.DefaultTransport, fpl.NewLimiter(100*time.Millisecond)),
+		fpl.RetryConfig{MaxAttempts: 4, BaseDelay: 500 * time.Millisecond, MaxDelay: 10 * time.Second},
+	)
+	client := fpl.NewHTTPClient(&http.Client{Transport: transport})
 
 	bootstrap, err := client.FetchBootstrap(ctx)
 	if err != nil {
