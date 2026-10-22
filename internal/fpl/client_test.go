@@ -235,3 +235,61 @@ func TestHTTPClient_EntryAndPicksErrors(t *testing.T) {
 		t.Errorf("errors should name the team: %q / %q", entryErr, picksErr)
 	}
 }
+
+const historyFixture2 = `{
+  "current": [
+    {"event": 1, "points": 53, "event_transfers": 0, "event_transfers_cost": 0, "bank": 0, "value": 1000, "points_on_bench": 3},
+    {"event": 2, "points": 60, "event_transfers": 1, "event_transfers_cost": 0, "bank": 5, "value": 1001, "points_on_bench": 3}
+  ],
+  "past": [],
+  "chips": [{"name": "wildcard", "time": "2026-09-12T16:00:00Z", "event": 5}]
+}`
+
+const transfersFixture = `[
+  {"event": 7, "element_in": 8, "element_in_cost": 59, "element_out": 112, "element_out_cost": 49, "time": "2026-10-10T16:36:16.074680Z"},
+  {"event": 2, "element_in": 26, "element_in_cost": 75, "element_out": 55, "element_out_cost": 80, "time": "2026-08-26T19:32:45.796569Z"}
+]`
+
+func TestHTTPClient_FetchHistory(t *testing.T) {
+	c, hit := newServer(t, "/entry/4321/history/", 200, historyFixture2)
+
+	h, err := c.FetchHistory(context.Background(), 4321)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(*hit) != 1 || (*hit)[0] != "/entry/4321/history/" {
+		t.Errorf("paths hit = %v", *hit)
+	}
+	if len(h.Current) != 2 || h.Current[1] != (fpl.GameweekHistory{
+		Event: 2, Points: 60, EventTransfers: 1, EventTransfersCost: 0, Bank: 5, Value: 1001, PointsOnBench: 3,
+	}) {
+		t.Errorf("current = %+v", h.Current)
+	}
+	if len(h.Chips) != 1 || h.Chips[0] != (fpl.ChipUse{Name: "wildcard", Event: 5}) {
+		t.Errorf("chips = %+v, want one wildcard in gameweek 5", h.Chips)
+	}
+}
+
+func TestHTTPClient_FetchTransfers(t *testing.T) {
+	c, hit := newServer(t, "/entry/4321/transfers/", 200, transfersFixture)
+
+	ts, err := c.FetchTransfers(context.Background(), 4321)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(*hit) != 1 || (*hit)[0] != "/entry/4321/transfers/" {
+		t.Errorf("paths hit = %v", *hit)
+	}
+	if len(ts) != 2 {
+		t.Fatalf("transfers = %d, want 2", len(ts))
+	}
+	got := ts[0]
+	if got.Event != 7 || got.PlayerIn != 8 || got.PlayerInCost != 59 || got.PlayerOut != 112 || got.PlayerOutCost != 49 {
+		t.Errorf("transfer = %+v", got)
+	}
+	if want := time.Date(2026, 10, 10, 16, 36, 16, 74680000, time.UTC); !got.Time.Equal(want) {
+		t.Errorf("time = %v, want %v", got.Time, want)
+	}
+}

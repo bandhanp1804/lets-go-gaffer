@@ -208,3 +208,31 @@ func (s *Store) TotalHistoryPoints(ctx context.Context, playerID int) (int, erro
 	}
 	return n, nil
 }
+
+// StartingPrices returns each player's price in gameweek 1, which is the price
+// everyone in an original squad paid. Players with no gameweek 1 row are left
+// out rather than guessed.
+func (s *Store) StartingPrices(ctx context.Context, playerIDs []int) (map[int]int, error) {
+	out := map[int]int{}
+	if len(playerIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT player_id, min(value) FROM player_history WHERE gameweek = 1 AND player_id = ANY($1) GROUP BY player_id`,
+		playerIDs)
+	if err != nil {
+		return nil, fmt.Errorf("starting prices: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, price int
+		if err := rows.Scan(&id, &price); err != nil {
+			return nil, fmt.Errorf("scan starting price: %w", err)
+		}
+		out[id] = price
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("starting prices: %w", err)
+	}
+	return out, nil
+}

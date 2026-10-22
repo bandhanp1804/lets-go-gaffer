@@ -225,3 +225,96 @@ func TestLoad_CancelledContext(t *testing.T) {
 		t.Errorf("err = %v, want context.Canceled", err)
 	}
 }
+
+// fakeFinance serves a canned history and transfer list.
+type fakeFinance struct {
+	history     *fpl.History
+	transfers   []fpl.Transfer
+	historyErr  error
+	transferErr error
+}
+
+func (f *fakeFinance) FetchHistory(context.Context, int) (*fpl.History, error) {
+	return f.history, f.historyErr
+}
+
+func (f *fakeFinance) FetchTransfers(context.Context, int) ([]fpl.Transfer, error) {
+	return f.transfers, f.transferErr
+}
+
+func startPrices() map[int]int {
+	m := map[int]int{}
+	for id := 101; id <= 115; id++ {
+		m[id] = 70
+	}
+	return m
+}
+
+func TestLoadFinances_CombinesBankFreeTransfersAndSellingPrices(t *testing.T) {
+	c, players := fixture()
+	team, err := myteam.Load(context.Background(), c, 4321, players)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fin := &fakeFinance{
+		history: &fpl.History{Current: []fpl.GameweekHistory{
+			{Event: 1}, {Event: 2, EventTransfers: 1}, {Event: 3},
+		}},
+		// Player 105 was bought at 6.0m and is now 7.0m: the manager keeps half the rise.
+		transfers: []fpl.Transfer{{Event: 2, PlayerIn: 105, PlayerInCost: 60}},
+	}
+
+	got, err := myteam.LoadFinances(context.Background(), fin, 4321, team, startPrices())
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Bank != team.History.Bank {
+		t.Errorf("bank = %d, want %d", got.Bank, team.History.Bank)
+	}
+	if got.Free.Next != 2 || len(got.Free.Mismatches) != 0 {
+		t.Errorf("free transfers = %+v, want 2 (GW2 used its one, GW3 banked one, plus the new one)", got.Free)
+	}
+	if got.Sell[105] != 65 { // 60 + (70-60)/2
+		t.Errorf("sell price of the player bought at 60 = %d, want 65", got.Sell[105])
+	}
+	if got.Sell[101] != 70 { // never transferred: bought at the 70 starting price, no profit
+		t.Errorf("sell price of an original player = %d, want 70", got.Sell[101])
+	}
+	if len(got.Sell) != 15 || len(got.Buy) != 15 || got.Buy[105] != 60 {
+		t.Errorf("sell prices for %d players, buy prices for %d, buy[105]=%d; want all 15 and 60", len(got.Sell), len(got.Buy), got.Buy[105])
+	}
+}
+
+func TestLoadFinances_Failures(t *testing.T) {
+	c, players := fixture()
+	team, _ := myteam.Load(context.Background(), c, 4321, players)
+	good := func() *fakeFinance { return &fakeFinance{history: &fpl.History{}} }
+
+	tests := []struct {
+		name    string
+		fin     func() *fakeFinance
+		prices  func() map[int]int
+		wantIs  error
+		wantMsg string
+	}{
+		{"history fetch fails", func() *fakeFinance { f := good(); f.historyErr = errAPI; return f }, startPrices, errAPI, "4321"},
+		{"transfers fetch fails", func() *fakeFinance { f := good(); f.transferErr = errAPI; return f }, startPrices, errAPI, "4321"},
+		{"a starting price is missing", good, func() map[int]int { m := startPrices(); delete(m, 103); return m }, nil, "103"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := myteam.LoadFinances(context.Background(), tc.fin(), 4321, team, tc.prices())
+
+			if err == nil {
+				t.Fatal("want an error")
+			}
+			if tc.wantIs != nil && !errors.Is(err, tc.wantIs) {
+				t.Errorf("err = %v, want it to wrap %v", err, tc.wantIs)
+			}
+			if !strings.Contains(err.Error(), tc.wantMsg) {
+				t.Errorf("err = %q, want it to mention %q", err, tc.wantMsg)
+			}
+		})
+	}
+}

@@ -96,7 +96,7 @@ func Greedy(players []fpl.Player, opts Options) (fpl.Squad, error) {
 		return fpl.Squad{}, fmt.Errorf("%w: found %d of %d players", ErrInfeasible, len(st.picked), SquadSize)
 	}
 
-	squad := pickLineup(st.picked, scores)
+	squad, _, _ := pickLineup(st.picked, scores)
 	// The constructive steps above should make this impossible; checking anyway
 	// means a bug here becomes an error, never an illegal squad handed to a user.
 	if err := Validate(squad); err != nil {
@@ -170,9 +170,22 @@ func (st *pickState) canFinishAfter(p fpl.Player, byCost []fpl.Player) bool {
 	return open == 0
 }
 
+// Lineup chooses the highest-scoring legal starting XI from a squad's players,
+// and names the two best starters captain and vice-captain. It also returns the
+// XI's total score with the captain's counted a second time, which is how FPL
+// scores a captain. ok is false when the players cannot field a legal XI (for
+// example no goalkeeper); Greedy and the transfer search both use this.
+func Lineup(players []fpl.Player, score func(fpl.Player) float64) (squad fpl.Squad, total float64, ok bool) {
+	scores := make(map[int]float64, len(players))
+	for _, p := range players {
+		scores[p.ID] = score(p)
+	}
+	return pickLineup(players, scores)
+}
+
 // pickLineup chooses the highest-scoring legal starting XI from a full squad,
 // then names the two best starters captain and vice-captain.
-func pickLineup(picked []fpl.Player, scores map[int]float64) fpl.Squad {
+func pickLineup(picked []fpl.Player, scores map[int]float64) (fpl.Squad, float64, bool) {
 	byPos := map[fpl.Position][]fpl.Player{}
 	for _, p := range picked {
 		byPos[p.Position] = append(byPos[p.Position], p)
@@ -189,6 +202,9 @@ func pickLineup(picked []fpl.Player, scores map[int]float64) fpl.Squad {
 		rank(byPos[pos])
 	}
 
+	if len(byPos[fpl.GKP]) == 0 {
+		return fpl.Squad{}, 0, false
+	}
 	sumTop := func(pos fpl.Position, n int) float64 {
 		total := 0.0
 		for _, p := range byPos[pos][:n] {
@@ -217,6 +233,9 @@ func pickLineup(picked []fpl.Player, scores map[int]float64) fpl.Squad {
 		}
 	}
 
+	if !found {
+		return fpl.Squad{}, 0, false
+	}
 	var starters []fpl.Player
 	starters = append(starters, byPos[fpl.GKP][:1]...)
 	starters = append(starters, byPos[fpl.DEF][:bestD]...)
@@ -237,8 +256,33 @@ func pickLineup(picked []fpl.Player, scores map[int]float64) fpl.Squad {
 		}
 		return a.ID < b.ID
 	})
+	total := scores[byPos[fpl.GKP][0].ID] + best
 	if len(starters) >= 2 {
 		squad.Captain, squad.ViceCaptain = starters[0].ID, starters[1].ID
+		total += scores[squad.Captain] // a captain scores double
 	}
-	return squad
+	return squad, total, true
+}
+
+// AvailabilityScore is form discounted by the chance of playing: a fit player
+// scores his form, a 50% doubt half of it, and an injured, suspended, or
+// unavailable player nothing. Form alone is backward-looking and blind to the
+// fact that a hurt player will not score, which matters most when deciding
+// whom to sell.
+func AvailabilityScore(p fpl.Player) float64 {
+	form := FormScore(p)
+	switch p.Status {
+	case "a":
+		// fit, unless FPL has put a chance on it
+	case "d":
+		if p.ChanceOfPlayingNextRound == nil {
+			return form * 0.5
+		}
+	default:
+		return 0
+	}
+	if p.ChanceOfPlayingNextRound != nil {
+		return form * float64(*p.ChanceOfPlayingNextRound) / 100
+	}
+	return form
 }

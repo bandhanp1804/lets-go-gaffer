@@ -157,3 +157,39 @@ type Picks struct {
 	EntryHistory EntryHistory `json:"entry_history"`
 	Picks        []Pick       `json:"picks"`
 }
+
+// GameweekHistory is one finished gameweek of a manager's season. Bank and Value
+// are in tenths of £m; Value is the squad's market value at that deadline, not
+// the sum of its selling prices.
+type GameweekHistory struct {
+	Event              int `json:"event"`
+	Points             int `json:"points"`
+	EventTransfers     int `json:"event_transfers"`
+	EventTransfersCost int `json:"event_transfers_cost"` // points lost to transfers beyond the free ones
+	Bank               int `json:"bank"`
+	Value              int `json:"value"`
+	PointsOnBench      int `json:"points_on_bench"`
+}
+
+// ChipUse records a chip (wildcard, freehit, bboost, 3xc) played in a gameweek.
+type ChipUse struct {
+	Name  string `json:"name"`
+	Event int    `json:"event"`
+}
+
+// History is a manager's season so far, from /api/entry/{id}/history/.
+type History struct {
+	Current []GameweekHistory `json:"current"`
+	Chips   []ChipUse         `json:"chips"`
+}
+
+// Transfer is one player swap a manager made. The costs are the prices actually
+// paid and received, in tenths of £m: PlayerOutCost is the selling price.
+type Transfer struct {
+	Event         int       `json:"event"`
+	PlayerIn      int       `json:"element_in"`
+	PlayerInCost  int       `json:"element_in_cost"`
+	PlayerOut     int       `json:"element_out"`
+	PlayerOutCost int       `json:"element_out_cost"`
+	Time          time.Time `json:"time"`
+}
