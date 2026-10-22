@@ -143,3 +143,19 @@ func TestPluralFreeTransfers(t *testing.T) {
 		}
 	}
 }
+
+func TestPrintTransfers_WithNoFreeTransfersLeftItDoesNotTalkAboutRollingZero(t *testing.T) {
+	v := transferFixture()
+	v.Suggestions, v.Free = nil, 0
+	var b strings.Builder
+
+	printTransfers(&b, v)
+
+	out := b.String()
+	if strings.Contains(out, "Rolling your 0") {
+		t.Errorf("there is nothing to roll:\n%s", out)
+	}
+	if !strings.Contains(out, "No free transfers left this week") || !strings.Contains(out, "1 free transfer next week") {
+		t.Errorf("want a plain statement of next week's allowance:\n%s", out)
+	}
+}

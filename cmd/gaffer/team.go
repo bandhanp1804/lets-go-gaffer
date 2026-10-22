@@ -61,9 +61,14 @@ func runTeam(ctx context.Context, args []string) error {
 		}
 		return err
 	}
-	team, _, err = applyPending(os.Stdout, team, players, swaps)
+	session := os.Getenv(sessionEnv)
+	team, fin, _, err := currentSquad(ctx, os.Stdout, fpl.NewHTTPClient(sessionClient(session)), session, teamID, team, players, swaps, time.Now())
 	if err != nil {
 		return err
+	}
+	if fin != nil {
+		fmt.Println(liveSummary(*fin))
+		fmt.Println()
 	}
 	printTeam(os.Stdout, team, teams)
 	return nil

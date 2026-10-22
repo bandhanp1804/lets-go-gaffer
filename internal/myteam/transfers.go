@@ -126,6 +126,9 @@ type Finances struct {
 	// (see ApplyFinances). FPL does not publish these without a login.
 	PendingTransfers int
 	PendingHit       int // points already lost to those transfers
+
+	// Chips still available to play, when known (live data only).
+	AvailableChips []string
 }
 
 // LoadFinances works out the manager's free transfers and the selling price of

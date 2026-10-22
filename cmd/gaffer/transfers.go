@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -40,6 +41,7 @@ type transfersView struct {
 	ShowPrices  bool
 	Suggestions []transfers.Suggestion
 	Pending     string // transfers the manager entered with -swap, if any
+	Live        bool   // squad, prices, and transfer counts are FPL's own
 }
 
 // runTransfers suggests this week's best transfers for the manager's real squad.
@@ -93,25 +95,32 @@ func runTransfers(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	ids := make([]int, len(team.Squad.Players))
-	for i, p := range team.Squad.Players {
-		ids[i] = p.ID
-	}
-	start, err := store.StartingPrices(ctx, ids)
+	// Prefer the live squad from FPL: it already includes this week's transfers and has
+	// FPL's own selling prices. Otherwise use the public squad, work the finances out,
+	// and apply any -swap on top.
+	public := team
+	session := os.Getenv(sessionEnv)
+	team, liveFin, changes, err := currentSquad(ctx, os.Stdout, fpl.NewHTTPClient(sessionClient(session)), session, teamID, public, players, swaps, time.Now())
 	if err != nil {
 		return err
 	}
-	fin, err := myteam.LoadFinances(ctx, client, teamID, team, start)
-	if err != nil {
-		return fmt.Errorf("%w (run `gaffer sync` so starting prices are stored)", err)
+	var fin myteam.Finances
+	if liveFin != nil {
+		fin = *liveFin
+	} else {
+		ids := make([]int, len(public.Squad.Players))
+		for i, p := range public.Squad.Players {
+			ids[i] = p.ID
+		}
+		start, err := store.StartingPrices(ctx, ids)
+		if err != nil {
+			return err
+		}
+		if fin, err = myteam.LoadFinances(ctx, client, teamID, public, start); err != nil {
+			return fmt.Errorf("%w (run `gaffer sync` so starting prices are stored)", err)
+		}
+		fin = myteam.ApplyFinances(fin, changes)
 	}
-
-	// Transfers already made this week change the squad, the bank, and the free transfers left.
-	team, changes, err := applyPending(os.Stdout, team, players, swaps)
-	if err != nil {
-		return err
-	}
-	fin = myteam.ApplyFinances(fin, changes)
 
 	// Rank by expected points over the horizon, not raw form (see `gaffer backtest`).
 	history, err := store.ListHistory(ctx)
@@ -127,10 +136,13 @@ func runTransfers(ctx context.Context, args []string) error {
 		return err
 	}
 
-	view := transfersView{Team: team, Teams: teams, Fin: fin, Horizon: *horizon, Wildcard: *wildcard, ShowPrices: *prices}
+	view := transfersView{Team: team, Teams: teams, Fin: fin, Horizon: *horizon, Wildcard: *wildcard, ShowPrices: *prices, Live: liveFin != nil}
 	view.Pending = myteam.DescribeChanges(changes)
 	view.Free, view.FreeSource = fin.Free.Next, "replayed from your history"
-	if len(changes) > 0 {
+	switch {
+	case liveFin != nil:
+		view.FreeSource = fmt.Sprintf("FPL: allowance minus the %d you have made", fin.PendingTransfers)
+	case len(changes) > 0:
 		view.FreeSource = fmt.Sprintf("replayed from your history, %d already used by your -swap", len(changes))
 	}
 	if *free >= 0 {
@@ -173,11 +185,22 @@ func printTransfers(w io.Writer, v transfersView) {
 	fmt.Fprintln(w, "Score: expected points per gameweek (season record weighted to recent form, shrunk toward the position norm,")
 	fmt.Fprintln(w, "scaled by fixture difficulty and the chance of playing)")
 	fmt.Fprintln(w, "xP is expected points per gameweek over the horizon: the number moves are ranked by, which can differ a lot from form.")
-	fmt.Fprintln(w, "Selling prices are computed from FPL's rule (you keep half of any price rise, rounded down);")
-	fmt.Fprintln(w, "check them on the FPL transfers page before relying on a move.")
-	if v.Pending != "" {
-		fmt.Fprintf(w, "You have already made %d transfers this week (%s), costing -%d points so far.\n",
-			v.Fin.PendingTransfers, v.Pending, v.Fin.PendingHit)
+	if v.Live {
+		fmt.Fprintln(w, "Squad, selling prices, bank, and transfer counts are FPL's own (read live).")
+	} else {
+		fmt.Fprintln(w, "Selling prices are computed from FPL's rule (you keep half of any price rise, rounded down);")
+		fmt.Fprintln(w, "check them on the FPL transfers page before relying on a move.")
+	}
+	if v.Fin.PendingTransfers > 0 {
+		who := ""
+		if v.Pending != "" {
+			who = " (" + v.Pending + ")"
+		}
+		fmt.Fprintf(w, "You have already made %d transfers this week%s, costing -%d points so far.\n",
+			v.Fin.PendingTransfers, who, v.Fin.PendingHit)
+	}
+	if v.Wildcard && v.Fin.AvailableChips != nil && !slices.Contains(v.Fin.AvailableChips, "wildcard") && !slices.Contains(v.Fin.AvailableChips, "freehit") {
+		fmt.Fprintln(w, "WARNING: FPL says you have no Wildcard or Free Hit left, so this plan is hypothetical.")
 	}
 	if m := v.Fin.Free.Mismatches; len(m) > 0 {
 		parts := make([]string, len(m))
@@ -194,8 +217,12 @@ func printTransfers(w io.Writer, v transfersView) {
 			fmt.Fprintln(w, "The wildcard finds nothing better than your current squad.")
 		} else {
 			fmt.Fprintf(w, "No transfer beats keeping your squad over %d gameweeks after the cost of hits.\n", v.Horizon)
-			fmt.Fprintf(w, "Rolling your %s leaves you with %s next week.\n",
-				freeTransfers(v.Free), freeTransfers(min(v.Free+1, transfers.MaxBankedFreeTransfers)))
+			next := freeTransfers(min(v.Free+1, transfers.MaxBankedFreeTransfers))
+			if v.Free == 0 {
+				fmt.Fprintf(w, "No free transfers left this week; you will have %s next week.\n", next)
+			} else {
+				fmt.Fprintf(w, "Rolling your %s leaves you with %s next week.\n", freeTransfers(v.Free), next)
+			}
 		}
 	}
 	for i, s := range v.Suggestions {

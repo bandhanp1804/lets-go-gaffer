@@ -253,3 +253,43 @@ func (fs Fixtures) Opponents(team, event int) []Opponent {
 	}
 	return out
 }
+
+// MyPick is one of the logged-in manager's 15 players, with the prices FPL itself
+// uses: SellingPrice is what he would sell for now and PurchasePrice what was
+// paid, in tenths of £m.
+type MyPick struct {
+	Element       int      `json:"element"`
+	Position      int      `json:"position"` // 1-11 start, 12-15 bench
+	Multiplier    int      `json:"multiplier"`
+	IsCaptain     bool     `json:"is_captain"`
+	IsViceCaptain bool     `json:"is_vice_captain"`
+	ElementType   Position `json:"element_type"`
+	SellingPrice  int      `json:"selling_price"`
+	PurchasePrice int      `json:"purchase_price"`
+}
+
+// MyChip is a chip and whether it can still be played ("available", "played").
+type MyChip struct {
+	Name   string `json:"name"`
+	Status string `json:"status_for_entry"`
+}
+
+// MyTransfers is the transfer position for the coming gameweek. Bank and Value are
+// in tenths of £m. Limit is the free transfers available, Made the transfers made so
+// far this gameweek, and Cost the points already lost to transfers beyond the free ones.
+type MyTransfers struct {
+	Cost   int    `json:"cost"`
+	Status string `json:"status"`
+	Limit  int    `json:"limit"`
+	Made   int    `json:"made"`
+	Bank   int    `json:"bank"`
+	Value  int    `json:"value"`
+}
+
+// MyTeam is the logged-in manager's squad as it stands now, including transfers
+// made since the last deadline, from /api/my-team/{id}/. It needs a session.
+type MyTeam struct {
+	Picks     []MyPick    `json:"picks"`
+	Chips     []MyChip    `json:"chips"`
+	Transfers MyTransfers `json:"transfers"`
+}
