@@ -139,3 +139,51 @@ func TestSync_PropagatesHistoryAbort(t *testing.T) {
 		t.Errorf("failed = %d, want the partial summary to be returned", len(sum.Failed))
 	}
 }
+
+func TestBootstrap_StoresTeamsThenPlayersAndReturnsThem(t *testing.T) {
+	client, b := syncFixture(5)
+	store := &memStore{}
+
+	got, err := ingest.Bootstrap(context.Background(), client, store)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != b {
+		t.Error("want the fetched bootstrap returned so callers can reuse it without a second API call")
+	}
+	if !slices.Equal(store.order, []string{"teams", "players"}) {
+		t.Errorf("writes = %v, want [teams players] and no history", store.order)
+	}
+	if client.BootstrapCalls() != 1 {
+		t.Errorf("bootstrap fetched %d times, want 1", client.BootstrapCalls())
+	}
+	for id := 1; id <= 5; id++ {
+		if client.HistoryCalls(id) != 0 {
+			t.Errorf("history fetched for player %d; Bootstrap must stay cheap", id)
+		}
+	}
+}
+
+func TestBootstrap_Failures(t *testing.T) {
+	t.Run("fetch fails", func(t *testing.T) {
+		client, _ := syncFixture(2)
+		client.SetErr(errFetch)
+		store := &memStore{}
+
+		got, err := ingest.Bootstrap(context.Background(), client, store)
+
+		if !errors.Is(err, errFetch) || got != nil || len(store.order) != 0 {
+			t.Errorf("got=%v err=%v writes=%v; want nil, wrapped errFetch, no writes", got, err, store.order)
+		}
+	})
+	t.Run("player store fails", func(t *testing.T) {
+		client, _ := syncFixture(2)
+
+		got, err := ingest.Bootstrap(context.Background(), client, &memStore{failPlayers: errStore})
+
+		if !errors.Is(err, errStore) || got != nil {
+			t.Errorf("got=%v err=%v; want nil and wrapped errStore", got, err)
+		}
+	})
+}

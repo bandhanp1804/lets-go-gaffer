@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/httpx"
@@ -14,8 +15,8 @@ import (
 
 const bootstrapFixture = `{
   "elements": [
-    {"id": 1, "web_name": "Raya", "element_type": 1, "team": 1, "now_cost": 61, "chance_of_playing_next_round": null},
-    {"id": 2, "web_name": "Saka", "element_type": 3, "team": 1, "now_cost": 100, "chance_of_playing_next_round": 75}
+    {"id": 1, "web_name": "Raya", "element_type": 1, "team": 1, "now_cost": 61, "chance_of_playing_next_round": null, "news": "", "news_added": null},
+    {"id": 2, "web_name": "Saka", "element_type": 3, "team": 1, "now_cost": 100, "chance_of_playing_next_round": 75, "news": "Hamstring injury - 75% chance of playing", "news_added": "2026-10-21T20:12:24.123456Z"}
   ],
   "teams": [{"id": 1, "name": "Arsenal", "short_name": "ARS"}],
   "events": [{"id": 1, "name": "Gameweek 1", "is_current": true}]
@@ -70,6 +71,14 @@ func TestHTTPClient_FetchBootstrapDecodes(t *testing.T) {
 	}
 	if saka.ChanceOfPlayingNextRound == nil || *saka.ChanceOfPlayingNextRound != 75 {
 		t.Errorf("saka chance = %v, want 75", saka.ChanceOfPlayingNextRound)
+	}
+	// Official player news: empty and null for a fit player, populated with a timestamp otherwise.
+	if raya.News != "" || raya.NewsAdded != nil {
+		t.Errorf("raya news = %q added %v, want none", raya.News, raya.NewsAdded)
+	}
+	wantAdded := time.Date(2026, 10, 21, 20, 12, 24, 123456000, time.UTC)
+	if saka.News != "Hamstring injury - 75% chance of playing" || saka.NewsAdded == nil || !saka.NewsAdded.Equal(wantAdded) {
+		t.Errorf("saka news = %q added %v, want the hamstring note at %v", saka.News, saka.NewsAdded, wantAdded)
 	}
 	if !b.Gameweeks[0].IsCurrent {
 		t.Error("gameweek 1 should be current")

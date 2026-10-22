@@ -1,0 +1,3 @@
+ALTER TABLE players
+    DROP COLUMN IF EXISTS news,
+    DROP COLUMN IF EXISTS news_added;
