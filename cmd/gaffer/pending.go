@@ -60,9 +60,11 @@ func parseTeamArgs(name, usage string, args []string) (int, []string, error) {
 
 // applyPending applies the manager's stated transfers to the squad and says so,
 // because the tool is then no longer showing what FPL published. With no swaps it
-// returns the team untouched and prints nothing.
+// returns the team untouched, but warns that the squad is as of the last deadline:
+// FPL hides later transfers, and a stale squad must not pass as the current one.
 func applyPending(w io.Writer, team myteam.Team, market []fpl.Player, swaps []string) (myteam.Team, []myteam.Change, error) {
 	if len(swaps) == 0 {
+		fmt.Fprintf(w, "Squad as of the GW%d deadline (FPL hides transfers made since). Made changes? Add -swap \"Out>In\".\n\n", team.Event)
 		return team, nil, nil
 	}
 	specs, err := myteam.ParseSwaps(swaps)
