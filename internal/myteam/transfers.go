@@ -121,6 +121,11 @@ type Finances struct {
 	Free FreeTransferState
 	Buy  map[int]int // what was paid for each squad player
 	Sell map[int]int // what each squad player would sell for today
+
+	// Transfers the manager says they have already made for the coming gameweek
+	// (see ApplyFinances). FPL does not publish these without a login.
+	PendingTransfers int
+	PendingHit       int // points already lost to those transfers
 }
 
 // LoadFinances works out the manager's free transfers and the selling price of

@@ -25,7 +25,8 @@ const transfersUsage = `usage: gaffer transfers [-team ID] [-free N] [-wildcard]
   -horizon   gameweeks a gain is assumed to last (default 4)
   -max       most players to change in a normal plan (default 2)
   -n         suggestions to show (default 5)
-  -prices    also print the selling price of each of your players`
+  -prices    also print the selling price of each of your players
+` + swapHelp
 
 // transfersView is everything printTransfers needs.
 type transfersView struct {
@@ -38,6 +39,7 @@ type transfersView struct {
 	Wildcard    bool
 	ShowPrices  bool
 	Suggestions []transfers.Suggestion
+	Pending     string // transfers the manager entered with -swap, if any
 }
 
 // runTransfers suggests this week's best transfers for the manager's real squad.
@@ -51,6 +53,8 @@ func runTransfers(ctx context.Context, args []string) error {
 	maxMoves := fs.Int("max", 2, "")
 	topN := fs.Int("n", 5, "")
 	prices := fs.Bool("prices", false, "")
+	var swaps stringList
+	fs.Var(&swaps, "swap", "")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("%w\n%s", err, transfersUsage)
 	}
@@ -102,6 +106,13 @@ func runTransfers(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w (run `gaffer sync` so starting prices are stored)", err)
 	}
 
+	// Transfers already made this week change the squad, the bank, and the free transfers left.
+	team, changes, err := applyPending(os.Stdout, team, players, swaps)
+	if err != nil {
+		return err
+	}
+	fin = myteam.ApplyFinances(fin, changes)
+
 	// Rank by expected points over the horizon, not raw form (see `gaffer backtest`).
 	history, err := store.ListHistory(ctx)
 	if err != nil {
@@ -117,7 +128,11 @@ func runTransfers(ctx context.Context, args []string) error {
 	}
 
 	view := transfersView{Team: team, Teams: teams, Fin: fin, Horizon: *horizon, Wildcard: *wildcard, ShowPrices: *prices}
+	view.Pending = myteam.DescribeChanges(changes)
 	view.Free, view.FreeSource = fin.Free.Next, "replayed from your history"
+	if len(changes) > 0 {
+		view.FreeSource = fmt.Sprintf("replayed from your history, %d already used by your -swap", len(changes))
+	}
 	if *free >= 0 {
 		view.Free, view.FreeSource = *free, "set by -free"
 	}
@@ -160,6 +175,10 @@ func printTransfers(w io.Writer, v transfersView) {
 	fmt.Fprintln(w, "xP is expected points per gameweek over the horizon: the number moves are ranked by, which can differ a lot from form.")
 	fmt.Fprintln(w, "Selling prices are computed from FPL's rule (you keep half of any price rise, rounded down);")
 	fmt.Fprintln(w, "check them on the FPL transfers page before relying on a move.")
+	if v.Pending != "" {
+		fmt.Fprintf(w, "You have already made %d transfers this week (%s), costing -%d points so far.\n",
+			v.Fin.PendingTransfers, v.Pending, v.Fin.PendingHit)
+	}
 	if m := v.Fin.Free.Mismatches; len(m) > 0 {
 		parts := make([]string, len(m))
 		for i, gw := range m {

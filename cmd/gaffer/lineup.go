@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -20,8 +19,9 @@ import (
 // captainTossUp is the expected-points gap under which the captain choice is a coin flip.
 const captainTossUp = 0.3
 
-const lineupUsage = `usage: gaffer lineup [TEAM_ID]
-  TEAM_ID defaults to GAFFER_TEAM_ID from .env`
+const lineupUsage = `usage: gaffer lineup [-swap Out>In]... [TEAM_ID]
+  TEAM_ID defaults to GAFFER_TEAM_ID from .env
+` + swapHelp
 
 // lineupView is everything printLineup needs.
 type lineupView struct {
@@ -30,21 +30,15 @@ type lineupView struct {
 	Next      int // the gameweek being picked for
 	Advice    lineup.Advice
 	Opponents map[int][]fpl.Opponent // player id -> that player's matches in Next
+	Swapped   bool                   // the squad includes pending transfers the manager entered
 }
 
 // runLineup recommends the best XI from the manager's real squad for the
 // upcoming gameweek, ranking players by expected points in that gameweek alone.
 func runLineup(ctx context.Context, args []string) error {
-	raw := os.Getenv("GAFFER_TEAM_ID")
-	if len(args) == 1 {
-		raw = args[0]
-	}
-	if len(args) > 1 || raw == "" {
-		return errors.New(lineupUsage)
-	}
-	teamID, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || teamID < 1 {
-		return fmt.Errorf("invalid team id %q\n%s", raw, lineupUsage)
+	teamID, swaps, err := parseTeamArgs("lineup", lineupUsage, args)
+	if err != nil {
+		return err
 	}
 	dsn := os.Getenv("GAFFER_DSN")
 	if dsn == "" {
@@ -78,6 +72,10 @@ func runLineup(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	team, changes, err := applyPending(os.Stdout, team, players, swaps)
+	if err != nil {
+		return err
+	}
 	fixtures, err := client.FetchFixtures(ctx)
 	if err != nil {
 		return err
@@ -97,7 +95,7 @@ func runLineup(ctx context.Context, args []string) error {
 	for _, p := range team.Squad.Players {
 		opponents[p.ID] = fixtures.Opponents(p.TeamID, next)
 	}
-	printLineup(os.Stdout, lineupView{Team: team, Teams: teams, Next: next, Advice: advice, Opponents: opponents})
+	printLineup(os.Stdout, lineupView{Team: team, Teams: teams, Next: next, Advice: advice, Opponents: opponents, Swapped: len(changes) > 0})
 	return nil
 }
 
@@ -184,7 +182,11 @@ func printLineup(w io.Writer, v lineupView) {
 		fmt.Fprintf(w, "This is the same XI as your GW%d lineup.\n", v.Team.Event)
 		return
 	}
-	fmt.Fprintf(w, "Changes from your GW%d lineup:\n", v.Team.Event)
+	was := fmt.Sprintf("your GW%d lineup", v.Team.Event)
+	if v.Swapped {
+		was += " with your pending swaps slotted in"
+	}
+	fmt.Fprintf(w, "Changes from %s:\n", was)
 	fmt.Fprintf(w, "  IN  %s\n  OUT %s\n", joinNames(in, names), joinNames(out, names))
 }
 

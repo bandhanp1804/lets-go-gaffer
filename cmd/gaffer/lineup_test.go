@@ -219,3 +219,19 @@ func TestPrintLineup_AClearCaptainIsStatedWithItsLead(t *testing.T) {
 		t.Errorf("a clear captain should read as one:\n%s", out)
 	}
 }
+
+func TestPrintLineup_SaysWhenTheComparisonIncludesPendingSwaps(t *testing.T) {
+	v := lineupFixture()
+	var plain, swapped strings.Builder
+
+	printLineup(&plain, v)
+	v.Swapped = true
+	printLineup(&swapped, v)
+
+	if strings.Contains(plain.String(), "pending swaps") {
+		t.Errorf("no swaps were entered, so the label must not mention them:\n%s", plain.String())
+	}
+	if !strings.Contains(swapped.String(), "with your pending swaps slotted in") {
+		t.Errorf("the comparison is against a lineup with swaps in it, and must say so:\n%s", swapped.String())
+	}
+}

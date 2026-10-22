@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/db"
@@ -18,23 +17,17 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/optimizer"
 )
 
-const teamUsage = `usage: gaffer team [TEAM_ID]
+const teamUsage = `usage: gaffer team [-swap Out>In]... [TEAM_ID]
   TEAM_ID defaults to GAFFER_TEAM_ID from .env. Find yours in the address bar when
-  you open the Points page on the FPL site: .../entry/<TEAM_ID>/event/<N>`
+  you open the Points page on the FPL site: .../entry/<TEAM_ID>/event/<N>
+` + swapHelp
 
 // runTeam pulls a manager's public squad and shows it with availability flags.
 // It reads only public data, so no FPL login is needed or used.
 func runTeam(ctx context.Context, args []string) error {
-	raw := os.Getenv("GAFFER_TEAM_ID")
-	if len(args) == 1 {
-		raw = args[0]
-	}
-	if len(args) > 1 || raw == "" {
-		return errors.New(teamUsage)
-	}
-	teamID, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || teamID < 1 {
-		return fmt.Errorf("invalid team id %q\n%s", raw, teamUsage)
+	teamID, swaps, err := parseTeamArgs("team", teamUsage, args)
+	if err != nil {
+		return err
 	}
 	dsn := os.Getenv("GAFFER_DSN")
 	if dsn == "" {
@@ -66,6 +59,10 @@ func runTeam(ctx context.Context, args []string) error {
 		if errors.As(err, &se) && se.StatusCode == http.StatusNotFound {
 			return fmt.Errorf("FPL has no visible squad for team %d (wrong ID, or the gameweek's deadline has not passed): %w", teamID, err)
 		}
+		return err
+	}
+	team, _, err = applyPending(os.Stdout, team, players, swaps)
+	if err != nil {
 		return err
 	}
 	printTeam(os.Stdout, team, teams)
