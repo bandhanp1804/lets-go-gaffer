@@ -33,12 +33,17 @@ func (b *trackedBody) Close() error { b.closed = true; return nil }
 
 // scripted is a fake http.RoundTripper that replays steps in order.
 type scripted struct {
-	steps  []step
-	calls  int
-	bodies []*trackedBody
+	steps     []step
+	calls     int
+	bodies    []*trackedBody
+	reqBodies []string // what each attempt's request body contained
 }
 
 func (s *scripted) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Body != nil {
+		b, _ := io.ReadAll(req.Body)
+		s.reqBodies = append(s.reqBodies, string(b))
+	}
 	if s.calls >= len(s.steps) {
 		return nil, fmt.Errorf("script exhausted: call %d", s.calls+1)
 	}
@@ -179,6 +184,47 @@ func TestRetryTransport(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRetryTransport_ReplaysTheRequestBodyOnEveryAttempt(t *testing.T) {
+	rt := &scripted{steps: []step{{status: 503}, {status: 503}, {status: 200}}}
+	tr := httpx.NewRetryTransport(rt, httpx.RetryConfig{MaxAttempts: 4, BaseDelay: time.Millisecond, MaxDelay: time.Millisecond, Sleep: (&sleeper{}).sleep})
+
+	// strings.Reader gives the request a GetBody, which is how a body is replayed.
+	req, _ := http.NewRequest(http.MethodPost, "http://fpl.test/embed", strings.NewReader(`{"input":["a"]}`))
+	resp, err := (&http.Client{Transport: tr}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if len(rt.reqBodies) != 3 {
+		t.Fatalf("attempts saw %d bodies, want 3", len(rt.reqBodies))
+	}
+	for i, got := range rt.reqBodies {
+		if got != `{"input":["a"]}` {
+			t.Errorf("attempt %d body = %q, want the full original body", i+1, got)
+		}
+	}
+}
+
+func TestRetryTransport_RefusesToRetryABodyItCannotReplay(t *testing.T) {
+	rt := &scripted{steps: []step{{status: 503}, {status: 200}}}
+	tr := httpx.NewRetryTransport(rt, httpx.RetryConfig{MaxAttempts: 4, BaseDelay: time.Millisecond, MaxDelay: time.Millisecond, Sleep: (&sleeper{}).sleep})
+
+	// An arbitrary reader has no GetBody: a retry would send an empty body.
+	req, _ := http.NewRequest(http.MethodPost, "http://fpl.test/embed", io.NopCloser(strings.NewReader("payload")))
+	resp, err := (&http.Client{Transport: tr}).Do(req)
+	if resp != nil {
+		resp.Body.Close()
+	}
+
+	if err == nil || !strings.Contains(err.Error(), "replay") {
+		t.Fatalf("err = %v, want an error explaining the body cannot be replayed", err)
+	}
+	if rt.calls != 1 {
+		t.Errorf("calls = %d, want 1: never send a second attempt with a lost body", rt.calls)
 	}
 }
 

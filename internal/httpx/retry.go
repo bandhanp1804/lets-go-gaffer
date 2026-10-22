@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math/rand/v2"
 	"net/http"
@@ -32,7 +33,9 @@ type retryTransport struct {
 // NewRetryTransport retries network errors, 429, and 5xx responses with
 // exponential backoff and full jitter, honouring Retry-After (in seconds).
 // Other statuses are returned untouched. After the final attempt it returns a
-// *RetryError. It only supports requests without a body (all FPL calls are GETs).
+// *RetryError. Requests with a body are replayed through req.GetBody, which
+// http.NewRequest sets for bytes.Reader, bytes.Buffer, and strings.Reader bodies;
+// without it a retry is refused rather than sent with an empty body.
 func NewRetryTransport(base http.RoundTripper, cfg RetryConfig) http.RoundTripper {
 	if base == nil {
 		base = http.DefaultTransport
@@ -53,7 +56,11 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	for attempt := 0; attempt < t.cfg.MaxAttempts; attempt++ {
 		var retryAfter time.Duration
 
-		resp, err := t.base.RoundTrip(req)
+		r, err := attemptRequest(req, attempt)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := t.base.RoundTrip(r)
 		switch {
 		case err != nil:
 			if ctx.Err() != nil {
@@ -71,6 +78,10 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		if attempt == t.cfg.MaxAttempts-1 {
 			break // no sleep after the final attempt
 		}
+		// Fail fast, before backing off, if a retry could not resend the body.
+		if hasBody(req) && req.GetBody == nil {
+			return nil, fmt.Errorf("not retrying after %v: request body cannot be replayed (no GetBody)", lastErr)
+		}
 
 		delay := t.backoff(attempt)
 		if retryAfter > 0 {
@@ -81,6 +92,26 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 	return nil, &RetryError{Attempts: t.cfg.MaxAttempts, Err: lastErr}
+}
+
+func hasBody(req *http.Request) bool {
+	return req.Body != nil && req.Body != http.NoBody
+}
+
+// attemptRequest returns the request to send on this attempt. The first attempt
+// uses req as is. A retry needs a fresh copy of the body, because the previous
+// attempt consumed it; sending the same request again would transmit nothing.
+func attemptRequest(req *http.Request, attempt int) (*http.Request, error) {
+	if attempt == 0 || !hasBody(req) {
+		return req, nil
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return nil, fmt.Errorf("replay request body: %w", err)
+	}
+	r := req.Clone(req.Context())
+	r.Body = body
+	return r, nil
 }
 
 // backoff returns a random delay in [0, min(MaxDelay, BaseDelay*2^attempt)].
