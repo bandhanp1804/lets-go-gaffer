@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+// SourceFPL labels items made from FPL's official per-player notes.
+//
+// Unlike a news article, such a note is state, not an event: it stays true until
+// FPL replaces or clears it. Search therefore only returns a player's current note.
+const SourceFPL = "fpl"
+
 // Item is one news story or note, from any source.
 type Item struct {
 	Source      string // "bbc", "sky", "fpl", ...

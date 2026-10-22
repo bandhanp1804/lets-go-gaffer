@@ -44,7 +44,7 @@ type Summary struct {
 }
 
 // Items from a PlayerNewsSource are fixed, so Name and Items are trivial.
-func (s *PlayerNewsSource) Name() string { return "fpl" }
+func (s *PlayerNewsSource) Name() string { return SourceFPL }
 
 func (s *PlayerNewsSource) Items(ctx context.Context) ([]Item, error) {
 	if err := ctx.Err(); err != nil {

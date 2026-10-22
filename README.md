@@ -38,7 +38,7 @@ internal/optimizer/ squad rules + greedy optimizer   (implemented)
 internal/embed/    Voyage AI client + offline test embedder (implemented)
 internal/httpx/    retry, rate limit, typed HTTP errors (implemented)
 internal/news/     RSS + FPL news, player linking, embed pipeline (implemented)
-internal/retrieval/ vector search                (planned)
+(vector search lives in internal/db: SearchNews)
 internal/router/   LLM tool-calling router       (planned)
 internal/server/   HTTP API + SSE                (planned)
 ```
@@ -57,10 +57,11 @@ go run ./cmd/gaffer sync
 
 ```bash
 go run ./cmd/gaffer news    # needs VOYAGE_API_KEY in .env
+go run ./cmd/gaffer search -player Saka "when will he be back"
 go run ./cmd/gaffer squad
 ```
 
-`news` pulls BBC Sport and Sky Sports football RSS plus FPL's official per-player injury/availability notes, links stories to players, embeds anything new with Voyage AI, and stores it in pgvector. Stored stories are never embedded twice, and progress is saved in chunks, so an interrupted or rate-limited run resumes where it stopped. Accounts without a payment method are limited to 3 requests/minute (`VOYAGE_RPM`), so a first run takes a few minutes.
+`news` pulls BBC Sport and Sky Sports football RSS plus FPL's official per-player injury/availability notes, links stories to players, embeds anything new with Voyage AI, and stores it in pgvector. Stored stories are never embedded twice, and progress is saved in chunks, so an interrupted or rate-limited run resumes where it stopped. `search` ranks stored stories by semantic similarity (`-player NAME`, `-days N`, `-k N`), so retrieval quality can be judged directly before any LLM is involved. FPL's player notes are treated as state: only a player's current note is returned, so a recovered player is never reported as injured. Accounts without a payment method are limited to 3 requests/minute (`VOYAGE_RPM`), so a first run takes a few minutes.
 
 `squad` builds the best legal squad from the stored players: it respects the £100.0m budget, the 3-per-club limit, and the position split, then picks the highest-scoring starting XI and a captain. Squads are validated in plain Go; the LLM never checks rules.
 
