@@ -34,7 +34,7 @@ migrations/        SQL schema migrations
 internal/fpl/      FPL API client and types      (implemented)
 internal/db/       Postgres + pgvector storage   (implemented)
 internal/ingest/   concurrent worker pool + sync (implemented)
-internal/optimizer/ squad validation + optimizer (planned)
+internal/optimizer/ squad rules + greedy optimizer   (implemented)
 internal/embed/    embedding interface           (planned)
 internal/retrieval/ vector search                (planned)
 internal/router/   LLM tool-calling router       (planned)
