@@ -409,3 +409,27 @@ func TestAvailabilityScore(t *testing.T) {
 		}
 	}
 }
+
+func TestLegalFormations(t *testing.T) {
+	got := optimizer.LegalFormations()
+
+	if len(got) != 8 {
+		t.Fatalf("formations = %d, want the 8 FPL allows: %v", len(got), got)
+	}
+	seen := map[[3]int]bool{}
+	for _, f := range got {
+		d, m, fw := f[0], f[1], f[2]
+		if d+m+fw != 10 || d < 3 || d > 5 || m < 2 || m > 5 || fw < 1 || fw > 3 {
+			t.Errorf("illegal formation %v", f)
+		}
+		if seen[f] {
+			t.Errorf("duplicate formation %v", f)
+		}
+		seen[f] = true
+	}
+	for _, want := range [][3]int{{3, 4, 3}, {3, 5, 2}, {4, 4, 2}, {4, 5, 1}, {5, 2, 3}, {5, 4, 1}} {
+		if !seen[want] {
+			t.Errorf("missing the %d-%d-%d formation", want[0], want[1], want[2])
+		}
+	}
+}

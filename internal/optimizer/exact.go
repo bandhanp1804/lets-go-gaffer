@@ -561,3 +561,13 @@ func slicesContains(ids []int, id int) bool {
 	}
 	return false
 }
+
+// LegalFormations lists every legal outfield split as {defenders, midfielders,
+// forwards}, each totalling ten with the goalkeeper making eleven.
+func LegalFormations() [][3]int {
+	out := make([][3]int, len(fplShape.formations))
+	for i, f := range fplShape.formations {
+		out[i] = [3]int{f[fpl.DEF], f[fpl.MID], f[fpl.FWD]}
+	}
+	return out
+}

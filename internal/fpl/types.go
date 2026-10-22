@@ -227,3 +227,29 @@ func (fs Fixtures) Difficulties(team, event int) []int {
 	}
 	return out
 }
+
+// Opponent is one match as seen from a team: who it plays, whether at home, and
+// FPL's difficulty rating of the match for the team.
+type Opponent struct {
+	Team       int
+	Home       bool
+	Difficulty int
+}
+
+// Opponents returns each match a team plays in a gameweek, in fixture order. A
+// blank gameweek gives none; a double gameweek gives two.
+func (fs Fixtures) Opponents(team, event int) []Opponent {
+	var out []Opponent
+	for _, f := range fs {
+		if f.Event != event {
+			continue
+		}
+		switch team {
+		case f.HomeTeam:
+			out = append(out, Opponent{Team: f.AwayTeam, Home: true, Difficulty: f.HomeDifficulty})
+		case f.AwayTeam:
+			out = append(out, Opponent{Team: f.HomeTeam, Home: false, Difficulty: f.AwayDifficulty})
+		}
+	}
+	return out
+}
