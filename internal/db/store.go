@@ -133,6 +133,56 @@ func (s *Store) GetPlayer(ctx context.Context, id int) (fpl.Player, error) {
 	return p, nil
 }
 
+// ListPlayers returns every player, ascending by id.
+func (s *Store) ListPlayers(ctx context.Context) ([]fpl.Player, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, first_name, last_name, web_name, team_id, position,
+			now_cost, total_points, form::text, minutes, status, chance_of_playing_next_round
+		FROM players ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("list players: %w", err)
+	}
+	defer rows.Close()
+
+	var out []fpl.Player
+	for rows.Next() {
+		var p fpl.Player
+		var position int
+		err := rows.Scan(&p.ID, &p.FirstName, &p.LastName, &p.WebName, &p.TeamID, &position,
+			&p.NowCost, &p.TotalPoints, &p.Form, &p.Minutes, &p.Status, &p.ChanceOfPlayingNextRound)
+		if err != nil {
+			return nil, fmt.Errorf("scan player: %w", err)
+		}
+		p.Position = fpl.Position(position)
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list players: %w", err)
+	}
+	return out, nil
+}
+
+// ListTeams returns every team, ascending by id.
+func (s *Store) ListTeams(ctx context.Context) ([]fpl.Team, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, name, short_name FROM teams ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("list teams: %w", err)
+	}
+	defer rows.Close()
+
+	var out []fpl.Team
+	for rows.Next() {
+		var t fpl.Team
+		if err := rows.Scan(&t.ID, &t.Name, &t.ShortName); err != nil {
+			return nil, fmt.Errorf("scan team: %w", err)
+		}
+		out = append(out, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list teams: %w", err)
+	}
+	return out, nil
+}
+
 func (s *Store) CountHistory(ctx context.Context, playerID int) (int, error) {
 	var n int
 	err := s.pool.QueryRow(ctx, `SELECT count(*) FROM player_history WHERE player_id = $1`, playerID).Scan(&n)
