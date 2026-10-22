@@ -16,7 +16,7 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/ingest"
 )
 
-const usage = "usage: gaffer sync | gaffer news | gaffer squad    (env: GAFFER_DSN required, GAFFER_MIGRATIONS default ./migrations)"
+const usage = "usage: gaffer sync | gaffer news | gaffer squad | gaffer search [flags] QUERY    (env: GAFFER_DSN required, GAFFER_MIGRATIONS default ./migrations)"
 
 func main() {
 	// Ctrl-C / SIGTERM cancels ctx; workers and the pool unwind before we exit.
@@ -35,10 +35,17 @@ func run(ctx context.Context, args []string) error {
 	if err := config.LoadDotEnv(".env"); err != nil {
 		return fmt.Errorf("load .env: %w", err)
 	}
-	if len(args) != 1 {
+	if len(args) == 0 {
 		return errors.New(usage)
 	}
-	switch args[0] {
+	cmd, rest := args[0], args[1:]
+	if cmd == "search" {
+		return runSearch(ctx, rest)
+	}
+	if len(rest) != 0 {
+		return errors.New(usage)
+	}
+	switch cmd {
 	case "sync":
 		return runSync(ctx)
 	case "news":

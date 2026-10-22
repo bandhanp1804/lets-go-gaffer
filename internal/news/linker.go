@@ -141,14 +141,30 @@ func PlayerNewsItems(players []fpl.Player, teams []fpl.Team) []Item {
 		}
 		added := p.NewsAdded.UTC()
 		items = append(items, Item{
-			Source:      "fpl",
-			Title:       fmt.Sprintf("%s (%s): %s", p.WebName, club[p.TeamID], p.News),
+			Source:      SourceFPL,
+			Title:       fmt.Sprintf("%s (%s %s): %s", p.WebName, club[p.TeamID], positionWord(p.Position), p.News),
 			URL:         fmt.Sprintf("fpl://player/%d/%s", p.ID, added.Format("2006-01-02T15:04:05Z")),
 			PublishedAt: added,
 			PlayerIDs:   []int{p.ID},
 		})
 	}
 	return items
+}
+
+// positionWord spells a position out, because "goalkeeper" in the text is what
+// lets a question like "which goalkeepers are injured" match semantically.
+func positionWord(p fpl.Position) string {
+	switch p {
+	case fpl.GKP:
+		return "goalkeeper"
+	case fpl.DEF:
+		return "defender"
+	case fpl.MID:
+		return "midfielder"
+	case fpl.FWD:
+		return "forward"
+	}
+	return "player"
 }
 
 // PlayerNewsSource adapts a fixed slice of items (such as PlayerNewsItems) to a Source.

@@ -17,7 +17,7 @@ func linkFixture() ([]fpl.Player, []fpl.Team) {
 		{ID: 4, Name: "Brighton", ShortName: "BHA"},
 	}
 	players := []fpl.Player{
-		{ID: 10, WebName: "Saka", TeamID: 1},
+		{ID: 10, WebName: "Saka", TeamID: 1, Position: fpl.MID},
 		{ID: 11, WebName: "Haaland", TeamID: 2},
 		{ID: 12, WebName: "João Pedro", TeamID: 4},
 		{ID: 20, WebName: "B.Fernandes", TeamID: 3}, // FPL prefixes an initial when a surname is shared
@@ -88,8 +88,9 @@ func TestPlayerNewsItems(t *testing.T) {
 	if it.Source != "fpl" || !slices.Equal(it.PlayerIDs, []int{10}) || !it.PublishedAt.Equal(added) {
 		t.Errorf("item = %+v", it)
 	}
-	// The player and club are in the text so the embedding knows who it is about.
-	if want := "Saka (Arsenal): Hamstring injury - 75% chance of playing"; it.Title != want {
+	// Player, club, and position are in the text so the embedding knows who it is
+	// about and a query like "which goalkeepers are injured" can match.
+	if want := "Saka (Arsenal midfielder): Hamstring injury - 75% chance of playing"; it.Title != want {
 		t.Errorf("title = %q, want %q", it.Title, want)
 	}
 	// A new note for the same player is a different URL, so history accumulates.
