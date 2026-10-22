@@ -1,4 +1,4 @@
-package fpl_test
+package httpx_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/httpx"
 )
 
 // These use the real clock with small intervals and assert only lower bounds,
@@ -18,7 +18,7 @@ func TestLimiter_SpacesSequentialCalls(t *testing.T) {
 		interval = 20 * time.Millisecond
 		n        = 5
 	)
-	l := fpl.NewLimiter(interval)
+	l := httpx.NewLimiter(interval)
 
 	start := time.Now()
 	for i := 0; i < n; i++ {
@@ -34,7 +34,7 @@ func TestLimiter_SpacesSequentialCalls(t *testing.T) {
 }
 
 func TestLimiter_WaitHonoursContext(t *testing.T) {
-	l := fpl.NewLimiter(time.Hour)
+	l := httpx.NewLimiter(time.Hour)
 
 	if err := l.Wait(context.Background()); err != nil {
 		t.Fatalf("first Wait should be immediate: %v", err)
@@ -57,7 +57,7 @@ func TestLimiter_WaitHonoursContext(t *testing.T) {
 func TestRateLimitTransport_SpacesRequests(t *testing.T) {
 	const interval = 20 * time.Millisecond
 	rt := &scripted{steps: repeat(3, step{status: 200})}
-	tr := fpl.NewRateLimitTransport(rt, fpl.NewLimiter(interval))
+	tr := httpx.NewRateLimitTransport(rt, httpx.NewLimiter(interval))
 
 	start := time.Now()
 	for i := 0; i < 3; i++ {
@@ -82,7 +82,7 @@ func TestLimiter_ConcurrentCallersAreSpaced(t *testing.T) {
 		goroutines = 8
 		perG       = 3
 	)
-	l := fpl.NewLimiter(interval)
+	l := httpx.NewLimiter(interval)
 
 	start := time.Now()
 	var wg sync.WaitGroup

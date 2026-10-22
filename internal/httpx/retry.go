@@ -1,4 +1,4 @@
-package fpl
+package httpx
 
 import (
 	"context"
@@ -63,7 +63,7 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		case retryable(resp.StatusCode):
 			retryAfter = parseRetryAfter(resp.Header.Get("Retry-After"))
 			lastErr = &StatusError{StatusCode: resp.StatusCode}
-			drainAndClose(resp.Body) // free the connection before we back off
+			DrainAndClose(resp.Body) // free the connection before we back off
 		default:
 			return resp, nil
 		}
@@ -112,7 +112,8 @@ func parseRetryAfter(v string) time.Duration {
 	return time.Duration(secs) * time.Second
 }
 
-func drainAndClose(body io.ReadCloser) {
+// DrainAndClose reads a little of body so the connection can be reused, then closes it.
+func DrainAndClose(body io.ReadCloser) {
 	_, _ = io.Copy(io.Discard, io.LimitReader(body, 4096))
 	_ = body.Close()
 }

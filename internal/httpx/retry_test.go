@@ -1,4 +1,4 @@
-package fpl_test
+package httpx_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/httpx"
 )
 
 var errBoom = errors.New("boom")
@@ -92,8 +92,8 @@ func TestRetryTransport(t *testing.T) {
 		steps      []step
 		wantCalls  int
 		wantStatus int  // checked when the call should succeed
-		giveUp     bool // want a *fpl.RetryError after exhausting attempts
-		// With giveUp: the cause must be a *fpl.StatusError with this code,
+		giveUp     bool // want a *httpx.RetryError after exhausting attempts
+		// With giveUp: the cause must be a *httpx.StatusError with this code,
 		// or (when 0) wrap errBoom.
 		causeStatus int
 	}{
@@ -112,7 +112,7 @@ func TestRetryTransport(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			rt := &scripted{steps: tc.steps}
 			sl := &sleeper{}
-			tr := fpl.NewRetryTransport(rt, fpl.RetryConfig{
+			tr := httpx.NewRetryTransport(rt, httpx.RetryConfig{
 				MaxAttempts: maxAttempts,
 				BaseDelay:   base,
 				MaxDelay:    maxDelay,
@@ -128,17 +128,17 @@ func TestRetryTransport(t *testing.T) {
 				t.Errorf("calls = %d, want %d", rt.calls, tc.wantCalls)
 			}
 			if tc.giveUp {
-				var re *fpl.RetryError
+				var re *httpx.RetryError
 				if !errors.As(err, &re) {
-					t.Fatalf("err = %v, want *fpl.RetryError", err)
+					t.Fatalf("err = %v, want *httpx.RetryError", err)
 				}
 				if re.Attempts != tc.wantCalls {
 					t.Errorf("RetryError.Attempts = %d, want %d", re.Attempts, tc.wantCalls)
 				}
 				if tc.causeStatus != 0 {
-					var se *fpl.StatusError
+					var se *httpx.StatusError
 					if !errors.As(err, &se) || se.StatusCode != tc.causeStatus {
-						t.Errorf("err = %v, want cause *fpl.StatusError{%d}", err, tc.causeStatus)
+						t.Errorf("err = %v, want cause *httpx.StatusError{%d}", err, tc.causeStatus)
 					}
 				} else if !errors.Is(err, errBoom) {
 					t.Errorf("err = %v, want it to wrap %v", err, errBoom)
@@ -185,7 +185,7 @@ func TestRetryTransport(t *testing.T) {
 func TestRetryTransport_HonoursRetryAfter(t *testing.T) {
 	rt := &scripted{steps: []step{{status: 429, retryAfter: "2"}, {status: 200}}}
 	sl := &sleeper{}
-	tr := fpl.NewRetryTransport(rt, fpl.RetryConfig{
+	tr := httpx.NewRetryTransport(rt, httpx.RetryConfig{
 		MaxAttempts: 3,
 		BaseDelay:   10 * time.Millisecond,
 		MaxDelay:    50 * time.Millisecond, // deliberately below Retry-After
@@ -210,7 +210,7 @@ func TestRetryTransport_HonoursRetryAfter(t *testing.T) {
 func TestRetryTransport_RetryAfterIsCapped(t *testing.T) {
 	rt := &scripted{steps: []step{{status: 429, retryAfter: "86400"}, {status: 200}}} // 24h
 	sl := &sleeper{}
-	tr := fpl.NewRetryTransport(rt, fpl.RetryConfig{
+	tr := httpx.NewRetryTransport(rt, httpx.RetryConfig{
 		MaxAttempts: 3,
 		BaseDelay:   10 * time.Millisecond,
 		MaxDelay:    50 * time.Millisecond,
@@ -231,7 +231,7 @@ func TestRetryTransport_RetryAfterIsCapped(t *testing.T) {
 func TestRetryTransport_ContextCancelStopsBackoff(t *testing.T) {
 	rt := &scripted{steps: repeat(100, step{status: 503})}
 	// Default Sleep (nil) with an hour-long backoff: only ctx can end this quickly.
-	tr := fpl.NewRetryTransport(rt, fpl.RetryConfig{
+	tr := httpx.NewRetryTransport(rt, httpx.RetryConfig{
 		MaxAttempts: 100,
 		BaseDelay:   time.Hour,
 		MaxDelay:    time.Hour,

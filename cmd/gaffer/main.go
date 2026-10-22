@@ -14,6 +14,7 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/config"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/db"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/httpx"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/ingest"
 )
 
@@ -70,9 +71,9 @@ func runSync(ctx context.Context) error {
 
 	// Retry wraps the rate limiter so every attempt, including retries, is paced.
 	// No http.Client.Timeout: it would cut off backoff; ctx bounds the whole run.
-	transport := fpl.NewRetryTransport(
-		fpl.NewRateLimitTransport(http.DefaultTransport, fpl.NewLimiter(100*time.Millisecond)),
-		fpl.RetryConfig{MaxAttempts: 4, BaseDelay: 500 * time.Millisecond, MaxDelay: 10 * time.Second},
+	transport := httpx.NewRetryTransport(
+		httpx.NewRateLimitTransport(http.DefaultTransport, httpx.NewLimiter(100*time.Millisecond)),
+		httpx.RetryConfig{MaxAttempts: 4, BaseDelay: 500 * time.Millisecond, MaxDelay: 10 * time.Second},
 	)
 	client := fpl.NewHTTPClient(&http.Client{Transport: transport})
 
