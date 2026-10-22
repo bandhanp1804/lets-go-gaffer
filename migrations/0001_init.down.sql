@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS chunk_players;
+DROP TABLE IF EXISTS news_chunks;
+DROP TABLE IF EXISTS news_articles;
+DROP TABLE IF EXISTS player_history;
+DROP TABLE IF EXISTS players;
+DROP TABLE IF EXISTS teams;
+DROP EXTENSION IF EXISTS vector;

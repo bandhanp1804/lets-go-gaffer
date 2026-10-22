@@ -29,8 +29,10 @@ news feeds ──► embed ───────┘
 
 ```text
 cmd/gaffer/        entry point
+deploy/docker/     local Postgres + pgvector via docker compose
+migrations/        SQL schema migrations
 internal/fpl/      FPL API client and types      (implemented)
-internal/db/       Postgres + pgvector           (planned)
+internal/db/       Postgres + pgvector storage   (implemented)
 internal/ingest/   concurrent worker pool        (planned)
 internal/optimizer/ squad validation + optimizer (planned)
 internal/embed/    embedding interface           (planned)
@@ -54,6 +56,17 @@ This fetches the live `bootstrap-static` data from the FPL API and prints player
 ```bash
 go vet ./... && go test -race ./...
 ```
+
+Database tests need Postgres with pgvector and skip without `GAFFER_TEST_DSN`. The container listens on host port 5433 (a native Postgres often owns 5432):
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml up -d --wait
+docker compose -f deploy/docker/docker-compose.yml exec postgres createdb -U gaffer gaffer_test
+export GAFFER_TEST_DSN='postgres://gaffer:gaffer@localhost:5433/gaffer_test?sslmode=disable'
+go test -race ./...
+```
+
+The tests truncate every table and refuse to run against a database whose name does not end in `_test`.
 
 ## Roadmap
 

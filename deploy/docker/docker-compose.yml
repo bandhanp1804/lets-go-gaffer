@@ -1,0 +1,24 @@
+# Explicit name: otherwise compose uses the folder name ("docker"), and the
+# volume would collide with any other project that lives in a folder called docker.
+name: lets-go-gaffer
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: gaffer
+      POSTGRES_PASSWORD: gaffer
+      POSTGRES_DB: gaffer
+    ports:
+      # Host port 5433: a native Postgres commonly owns 5432 on dev machines.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gaffer -d gaffer"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
