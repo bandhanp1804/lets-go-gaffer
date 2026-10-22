@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bandhanpatel/lets-go-gaffer/internal/config"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/db"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/ingest"
@@ -31,6 +32,10 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) error {
+	// Optional local config; real environment variables take precedence.
+	if err := config.LoadDotEnv(".env"); err != nil {
+		return fmt.Errorf("load .env: %w", err)
+	}
 	if len(args) != 1 {
 		return errors.New(usage)
 	}

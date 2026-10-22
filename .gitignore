@@ -25,8 +25,10 @@ profile.cov
 go.work
 go.work.sum
 
-# env file
+# env files hold secrets; only the template is committed
 .env
+.env.*
+!.env.example
 
 # Editor/IDE
 # .idea/
