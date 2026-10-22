@@ -3,6 +3,7 @@ package fpl
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -105,6 +106,23 @@ func (c *HTTPClient) FetchFixtures(ctx context.Context) (Fixtures, error) {
 		return nil, fmt.Errorf("fetch fixtures: %w", err)
 	}
 	return fs, nil
+}
+
+// FetchMyTeam retrieves the manager's squad as it stands now, with FPL's exact
+// selling prices, bank, and transfers made this gameweek. It needs a client whose
+// transport carries a session (see NewSessionTransport). A rejected session is
+// reported as ErrSessionRejected.
+func (c *HTTPClient) FetchMyTeam(ctx context.Context, teamID int) (*MyTeam, error) {
+	var t MyTeam
+	err := c.get(ctx, fmt.Sprintf("/my-team/%d/", teamID), &t)
+	if err != nil {
+		var se *httpx.StatusError
+		if errors.As(err, &se) && (se.StatusCode == http.StatusUnauthorized || se.StatusCode == http.StatusForbidden) {
+			return nil, fmt.Errorf("fetch my team %d: %w: %w", teamID, ErrSessionRejected, err)
+		}
+		return nil, fmt.Errorf("fetch my team %d: %w", teamID, err)
+	}
+	return &t, nil
 }
 
 // get performs a GET request and JSON-decodes the response into dst.

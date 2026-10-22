@@ -31,6 +31,7 @@ type lineupView struct {
 	Advice    lineup.Advice
 	Opponents map[int][]fpl.Opponent // player id -> that player's matches in Next
 	Swapped   bool                   // the squad includes pending transfers the manager entered
+	Live      bool                   // the squad was read live from FPL, so Starting is the current lineup there
 }
 
 // runLineup recommends the best XI from the manager's real squad for the
@@ -72,7 +73,8 @@ func runLineup(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	team, changes, err := applyPending(os.Stdout, team, players, swaps)
+	session := os.Getenv(sessionEnv)
+	team, fin, changes, err := currentSquad(ctx, os.Stdout, fpl.NewHTTPClient(sessionClient(session)), session, teamID, team, players, swaps, time.Now())
 	if err != nil {
 		return err
 	}
@@ -95,7 +97,7 @@ func runLineup(ctx context.Context, args []string) error {
 	for _, p := range team.Squad.Players {
 		opponents[p.ID] = fixtures.Opponents(p.TeamID, next)
 	}
-	printLineup(os.Stdout, lineupView{Team: team, Teams: teams, Next: next, Advice: advice, Opponents: opponents, Swapped: len(changes) > 0})
+	printLineup(os.Stdout, lineupView{Team: team, Teams: teams, Next: next, Advice: advice, Opponents: opponents, Swapped: len(changes) > 0, Live: fin != nil})
 	return nil
 }
 
@@ -179,11 +181,18 @@ func printLineup(w io.Writer, v lineupView) {
 	in, out := lineup.Changes(v.Team.Squad.Starting, now)
 	fmt.Fprintln(w)
 	if len(in) == 0 && len(out) == 0 {
-		fmt.Fprintf(w, "This is the same XI as your GW%d lineup.\n", v.Team.Event)
+		if v.Live {
+			fmt.Fprintln(w, "This is the same XI as the lineup currently set on FPL.")
+		} else {
+			fmt.Fprintf(w, "This is the same XI as your GW%d lineup.\n", v.Team.Event)
+		}
 		return
 	}
 	was := fmt.Sprintf("your GW%d lineup", v.Team.Event)
-	if v.Swapped {
+	switch {
+	case v.Live:
+		was = "the lineup currently set on FPL"
+	case v.Swapped:
 		was += " with your pending swaps slotted in"
 	}
 	fmt.Fprintf(w, "Changes from %s:\n", was)
