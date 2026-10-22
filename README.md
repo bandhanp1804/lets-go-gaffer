@@ -2,7 +2,7 @@
 
 Go + RAG assistant for Fantasy Premier League: pgvector news retrieval, concurrent ingestion, and a constraint-validated squad optimizer.
 
-> **Status: early development.** Only the FPL API client exists so far. Everything under "Planned" below is not built yet.
+> **Status: early development.** Data ingestion works end to end (FPL API to Postgres). Everything under "Planned" below is not built yet.
 
 ## Design principles
 
@@ -33,7 +33,7 @@ deploy/docker/     local Postgres + pgvector via docker compose
 migrations/        SQL schema migrations
 internal/fpl/      FPL API client and types      (implemented)
 internal/db/       Postgres + pgvector storage   (implemented)
-internal/ingest/   concurrent worker pool        (planned)
+internal/ingest/   concurrent worker pool + sync (implemented)
 internal/optimizer/ squad validation + optimizer (planned)
 internal/embed/    embedding interface           (planned)
 internal/retrieval/ vector search                (planned)
@@ -46,10 +46,12 @@ internal/server/   HTTP API + SSE                (planned)
 Requires Go 1.23+.
 
 ```bash
-go run ./cmd/gaffer/
+docker compose -f deploy/docker/docker-compose.yml up -d --wait
+export GAFFER_DSN='postgres://gaffer:gaffer@localhost:5433/gaffer?sslmode=disable'
+go run ./cmd/gaffer sync
 ```
 
-This fetches the live `bootstrap-static` data from the FPL API and prints player, team, and gameweek counts plus the first player.
+`sync` applies migrations, then pulls all teams, players, and per-gameweek history from the live FPL API into Postgres. A full run takes about a minute: 8 workers fetch concurrently, paced to 10 requests/second so the API isn't hammered. Ctrl-C cancels cleanly.
 
 ## Development
 
