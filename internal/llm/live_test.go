@@ -27,10 +27,7 @@ func TestAnthropic_Live(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	model := os.Getenv("ANTHROPIC_MODEL")
-	if model == "" {
-		model = "claude-haiku-5-5"
-	}
+	model := llm.ModelFromEnv()
 
 	// 1. Streaming text.
 	var pieces int

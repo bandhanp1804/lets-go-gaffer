@@ -5,6 +5,7 @@ package llm
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/httpx"
@@ -186,4 +187,17 @@ func (e *APIError) Unwrap() error {
 		return nil
 	}
 	return &httpx.StatusError{StatusCode: e.Status}
+}
+
+// DefaultModel is the model used unless ANTHROPIC_MODEL says otherwise. The
+// assistant's questions are short and Go does the computing, so the small, fast,
+// inexpensive model is enough.
+const DefaultModel = "claude-haiku-5-5"
+
+// ModelFromEnv returns ANTHROPIC_MODEL if set, else DefaultModel.
+func ModelFromEnv() string {
+	if m := strings.TrimSpace(os.Getenv("ANTHROPIC_MODEL")); m != "" {
+		return m
+	}
+	return DefaultModel
 }
