@@ -41,6 +41,7 @@ internal/transfers/ transfer search with free-transfer and hit costs (implemente
 internal/myteam/   your squad, free transfers, selling prices (implemented)
 internal/embed/    Voyage AI client + offline test embedder (implemented)
 internal/httpx/    retry, rate limit, typed HTTP errors (implemented)
+internal/llm/      Anthropic Messages API client: streaming, tool use (implemented)
 internal/news/     RSS + FPL news, player linking, embed pipeline (implemented)
 (vector search lives in internal/db: SearchNews)
 internal/router/   LLM tool-calling router       (planned)
