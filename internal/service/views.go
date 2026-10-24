@@ -151,6 +151,7 @@ type NewsView struct {
 
 func round1(x float64) float64 { return math.Round(x*10) / 10 }
 func round2(x float64) float64 { return math.Round(x*100) / 100 }
+func round3(x float64) float64 { return math.Round(x*1000) / 1000 }
 
 // formatMoney renders tenths of £m: 61 -> "£6.1m".
 func formatMoney(tenths int) string { return fmt.Sprintf("£%d.%dm", tenths/10, tenths%10) }

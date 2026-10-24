@@ -63,6 +63,7 @@ type Store interface {
 	StartingPrices(ctx context.Context, playerIDs []int) (map[int]int, error)
 	FindPlayers(ctx context.Context, name string) ([]fpl.Player, error)
 	SearchNews(ctx context.Context, query []float32, f db.SearchFilter) ([]db.Hit, error)
+	CountNews(ctx context.Context) (db.NewsCounts, error)
 }
 
 // FPL is FPL's public API.
@@ -110,6 +111,10 @@ type Service struct {
 	baseAt  time.Time
 	squad   *squadSnap
 	squadAt time.Time
+
+	btMu   sync.Mutex // the backtest takes seconds, so it has its own lock and cache
+	btKey  string
+	btView *BacktestView
 }
 
 // New returns a Service.
@@ -122,14 +127,16 @@ func New(deps Deps, cfg Config) *Service {
 
 // baseSnap is the season's data, shared by every question.
 type baseSnap struct {
-	players  []fpl.Player
-	teams    []fpl.Team
-	short    map[int]string // team id -> short name
-	history  []fpl.PlayerHistory
-	fixtures fpl.Fixtures
-	next     int      // the gameweek being decided for: the one whose deadline has not passed
-	notes    []string // problems with the data itself, shown with every squad answer
-	model    *projection.Model
+	players   []fpl.Player
+	teams     []fpl.Team
+	short     map[int]string // team id -> short name
+	history   []fpl.PlayerHistory
+	fixtures  fpl.Fixtures
+	gameweeks []fpl.Gameweek
+	asOf      int      // the last gameweek the stored history covers
+	next      int      // the gameweek being decided for: the one whose deadline has not passed
+	notes     []string // problems with the data itself, shown with every squad answer
+	model     *projection.Model
 }
 
 // squadSnap is the manager's squad and money.
@@ -189,7 +196,7 @@ func (s *Service) baseSnapshot(ctx context.Context) (*baseSnap, error) {
 	for _, t := range teams {
 		short[t.ID] = t.ShortName
 	}
-	s.base = &baseSnap{players: players, teams: teams, short: short, history: history, fixtures: fixtures, next: next, notes: notes, model: model}
+	s.base = &baseSnap{players: players, teams: teams, short: short, history: history, fixtures: fixtures, gameweeks: boot.Gameweeks, asOf: asOf, next: next, notes: notes, model: model}
 	s.baseAt = s.deps.Now()
 	return s.base, nil
 }

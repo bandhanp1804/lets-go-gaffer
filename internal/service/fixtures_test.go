@@ -114,6 +114,9 @@ func (s *fakeStore) ListPlayers(context.Context) ([]fpl.Player, error) {
 	s.mu.Unlock()
 	return append([]fpl.Player(nil), s.w.players...), nil
 }
+func (s *fakeStore) CountNews(context.Context) (db.NewsCounts, error) {
+	return db.NewsCounts{Articles: 12, Chunks: 15, PlayerLinks: 20}, nil
+}
 func (s *fakeStore) ListTeams(context.Context) ([]fpl.Team, error) { return s.w.teams, nil }
 func (s *fakeStore) ListHistory(context.Context) ([]fpl.PlayerHistory, error) {
 	return s.w.history, nil
