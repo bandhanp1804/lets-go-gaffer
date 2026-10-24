@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 
@@ -41,6 +42,16 @@ type Summary struct {
 	New          int // embedded and saved
 	Linked       int // of New, how many mention at least one player
 	SourceErrors map[string]error
+}
+
+// FailedSources names the sources that failed, sorted.
+func (s Summary) FailedSources() []string {
+	names := make([]string, 0, len(s.SourceErrors))
+	for n := range s.SourceErrors {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // Items from a PlayerNewsSource are fixed, so Name and Items are trivial.
@@ -93,73 +104,100 @@ func Ingest(ctx context.Context, sources []Source, linker *Linker, e Embedder, s
 		return sum, fmt.Errorf("news ingest: every source failed: %w", errors.Join(failures...))
 	}
 
-	// Merge in source order, keeping the first copy of each story. A story is the
-	// same if it has the same URL, or the same title from the same publisher: Sky
-	// lists one article in several feeds under URLs that differ only by section.
-	seenURL := map[string]bool{}
-	seenStory := map[string]bool{}
-	var fresh []Item
-	for _, items := range results {
-		for _, it := range items {
-			sum.Fetched++
-			story := storyKey(it)
-			if seenURL[it.URL] || seenStory[story] {
-				sum.Duplicates++
-				continue
-			}
-			seenURL[it.URL], seenStory[story] = true, true
-			fresh = append(fresh, it)
-		}
-	}
-	if len(fresh) == 0 {
-		return sum, nil
-	}
-
-	urls := make([]string, len(fresh))
-	for i, it := range fresh {
-		urls[i] = it.URL
-	}
-	stored, err := s.ExistingURLs(ctx, urls)
+	fresh, dups := Merge(results)
+	sum.Fetched += len(fresh) + dups
+	sum.Duplicates += dups
+	todo, stored, err := DropStored(ctx, s, fresh)
 	if err != nil {
-		return sum, fmt.Errorf("news ingest: check stored items: %w", err)
+		return sum, fmt.Errorf("news ingest: %w", err)
 	}
-	var todo []Item
-	for _, it := range fresh {
-		if stored[it.URL] {
-			sum.Duplicates++
-			continue
-		}
-		todo = append(todo, it)
-	}
+	sum.Duplicates += stored
 	if len(todo) == 0 {
 		return sum, nil
 	}
-
-	if linker != nil {
-		for i := range todo {
-			if len(todo[i].PlayerIDs) == 0 {
-				todo[i].PlayerIDs = linker.Link(todo[i].Text())
-			}
-		}
-	}
+	LinkAll(linker, todo)
 
 	// Embed and save one chunk at a time. Embedding APIs rate-limit and fail
 	// mid-run; saving per chunk keeps the work already paid for, and because
 	// stored URLs are skipped next time, a rerun resumes where this one stopped.
 	for start := 0; start < len(todo); start += ChunkSize {
 		chunk := todo[start:min(start+ChunkSize, len(todo))]
-		if err := embedAndSave(ctx, chunk, e, s); err != nil {
+		if err := EmbedAndSave(ctx, chunk, e, s); err != nil {
 			return sum, fmt.Errorf("news ingest: items %d-%d of %d: %w", start, start+len(chunk)-1, len(todo), err)
 		}
 		sum.New += len(chunk)
-		for _, it := range chunk {
-			if len(it.PlayerIDs) > 0 {
-				sum.Linked++
-			}
-		}
+		sum.Linked += Linked(chunk)
 		slog.Info("saved news", "saved", sum.New, "of", len(todo))
 	}
 	return sum, nil
+}
+
+// Merge joins the sources' items in source order, keeping the first copy of each story, and
+// says how many copies it dropped. A story is the same if it has the same URL, or the same
+// title from the same publisher: Sky lists one article in several feeds under URLs that differ
+// only by section.
+func Merge(results [][]Item) (fresh []Item, duplicates int) {
+	seenURL := map[string]bool{}
+	seenStory := map[string]bool{}
+	for _, items := range results {
+		for _, it := range items {
+			story := storyKey(it)
+			if seenURL[it.URL] || seenStory[story] {
+				duplicates++
+				continue
+			}
+			seenURL[it.URL], seenStory[story] = true, true
+			fresh = append(fresh, it)
+		}
+	}
+	return fresh, duplicates
+}
+
+// DropStored returns the items not stored yet, and how many were.
+func DropStored(ctx context.Context, s Store, items []Item) (todo []Item, stored int, err error) {
+	if len(items) == 0 {
+		return nil, 0, nil
+	}
+	urls := make([]string, len(items))
+	for i, it := range items {
+		urls[i] = it.URL
+	}
+	have, err := s.ExistingURLs(ctx, urls)
+	if err != nil {
+		return nil, 0, fmt.Errorf("check stored items: %w", err)
+	}
+	for _, it := range items {
+		if have[it.URL] {
+			stored++
+			continue
+		}
+		todo = append(todo, it)
+	}
+	return todo, stored, nil
+}
+
+// LinkAll fills in the players of every item that does not name them already. A nil linker
+// links nothing.
+func LinkAll(linker *Linker, items []Item) {
+	if linker == nil {
+		return
+	}
+	for i := range items {
+		if len(items[i].PlayerIDs) == 0 {
+			items[i].PlayerIDs = linker.Link(items[i].Text())
+		}
+	}
+}
+
+// Linked counts the items that mention at least one player.
+func Linked(items []Item) int {
+	n := 0
+	for _, it := range items {
+		if len(it.PlayerIDs) > 0 {
+			n++
+		}
+	}
+	return n
 }
 
 // storyKey identifies a story by publisher host and normalised title.
@@ -171,7 +209,8 @@ func storyKey(it Item) string {
 	return host + "|" + strings.ToLower(strings.Join(strings.Fields(it.Title), " "))
 }
 
-func embedAndSave(ctx context.Context, chunk []Item, e Embedder, s Store) error {
+// EmbedAndSave embeds one chunk of items (up to ChunkSize) and stores them together.
+func EmbedAndSave(ctx context.Context, chunk []Item, e Embedder, s Store) error {
 	texts := make([]string, len(chunk))
 	for i, it := range chunk {
 		texts[i] = it.Text()

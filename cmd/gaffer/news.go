@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
 	"time"
 
@@ -116,12 +115,7 @@ func (p newsPipeline) refresh(ctx context.Context) (news.Summary, error) {
 	slog.Info("news ingest finished",
 		"fetched", sum.Fetched, "new", sum.New, "duplicates", sum.Duplicates, "linked_to_players", sum.Linked,
 		"elapsed", time.Since(start).Round(time.Millisecond))
-	names := make([]string, 0, len(sum.SourceErrors))
-	for name := range sum.SourceErrors {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
+	for _, name := range sum.FailedSources() {
 		slog.Warn("source failed", "source", name, "err", sum.SourceErrors[name])
 	}
 	if err != nil {

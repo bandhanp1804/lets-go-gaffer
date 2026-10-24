@@ -667,15 +667,15 @@ type refresher struct {
 	running bool
 }
 
-func (f *refresher) Start() bool {
+func (f *refresher) Start(context.Context) (bool, error) {
 	f.starts++
 	was := f.running
 	f.running = true
-	return !was
+	return !was, nil
 }
 
-func (f *refresher) Status() news.RefreshStatus {
-	return news.RefreshStatus{Available: true, Running: f.running, LastNew: 4}
+func (f *refresher) Status(context.Context) (news.RefreshStatus, error) {
+	return news.RefreshStatus{Available: true, Running: f.running, LastNew: 4}, nil
 }
 
 func TestNewsRefresh(t *testing.T) {
@@ -715,5 +715,79 @@ func TestNewsRefreshRefusesAForeignOrigin(t *testing.T) {
 
 	if w.Code != 403 || f.starts != 0 {
 		t.Errorf("%d, starts %d: a page on another site must not be able to spend embedding credits", w.Code, f.starts)
+	}
+}
+
+// inbox is an Inbox that records what it was asked.
+type inbox struct {
+	readTo  int64
+	watched map[int]bool
+}
+
+func (i *inbox) Alerts(context.Context) (service.AlertsView, error) {
+	return service.AlertsView{Alerts: []service.AlertView{{ID: 3, Title: "Palmer: suspended"}}, Unread: 1, Live: true}, nil
+}
+func (i *inbox) MarkRead(_ context.Context, upTo int64) error {
+	if upTo < 1 {
+		return &service.InputError{Msg: "up_to must be an alert id"}
+	}
+	i.readTo = upTo
+	return nil
+}
+func (i *inbox) Watchlist(context.Context) (service.WatchlistView, error) {
+	v := service.WatchlistView{}
+	for id, on := range i.watched {
+		if on {
+			v.Players = append(v.Players, service.WatchedView{ID: id})
+		}
+	}
+	return v, nil
+}
+func (i *inbox) SetWatch(ctx context.Context, id int, on bool) (service.WatchlistView, error) {
+	i.watched[id] = on
+	return i.Watchlist(ctx)
+}
+func (i *inbox) Health(context.Context) (service.HealthView, error) {
+	return service.HealthView{Evals: []service.EvalRunView{{PassRate: 0.96}}}, nil
+}
+
+func TestInboxEndpoints(t *testing.T) {
+	in := &inbox{watched: map[int]bool{}}
+	r := newRig(t, func(c *api.Config, _ *rig) { c.Inbox = in })
+
+	tests := []struct {
+		method, path, body string
+		status             int
+		contains           string
+	}{
+		{"GET", "/api/alerts", "", 200, `"unread":1`},
+		{"POST", "/api/alerts/read", `{"up_to": 3}`, 200, `"ok":true`},
+		{"POST", "/api/alerts/read", `{"up_to": 0}`, 400, "alert id"},
+		{"POST", "/api/alerts/read", `{"upto": 3}`, 400, "up_to"},
+		{"POST", "/api/watchlist", `{"player_id": 4, "watch": true}`, 200, `"id":4`},
+		{"GET", "/api/watchlist", "", 200, `"id":4`},
+		{"POST", "/api/watchlist", `{"player_id": 4, "watch": false}`, 200, `"players":[]`},
+		{"GET", "/api/health/runs", "", 200, `"pass_rate":0.96`},
+	}
+	for _, tt := range tests {
+		w := r.do(tt.method, tt.path, tt.body, nil)
+		if w.Code != tt.status || !strings.Contains(w.Body.String(), tt.contains) {
+			t.Errorf("%s %s %s: %d %s", tt.method, tt.path, tt.body, w.Code, w.Body)
+		}
+	}
+	if in.readTo != 3 {
+		t.Errorf("read up to %d", in.readTo)
+	}
+	if w := r.do("POST", "/api/watchlist", `{"player_id": 4, "watch": true}`, map[string]string{"Origin": "https://evil.example"}); w.Code != 403 {
+		t.Errorf("another site must not change the watchlist: %d", w.Code)
+	}
+}
+
+func TestInboxEndpointsAreOffWithoutAnInbox(t *testing.T) {
+	r := newRig(t, nil)
+	for _, p := range []string{"/api/alerts", "/api/watchlist", "/api/health/runs"} {
+		if w := r.do("GET", p, "", nil); w.Code != 503 {
+			t.Errorf("%s: %d", p, w.Code)
+		}
 	}
 }

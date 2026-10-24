@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS briefings;
+DROP TABLE IF EXISTS backtest_runs;
+DROP TABLE IF EXISTS eval_runs;
+DROP TABLE IF EXISTS watchlist;
+DROP TABLE IF EXISTS alerts;

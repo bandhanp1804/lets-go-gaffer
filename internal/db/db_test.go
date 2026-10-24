@@ -52,8 +52,8 @@ func newStore(t *testing.T) (*db.Store, *pgxpool.Pool) {
 	if err := db.Migrate(ctx, pool, os.DirFS("../../migrations")); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	_, err = pool.Exec(ctx, `TRUNCATE chunk_players, news_chunks, news_articles,
-		player_history, players, teams RESTART IDENTITY CASCADE`)
+	_, err = pool.Exec(ctx, `TRUNCATE alerts, watchlist, eval_runs, backtest_runs, briefings,
+		chunk_players, news_chunks, news_articles, player_history, players, teams RESTART IDENTITY CASCADE`)
 	if err != nil {
 		t.Fatalf("truncate: %v", err)
 	}

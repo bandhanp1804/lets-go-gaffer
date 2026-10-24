@@ -40,6 +40,7 @@ func generate() (string, error) {
 	for _, v := range []any{
 		service.MyTeamView{}, service.LineupView{}, service.TransfersView{}, service.PlayersView{},
 		service.NewsSearchView{}, service.StatusView{}, service.SquadView{}, service.BacktestView{}, service.WhatIfView{}, service.WhatIfRequest{}, service.ChipsView{}, service.OutlookView{},
+		service.AlertsView{}, service.WatchlistView{}, service.HealthView{},
 		api.AskDone{}, api.ErrorBody{}, news.RefreshStatus{},
 	} {
 		if err := g.Add(v); err != nil {

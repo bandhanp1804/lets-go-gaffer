@@ -205,6 +205,9 @@ func ago(d time.Duration) string {
 	return fmt.Sprintf("%d min", int(d.Minutes()))
 }
 
+// StatusText is how a player's availability reads: "available", "doubtful (75%)", "suspended".
+func StatusText(p fpl.Player) string { return statusText(p) }
+
 func statusText(p fpl.Player) string {
 	label := map[string]string{"a": "available", "d": "doubtful", "i": "injured", "s": "suspended", "u": "unavailable"}[p.Status]
 	if label == "" {

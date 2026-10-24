@@ -86,6 +86,16 @@ func buildStack(ctx context.Context) (stack, func(), error) {
 	if err != nil {
 		return stack{}, nil, fmt.Errorf("open database: %w", err)
 	}
+	// The server and the worker read tables a later version added (alerts, watchlist), so a
+	// database that was only ever synced by an older build is brought up to date here.
+	migrations := os.Getenv("GAFFER_MIGRATIONS")
+	if migrations == "" {
+		migrations = "migrations"
+	}
+	if err := db.Migrate(ctx, pool, os.DirFS(migrations)); err != nil {
+		pool.Close()
+		return stack{}, nil, fmt.Errorf("migrate: %w", err)
+	}
 
 	// The token lasts an hour and this process may run for days (gaffer serve), so it is
 	// read again whenever .env changes instead of once at startup.

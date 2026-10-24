@@ -55,6 +55,9 @@ type BacktestReport struct {
 	AvgTuned, AvgDefault, AvgOld float64
 }
 
+// DefaultModelName is the backtest row of the model the app uses, the one whose trend is watched.
+const DefaultModelName = "model: + fixture difficulty (default)"
+
 // RunBacktest measures how well each way of scoring players ranked gameweeks that have
 // already been played, using only the gameweeks before each. It stops early when ctx is
 // cancelled.
@@ -93,7 +96,7 @@ func RunBacktest(ctx context.Context, players []fpl.Player, history []fpl.Player
 		{"model: + recency decay 0.8", model(Params{Decay: 0.8})},
 		{"model: long-memory skill, short-memory minutes", model(Params{Decay: 1, MinutesDecay: 0.35})},
 		{"model: + shrink toward position norm (3 games)", model(Params{Decay: 0.8, PriorGames: 3})},
-		{"model: + fixture difficulty (default)", model(Default)},
+		{DefaultModelName, model(Default)},
 	} {
 		rep.Models = append(rep.Models, ModelRow{Name: m.name, Metrics: eval(m.f)})
 	}

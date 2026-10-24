@@ -151,12 +151,19 @@ func floatParam(v string) (float64, error) {
 // whatIf weighs a transfer plan. It is a POST because the plan is a body, not because it
 // changes anything: nothing is stored and nothing is sent to FPL.
 // newsRefreshStatus says whether a refresh is running and how the last one went.
-func (s *Server) newsRefreshStatus(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) newsRefreshStatus(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.News == nil {
 		writeJSON(w, http.StatusOK, news.RefreshStatus{})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.cfg.News.Status())
+	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ReadTimeout)
+	defer cancel()
+	st, err := s.cfg.News.Status(ctx)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, st)
 }
 
 // newsRefresh starts a refresh and answers at once: pulling and embedding can take a minute or
@@ -167,8 +174,98 @@ func (s *Server) newsRefresh(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, service.ErrNewsUnavailable)
 		return
 	}
-	s.cfg.News.Start()
-	writeJSON(w, http.StatusAccepted, s.cfg.News.Status())
+	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ReadTimeout)
+	defer cancel()
+	if _, err := s.cfg.News.Start(ctx); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	st, err := s.cfg.News.Status(ctx)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	st.Running = true // it was just started, or was already going; a list may not show it yet
+	writeJSON(w, http.StatusAccepted, st)
+}
+
+// errInboxOff is returned by the inbox endpoints of a server built without one.
+var errInboxOff = errors.New("alerts are not available on this server")
+
+func (s *Server) alerts(ctx context.Context, _ *http.Request) (any, error) {
+	if s.cfg.Inbox == nil {
+		return nil, errInboxOff
+	}
+	return s.cfg.Inbox.Alerts(ctx)
+}
+
+func (s *Server) watchlist(ctx context.Context, _ *http.Request) (any, error) {
+	if s.cfg.Inbox == nil {
+		return nil, errInboxOff
+	}
+	return s.cfg.Inbox.Watchlist(ctx)
+}
+
+func (s *Server) health(ctx context.Context, _ *http.Request) (any, error) {
+	if s.cfg.Inbox == nil {
+		return nil, errInboxOff
+	}
+	return s.cfg.Inbox.Health(ctx)
+}
+
+// readBody decodes a small JSON body, refusing unknown fields, and answers 400 itself on failure.
+func readBody(w http.ResponseWriter, r *http.Request, v any, example string) bool {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		writeError(w, http.StatusBadRequest, "send a JSON body like "+example)
+		return false
+	}
+	return true
+}
+
+// markRead marks the alerts up to an id as read: {"up_to": 12}.
+func (s *Server) markRead(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Inbox == nil {
+		s.fail(w, r, errInboxOff)
+		return
+	}
+	var body struct {
+		UpTo int64 `json:"up_to"`
+	}
+	if !readBody(w, r, &body, `{"up_to": 12}`) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ReadTimeout)
+	defer cancel()
+	if err := s.cfg.Inbox.MarkRead(ctx, body.UpTo); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// setWatch watches a player or stops: {"player_id": 4, "watch": true}.
+func (s *Server) setWatch(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Inbox == nil {
+		s.fail(w, r, errInboxOff)
+		return
+	}
+	var body struct {
+		PlayerID int  `json:"player_id"`
+		Watch    bool `json:"watch"`
+	}
+	if !readBody(w, r, &body, `{"player_id": 4, "watch": true}`) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ReadTimeout)
+	defer cancel()
+	v, err := s.cfg.Inbox.SetWatch(ctx, body.PlayerID, body.Watch)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
 }
 
 func (s *Server) whatIf(w http.ResponseWriter, r *http.Request) {
@@ -339,7 +436,7 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 		writeJSON(w, http.StatusBadRequest, ErrorBody{Error: err.Error(), Code: "team_required"})
 	case errors.As(err, &in):
 		writeError(w, http.StatusBadRequest, in.Msg)
-	case errors.Is(err, service.ErrNewsUnavailable):
+	case errors.Is(err, service.ErrNewsUnavailable), errors.Is(err, errInboxOff):
 		writeError(w, http.StatusServiceUnavailable, err.Error())
 	case errors.Is(err, context.DeadlineExceeded):
 		writeError(w, http.StatusGatewayTimeout, "the request took too long")

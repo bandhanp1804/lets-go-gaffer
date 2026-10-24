@@ -23,6 +23,7 @@ const (
 
 // NewsPlayerView is the player a search was narrowed to, with what FPL says of him now.
 type NewsPlayerView struct {
+	ID       int    `json:"id"`
 	Name     string `json:"name"`
 	Team     string `json:"team"`
 	Position string `json:"position"`
@@ -92,7 +93,7 @@ func (s *Service) Search(ctx context.Context, q NewsQuery) (NewsSearchView, erro
 	if who != nil {
 		filter.PlayerIDs = []int{who.ID}
 		pv := base.view(*who, 0)
-		v.Player = &NewsPlayerView{Name: who.WebName, Team: pv.Team, Position: pv.Position, Price: pv.Price, Status: pv.Status, News: who.News}
+		v.Player = &NewsPlayerView{ID: who.ID, Name: who.WebName, Team: pv.Team, Position: pv.Position, Price: pv.Price, Status: pv.Status, News: who.News}
 	}
 
 	now := s.deps.Now()
