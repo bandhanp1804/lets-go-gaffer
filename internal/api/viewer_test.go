@@ -21,7 +21,7 @@ func TestViewerHeadersReachTheService(t *testing.T) {
 		want service.Viewer
 	}{
 		{"none", nil, service.Viewer{}},
-		{"team only", map[string]string{"X-Gaffer-Team": "1253022"}, service.Viewer{TeamID: 1253022}},
+		{"team only", map[string]string{"X-Gaffer-Team": "1234567"}, service.Viewer{TeamID: 1234567}},
 		{"team and a bare token", map[string]string{"X-Gaffer-Team": "42", "X-Gaffer-Token": jwt}, service.Viewer{TeamID: 42, Token: "Bearer " + jwt}},
 		{"a token pasted with Bearer", map[string]string{"X-Gaffer-Token": "Bearer " + jwt}, service.Viewer{Token: "Bearer " + jwt}},
 		{"lower-case bearer and stray spaces", map[string]string{"X-Gaffer-Token": "  bearer   " + jwt + " "}, service.Viewer{Token: "Bearer " + jwt}},

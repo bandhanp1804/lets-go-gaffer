@@ -72,7 +72,7 @@ export function TeamModal() {
             inputMode="numeric"
             autoComplete="off"
             value={teamText}
-            placeholder="e.g. 1253022"
+            placeholder="e.g. 1234567"
             onChange={(e) => setTeamText(e.target.value)}
             aria-invalid={teamError !== ""}
             autoFocus
@@ -87,7 +87,7 @@ export function TeamModal() {
             </li>
             <li>Click <strong>Points</strong> (or <strong>Pick Team</strong>).</li>
             <li>
-              Look at the address bar: <code>fantasy.premierleague.com/entry/<mark>1253022</mark>/event/8</code>. The number after <code>entry/</code> is your team id. You can paste the whole address above.
+              Look at the address bar: <code>fantasy.premierleague.com/entry/<mark>1234567</mark>/event/8</code>. The number after <code>entry/</code> is your team id. You can paste the whole address above.
             </li>
           </ol>
         </details>

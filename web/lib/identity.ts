@@ -10,7 +10,7 @@ export interface Identity {
 
 export const noIdentity: Identity = { teamId: null, token: "" };
 
-/** "1253022", or the address of any FPL page that has it, like .../entry/1253022/event/8. */
+/** "1234567", or the address of any FPL page that has it, like .../entry/1234567/event/8. */
 export function parseTeamId(input: string): number | null {
   const text = input.trim();
   const fromUrl = /\/entry\/(\d{1,9})(?:\/|$|\?|#)/.exec(text);
