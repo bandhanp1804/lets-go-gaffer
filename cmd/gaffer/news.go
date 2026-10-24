@@ -160,3 +160,35 @@ func runNews(ctx context.Context) error {
 	_, err = newsPipeline{store: db.NewStore(pool), embedder: embedder}.refresh(ctx)
 	return err
 }
+
+// runRelink works out again which players each stored story mentions. Run it after the linker
+// improves (stories are linked once, when stored). It needs no Voyage key: nothing is embedded again.
+func runRelink(ctx context.Context) error {
+	dsn := os.Getenv("GAFFER_DSN")
+	if dsn == "" {
+		return errors.New("GAFFER_DSN is not set")
+	}
+	pool, err := db.Open(ctx, dsn)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer pool.Close()
+	store := db.NewStore(pool)
+	players, err := store.ListPlayers(ctx)
+	if err != nil {
+		return err
+	}
+	teams, err := store.ListTeams(ctx)
+	if err != nil {
+		return err
+	}
+	if len(players) == 0 {
+		return errors.New("no players stored; run `gaffer sync` first")
+	}
+	changed, err := store.RelinkNews(ctx, news.NewLinker(players, teams).Link)
+	if err != nil {
+		return err
+	}
+	slog.Info("relinked stored news", "stories_changed", changed)
+	return nil
+}

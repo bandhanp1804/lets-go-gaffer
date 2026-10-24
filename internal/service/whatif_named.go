@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/news"
 )
 
 // NamedMove is a swap described the way a person says it: by name.
@@ -59,13 +60,7 @@ func (s *Service) WhatIfNamed(ctx context.Context, req WhatIfNamedRequest) (What
 // fold makes a name comparable: lower case, without accents, and with punctuation read as
 // a space, so "Groß" matches "gross" and "Le Fee" matches "E.Le Fée".
 func fold(s string) string {
-	repl := strings.NewReplacer(
-		"á", "a", "à", "a", "â", "a", "ä", "a", "ã", "a", "å", "a", "æ", "ae", "ç", "c", "ć", "c", "č", "c", "đ", "d",
-		"é", "e", "è", "e", "ê", "e", "ë", "e", "ğ", "g", "í", "i", "ì", "i", "î", "i", "ï", "i", "ı", "i", "ł", "l",
-		"ñ", "n", "ó", "o", "ò", "o", "ô", "o", "ö", "o", "õ", "o", "ø", "o", "ő", "o", "œ", "oe", "š", "s", "ś", "s",
-		"ß", "ss", "ú", "u", "ù", "u", "û", "u", "ü", "u", "ű", "u", "ý", "y", "ÿ", "y", "ž", "z", "ź", "z",
-		"'", "", "’", "", // O'Brien and O’Brien are both obrien
-	)
+	repl := strings.NewReplacer("'", "", "’", "") // O'Brien and O’Brien are both obrien
 	// Everything that is not a letter or a digit separates words: a name followed by a comma, a
 	// question mark or a bracket is still the same name.
 	words := strings.Map(func(r rune) rune {
@@ -73,7 +68,7 @@ func fold(s string) string {
 			return r
 		}
 		return ' '
-	}, repl.Replace(strings.ToLower(s)))
+	}, repl.Replace(news.StripAccents(strings.ToLower(s))))
 	return strings.Join(strings.Fields(words), " ")
 }
 

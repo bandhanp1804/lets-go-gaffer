@@ -40,7 +40,9 @@ func TestLinker(t *testing.T) {
 		{"unique surname", "Saka injury 'does not look good'", []int{10}},
 		{"two players in one story", "Haaland and Saka both score", []int{10, 11}},
 		{"same player twice is listed once", "Saka, Saka, Saka", []int{10}},
-		{"multi-word name as a phrase", "Joao Pedro opens the scoring", nil}, // accents are not folded yet
+		{"multi-word name without its accent", "Joao Pedro opens the scoring", []int{12}},
+		{"accent in the text, none in the name", "Saká injury", []int{10}},
+		{"all capitals with an accent", "JOÃO PEDRO opens the scoring", []int{12}},
 		{"multi-word name with its accent", "João Pedro opens the scoring", []int{12}},
 		{"no players", "Referees announced for the weekend", nil},
 		{"lower case common word is not a player", "she cooked rice for the squad", nil},
