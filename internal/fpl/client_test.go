@@ -382,3 +382,34 @@ func TestFixtures_OpponentsForATeamInAGameweek(t *testing.T) {
 		t.Errorf("a blank gameweek gave %+v", none)
 	}
 }
+
+func TestUpcomingGameweek(t *testing.T) {
+	tests := []struct {
+		name string
+		gws  []fpl.Gameweek
+		want int
+	}{
+		{"FPL marks the next one", []fpl.Gameweek{{ID: 7, Finished: true}, {ID: 8, IsCurrent: true}, {ID: 9, IsNext: true}, {ID: 10}}, 9},
+		{"before the deadline the next is the one coming", []fpl.Gameweek{{ID: 7, IsCurrent: true, Finished: true}, {ID: 8, IsNext: true}}, 8},
+		{"input order does not matter", []fpl.Gameweek{{ID: 9, IsNext: true}, {ID: 7, Finished: true}, {ID: 8, IsCurrent: true}}, 9},
+		{"no flag falls back to the first unfinished gameweek", []fpl.Gameweek{{ID: 2, Finished: true}, {ID: 4}, {ID: 3}}, 3},
+		{"a finished season has none", []fpl.Gameweek{{ID: 37, Finished: true}, {ID: 38, Finished: true}}, 0},
+		{"nothing at all", nil, 0},
+	}
+	for _, tc := range tests {
+		if got := fpl.UpcomingGameweek(tc.gws); got != tc.want {
+			t.Errorf("%s: got %d, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestLastFinishedGameweek(t *testing.T) {
+	gws := []fpl.Gameweek{{ID: 9}, {ID: 7, Finished: true}, {ID: 8, IsCurrent: true}, {ID: 6, Finished: true}}
+
+	if got := fpl.LastFinishedGameweek(gws); got != 7 {
+		t.Errorf("got %d, want 7 (GW8 is under way, so GW7 is the last finished)", got)
+	}
+	if got := fpl.LastFinishedGameweek(nil); got != 0 {
+		t.Errorf("got %d, want 0", got)
+	}
+}

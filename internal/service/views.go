@@ -34,8 +34,9 @@ type PlayerView struct {
 type MyTeamView struct {
 	Manager        string       `json:"manager"`
 	TeamName       string       `json:"team_name"`
-	Gameweek       int          `json:"gameweek"` // the gameweek being picked for
-	Source         string       `json:"source"`   // "live" or "public"
+	Gameweek       int          `json:"gameweek"`    // the gameweek being picked for
+	Source         string       `json:"source"`      // "live" or "public"
+	AsOf           string       `json:"squad_as_of"` // when the squad is from, to be quoted as written
 	Starting       []PlayerView `json:"starting"`
 	Bench          []PlayerView `json:"bench"`
 	Captain        string       `json:"captain"`
@@ -65,6 +66,7 @@ type FormationView struct {
 type LineupView struct {
 	Gameweek        int             `json:"gameweek"`
 	Source          string          `json:"source"`
+	AsOf            string          `json:"squad_as_of"`
 	Formation       string          `json:"formation"`
 	ExpectedPoints  float64         `json:"expected_points"` // the XI, captain counted twice
 	Starting        []PlayerView    `json:"starting"`
@@ -101,6 +103,7 @@ type SuggestionView struct {
 type TransfersView struct {
 	Gameweek         int              `json:"gameweek"`
 	Source           string           `json:"source"`
+	AsOf             string           `json:"squad_as_of"`
 	Wildcard         bool             `json:"wildcard"`
 	FreeTransfers    int              `json:"free_transfers_left"`
 	Bank             string           `json:"bank"`

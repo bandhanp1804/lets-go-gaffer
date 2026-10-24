@@ -2,6 +2,7 @@ package projection_test
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
@@ -307,5 +308,68 @@ func TestEvaluate_SkipsWeeksWithTooFewPlayersToJudge(t *testing.T) {
 
 	if got.Weeks != 0 {
 		t.Errorf("weeks = %d, want 0: two players are not enough to say anything", got.Weeks)
+	}
+}
+
+func TestScoreFrom_LooksAtTheGameweeksYouNameNotJustTheNextOneWithoutData(t *testing.T) {
+	// History runs through gameweek 7. Gameweek 8 is under way (locked, no data yet), so the
+	// gameweek being decided for is 9. A model told only "predict from 8" would score the
+	// wrong match week. Gameweek 8 is hard for team 1, gameweek 9 easy.
+	players := []fpl.Player{player(1, 1, fpl.MID)}
+	fx := fpl.Fixtures{
+		{ID: 1, Event: 8, HomeTeam: 1, AwayTeam: 2, HomeDifficulty: 4, AwayDifficulty: 2},
+		{ID: 2, Event: 9, HomeTeam: 1, AwayTeam: 2, HomeDifficulty: 2, AwayDifficulty: 4},
+	}
+	m := model(t, players, rows(1, 5, 5, 5, 5, 5, 5, 5), fx, projection.Params{Decay: 1, FixtureSlope: 0.1}, 8)
+
+	fromData := m.Score(1)(players[0])
+	fromNine := m.ScoreFrom(9, 1)(players[0])
+
+	if !near(fromData, 4.5) || !near(fromNine, 5.5) {
+		t.Errorf("Score(1) = %v (gameweek 8, hard) and ScoreFrom(9, 1) = %v (easy); want 4.5 and 5.5", fromData, fromNine)
+	}
+	if got := m.ScoreFrom(8, 2)(players[0]); !near(got, 5.0) {
+		t.Errorf("ScoreFrom(8, 2) = %v, want the mean of 4.5 and 5.5", got)
+	}
+}
+
+func TestScoreFrom_ASkippedGameweekDoesNotCountAsAZeroMinuteWeek(t *testing.T) {
+	// The model is told gameweeks 1-7 are the history. Predicting for 9 must not invent a
+	// zero-minute gameweek 8 and drag every player's minutes down.
+	players := []fpl.Player{player(1, 1, fpl.MID)}
+	m := model(t, players, rows(1, 6, 6, 6, 6, 6, 6, 6), nil, projection.Params{Decay: 1}, 8)
+
+	if got := m.ScoreFrom(9, 1)(players[0]); !near(got, 6) {
+		t.Errorf("ScoreFrom(9, 1) = %v, want 6: full-time and consistent", got)
+	}
+}
+
+func TestAsOf(t *testing.T) {
+	history := []fpl.PlayerHistory{{GameweekID: 3}, {GameweekID: 7}, {GameweekID: 5}}
+
+	if got := projection.AsOf(history); got != 8 {
+		t.Errorf("AsOf = %d, want 8: the first gameweek with no data", got)
+	}
+	if got := projection.AsOf(nil); got != 2 {
+		t.Errorf("AsOf(nil) = %d, want 2: the earliest gameweek that can be predicted", got)
+	}
+}
+
+func TestHistoryNote(t *testing.T) {
+	// asOf is the first gameweek without data, so history ends at asOf-1.
+	if got := projection.HistoryNote(8, 7); got != "" {
+		t.Errorf("history through GW7 with GW7 the last finished is up to date, got %q", got)
+	}
+	if got := projection.HistoryNote(8, 6); got != "" {
+		t.Errorf("history ahead of the last finished gameweek is not behind, got %q", got)
+	}
+	got := projection.HistoryNote(8, 8)
+	for _, want := range []string{"GW7", "GW8", "gaffer sync"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("note %q should mention %q", got, want)
+		}
+	}
+	if got := projection.HistoryNote(8, 0); got != "" {
+		t.Errorf("an unknown last finished gameweek gives no note, got %q", got)
 	}
 }

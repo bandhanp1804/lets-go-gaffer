@@ -84,7 +84,11 @@ func TestMyTeam_PublicSquadIsLabelledAsStale(t *testing.T) {
 	if got.Bank != "£2.0m" {
 		t.Errorf("bank = %q", got.Bank)
 	}
-	// The model must never be able to present a stale squad as the current one.
+	// The model must never be able to present a stale squad as the current one, and it must not
+	// have to work out which deadline from other fields: the view states it.
+	if got.AsOf != "the GW7 deadline" {
+		t.Errorf("squad_as_of = %q, want it stated outright", got.AsOf)
+	}
 	if !hasNote(got.Notes, "GW7 deadline") {
 		t.Errorf("notes %v should say the squad is as of the last deadline", got.Notes)
 	}
@@ -105,6 +109,9 @@ func TestMyTeam_LiveSquadCarriesFPLsOwnNumbers(t *testing.T) {
 	}
 	if got.Source != "live" || got.Bank != "£0.9m" || got.FreeTransfers != 0 || got.TransfersMade != 2 || got.HitSoFar != 4 {
 		t.Errorf("%+v", got)
+	}
+	if got.AsOf != "now (live from FPL)" {
+		t.Errorf("squad_as_of = %q", got.AsOf)
 	}
 	if !slices.Equal(got.ChipsAvailable, []string{"wildcard"}) {
 		t.Errorf("chips = %v, want only the available wildcard", got.ChipsAvailable)
@@ -192,6 +199,9 @@ func TestLineup(t *testing.T) {
 	if got.Gameweek != 8 || got.Source != "public" || !strings.Contains(got.Formation, "-") {
 		t.Errorf("gameweek %d source %q formation %q", got.Gameweek, got.Source, got.Formation)
 	}
+	if got.AsOf != "the GW7 deadline" {
+		t.Errorf("squad_as_of = %q", got.AsOf)
+	}
 	if len(got.Starting) != 11 || len(got.Bench) != 4 || got.Bench[0].Position != "GKP" {
 		t.Errorf("XI %d bench %d, spare goalkeeper first? %v", len(got.Starting), len(got.Bench), names(got.Bench))
 	}
@@ -222,6 +232,9 @@ func TestTransfers_FindsTheObviousUpgradeAndCountsFreeTransfers(t *testing.T) {
 	// The history gives five free transfers: one banked per quiet gameweek, none used since GW3.
 	if got.FreeTransfers != 5 || got.Bank != "£2.0m" || got.Wildcard {
 		t.Errorf("free %d bank %q wildcard %v", got.FreeTransfers, got.Bank, got.Wildcard)
+	}
+	if got.AsOf != "the GW7 deadline" {
+		t.Errorf("squad_as_of = %q", got.AsOf)
 	}
 	if len(got.Suggestions) == 0 {
 		t.Fatal("the squad goalkeeper scores 1 a week and a 9-a-week goalkeeper is on the market for less: want a suggestion")
@@ -456,4 +469,85 @@ func TestSearchNews(t *testing.T) {
 			t.Errorf("store error lost: %v", err)
 		}
 	})
+}
+
+// deadlinePassed puts the world where it really was on 24 October: the GW8 deadline has
+// gone, GW8 is under way, GW9 is next, and the stored history still ends at GW7.
+func deadlinePassed(w *world) {
+	for i := range w.events {
+		switch w.events[i].ID {
+		case 8:
+			w.events[i].IsNext, w.events[i].IsCurrent = false, true
+		case 9:
+			w.events[i].IsNext = true
+		}
+	}
+	// In GW9 club 2 hosts club 1: the opposite of GW8, so the two are told apart.
+	w.fixtures = append(w.fixtures, fpl.Fixture{ID: 100, Event: 9, HomeTeam: 2, AwayTeam: 1, HomeDifficulty: 3, AwayDifficulty: 3})
+}
+
+func TestTheUpcomingGameweekComesFromFPLsScheduleNotFromHowFarTheStoredDataGoes(t *testing.T) {
+	r := newRig(t, rigOpts{mutate: deadlinePassed})
+	r.fpl.currentEvent = 8 // the manager's GW8 squad is now public
+	ctx := context.Background()
+
+	team, err := r.svc.MyTeam(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lineup, err := r.svc.Lineup(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The data ends at GW7, but GW8 is locked: the decision is for GW9.
+	if team.Gameweek != 9 || lineup.Gameweek != 9 {
+		t.Errorf("gameweeks %d and %d, want 9: GW8 is already locked", team.Gameweek, lineup.Gameweek)
+	}
+	if team.AsOf != "the GW8 deadline" {
+		t.Errorf("squad_as_of = %q: the public squad is the one that took the pitch in GW8", team.AsOf)
+	}
+	// Own01's club hosts in GW8 but travels in GW9; the view must show GW9's match.
+	if first := team.Starting[0]; first.Name != "Own01" || first.Fixture != "C02 (A)" {
+		t.Errorf("first starter %+v, want the GW9 fixture C02 (A), not GW8's C02 (H)", first)
+	}
+	if hasNote(team.Notes, "gaffer sync") {
+		t.Errorf("GW8 has not finished, so no history is missing yet: %v", team.Notes)
+	}
+}
+
+func TestHistoryThatLagsAFinishedGameweekIsFlagged(t *testing.T) {
+	r := newRig(t, rigOpts{mutate: func(w *world) {
+		deadlinePassed(w)
+		for i := range w.events {
+			if w.events[i].ID == 8 {
+				w.events[i].Finished, w.events[i].IsCurrent = true, false
+			}
+		}
+	}})
+	r.fpl.currentEvent = 8
+	ctx := context.Background()
+
+	team, _ := r.svc.MyTeam(ctx)
+	lineup, _ := r.svc.Lineup(ctx)
+	tr, _ := r.svc.Transfers(ctx, service.TransfersRequest{})
+
+	// Stored history ends at GW7 but GW8 is over: form and expected points are a week behind.
+	for name, notes := range map[string][]string{"team": team.Notes, "lineup": lineup.Notes, "transfers": tr.Notes} {
+		if !hasNote(notes, "gaffer sync") || !hasNote(notes, "GW8") {
+			t.Errorf("%s notes %v should say the history is behind and to run gaffer sync", name, notes)
+		}
+	}
+}
+
+func TestNoUpcomingGameweekIsAnErrorNotAGuess(t *testing.T) {
+	r := newRig(t, rigOpts{mutate: func(w *world) {
+		for i := range w.events {
+			w.events[i].Finished, w.events[i].IsNext, w.events[i].IsCurrent = true, false, false
+		}
+	}})
+
+	if _, err := r.svc.MyTeam(context.Background()); err == nil || !strings.Contains(err.Error(), "upcoming gameweek") {
+		t.Errorf("err = %v, want one about there being no upcoming gameweek", err)
+	}
 }

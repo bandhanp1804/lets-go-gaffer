@@ -61,6 +61,7 @@ type FPL interface {
 	FetchHistory(ctx context.Context, teamID int) (*fpl.History, error)
 	FetchTransfers(ctx context.Context, teamID int) ([]fpl.Transfer, error)
 	FetchFixtures(ctx context.Context) (fpl.Fixtures, error)
+	FetchBootstrap(ctx context.Context) (*fpl.Bootstrap, error)
 }
 
 // Live reads the logged-in manager's squad as it stands now. It may be nil.
@@ -115,7 +116,8 @@ type baseSnap struct {
 	short    map[int]string // team id -> short name
 	history  []fpl.PlayerHistory
 	fixtures fpl.Fixtures
-	next     int // the gameweek being picked for
+	next     int      // the gameweek being decided for: the one whose deadline has not passed
+	notes    []string // problems with the data itself, shown with every squad answer
 	model    *projection.Model
 }
 
@@ -152,19 +154,31 @@ func (s *Service) baseSnapshot(ctx context.Context) (*baseSnap, error) {
 	if err != nil {
 		return nil, err
 	}
-	next := 1
-	for _, h := range history {
-		next = max(next, h.GameweekID+1)
-	}
-	model, err := projection.New(players, history, fixtures, projection.Default, next)
+	boot, err := s.deps.FPL.FetchBootstrap(ctx)
 	if err != nil {
 		return nil, err
+	}
+	// The gameweek being decided for comes from FPL's schedule, never from how far the
+	// stored data goes: once a deadline passes its gameweek is locked even though its
+	// history is not in yet.
+	next := fpl.UpcomingGameweek(boot.Gameweeks)
+	if next == 0 {
+		return nil, errors.New("there is no upcoming gameweek (the season may be over)")
+	}
+	asOf := projection.AsOf(history)
+	model, err := projection.New(players, history, fixtures, projection.Default, asOf)
+	if err != nil {
+		return nil, err
+	}
+	var notes []string
+	if n := projection.HistoryNote(asOf, fpl.LastFinishedGameweek(boot.Gameweeks)); n != "" {
+		notes = append(notes, n)
 	}
 	short := make(map[int]string, len(teams))
 	for _, t := range teams {
 		short[t.ID] = t.ShortName
 	}
-	s.base = &baseSnap{players: players, teams: teams, short: short, history: history, fixtures: fixtures, next: next, model: model}
+	s.base = &baseSnap{players: players, teams: teams, short: short, history: history, fixtures: fixtures, next: next, notes: notes, model: model}
 	s.baseAt = s.deps.Now()
 	return s.base, nil
 }
@@ -253,6 +267,16 @@ func (s *Service) source(sq *squadSnap) string {
 	return "public"
 }
 
+// asOf states when a squad is from, in words a consumer can quote without working
+// anything out: a model that has to infer "which deadline" from other fields will,
+// sooner or later, get it wrong.
+func (s *Service) asOf(sq *squadSnap) string {
+	if sq.live {
+		return "now (live from FPL)"
+	}
+	return fmt.Sprintf("the GW%d deadline", sq.team.Event)
+}
+
 // view builds a PlayerView. xp is the caller's chosen expected-points figure.
 func (b *baseSnap) view(p fpl.Player, xp float64) PlayerView {
 	return PlayerView{
@@ -261,6 +285,14 @@ func (b *baseSnap) view(p fpl.Player, xp float64) PlayerView {
 		Status: statusText(p), News: p.News,
 		Fixture: fixtureText(b.fixtures.Opponents(p.TeamID, b.next), b.short),
 	}
+}
+
+func joinNotes(groups ...[]string) []string {
+	out := []string{}
+	for _, g := range groups {
+		out = append(out, g...)
+	}
+	return out
 }
 
 func nameOf(players []fpl.Player, id int) string {
@@ -278,17 +310,17 @@ func (s *Service) MyTeam(ctx context.Context) (MyTeamView, error) {
 	if err != nil {
 		return MyTeamView{}, err
 	}
-	xp := base.model.Score(1)
+	xp := base.model.ScoreFrom(base.next, 1)
 	started := make(map[int]bool, 11)
 	for _, id := range sq.team.Squad.Starting {
 		started[id] = true
 	}
 	v := MyTeamView{
 		Manager: strings.TrimSpace(sq.team.Entry.FirstName + " " + sq.team.Entry.LastName), TeamName: sq.team.Entry.Name,
-		Gameweek: base.next, Source: s.source(sq),
+		Gameweek: base.next, Source: s.source(sq), AsOf: s.asOf(sq),
 		Captain: nameOf(sq.team.Squad.Players, sq.team.Squad.Captain), ViceCaptain: nameOf(sq.team.Squad.Players, sq.team.Squad.ViceCaptain),
 		Bank: formatMoney(sq.fin.Bank), FreeTransfers: sq.fin.Free.Next, TransfersMade: sq.fin.PendingTransfers,
-		HitSoFar: sq.fin.PendingHit, ChipsAvailable: sq.fin.AvailableChips, Notes: append([]string{}, sq.notes...),
+		HitSoFar: sq.fin.PendingHit, ChipsAvailable: sq.fin.AvailableChips, Notes: joinNotes(base.notes, sq.notes),
 	}
 	for _, p := range sq.team.Squad.Players {
 		pv := base.view(p, xp(p))
@@ -308,7 +340,7 @@ func (s *Service) Lineup(ctx context.Context) (LineupView, error) {
 	if err != nil {
 		return LineupView{}, err
 	}
-	xp := base.model.Score(1)
+	xp := base.model.ScoreFrom(base.next, 1)
 	advice, err := lineup.Advise(sq.team.Squad.Players, lineup.Options{XP: xp})
 	if err != nil {
 		return LineupView{}, err
@@ -316,9 +348,9 @@ func (s *Service) Lineup(ctx context.Context) (LineupView, error) {
 
 	entryView := func(e lineup.Entry) PlayerView { return base.view(e.Player, e.XP) }
 	v := LineupView{
-		Gameweek: base.next, Source: s.source(sq), Formation: advice.Formation, ExpectedPoints: round1(advice.Total),
+		Gameweek: base.next, Source: s.source(sq), AsOf: s.asOf(sq), Formation: advice.Formation, ExpectedPoints: round1(advice.Total),
 		Captain: advice.Captain.Player.WebName, ViceCaptain: advice.ViceCaptain.Player.WebName,
-		CaptainLead: round2(advice.Captain.XP - advice.ViceCaptain.XP), Notes: append([]string{}, sq.notes...),
+		CaptainLead: round2(advice.Captain.XP - advice.ViceCaptain.XP), Notes: joinNotes(base.notes, sq.notes),
 	}
 	var ids []int
 	for _, e := range advice.Starting {
@@ -381,7 +413,7 @@ func (s *Service) Transfers(ctx context.Context, req TransfersRequest) (Transfer
 		topN = defaultTopMoves
 	}
 	in := transfers.Input{Squad: sq.team.Squad.Players, Sell: sq.fin.Sell, Bank: sq.fin.Bank, Pool: base.players}
-	opts := transfers.Options{Score: base.model.Score(horizon), FreeTransfers: free, MaxTransfers: req.Max, Horizon: horizon, TopN: topN}
+	opts := transfers.Options{Score: base.model.ScoreFrom(base.next, horizon), FreeTransfers: free, MaxTransfers: req.Max, Horizon: horizon, TopN: topN}
 
 	var found []transfers.Suggestion
 	if req.Wildcard {
@@ -397,9 +429,9 @@ func (s *Service) Transfers(ctx context.Context, req TransfersRequest) (Transfer
 	}
 
 	v := TransfersView{
-		Gameweek: base.next, Source: s.source(sq), Wildcard: req.Wildcard, FreeTransfers: free, Bank: formatMoney(sq.fin.Bank),
+		Gameweek: base.next, Source: s.source(sq), AsOf: s.asOf(sq), Wildcard: req.Wildcard, FreeTransfers: free, Bank: formatMoney(sq.fin.Bank),
 		Horizon: horizon, PendingTransfers: sq.fin.PendingTransfers, PendingHit: sq.fin.PendingHit,
-		Notes: append([]string{}, sq.notes...), Suggestions: []SuggestionView{},
+		Notes: joinNotes(base.notes, sq.notes), Suggestions: []SuggestionView{},
 	}
 	if !sq.live {
 		v.Notes = append(v.Notes, "Selling prices are computed from FPL's rule (half of any price rise is kept, rounded down); the FPL transfers page shows the exact figures.")
@@ -473,7 +505,7 @@ func (s *Service) FindPlayers(ctx context.Context, q PlayerQuery) ([]PlayerView,
 			return nil, err
 		}
 	}
-	xp := base.model.Score(defaultHorizon)
+	xp := base.model.ScoreFrom(base.next, defaultHorizon)
 	type scored struct {
 		p  fpl.Player
 		xp float64

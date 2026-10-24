@@ -293,3 +293,35 @@ type MyTeam struct {
 	Chips     []MyChip    `json:"chips"`
 	Transfers MyTransfers `json:"transfers"`
 }
+
+// UpcomingGameweek is the gameweek whose deadline has not yet passed: the one a manager
+// is now deciding for. FPL marks it; failing that it is the first unfinished one after
+// any in progress. It is 0 when the season is over.
+func UpcomingGameweek(gws []Gameweek) int {
+	best := 0
+	for _, g := range gws {
+		if g.IsNext && (best == 0 || g.ID < best) {
+			best = g.ID
+		}
+	}
+	if best != 0 {
+		return best
+	}
+	for _, g := range gws {
+		if !g.Finished && !g.IsCurrent && (best == 0 || g.ID < best) {
+			best = g.ID
+		}
+	}
+	return best
+}
+
+// LastFinishedGameweek is the latest gameweek whose matches have all been played, or 0.
+func LastFinishedGameweek(gws []Gameweek) int {
+	last := 0
+	for _, g := range gws {
+		if g.Finished && g.ID > last {
+			last = g.ID
+		}
+	}
+	return last
+}

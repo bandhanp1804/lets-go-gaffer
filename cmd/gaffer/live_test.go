@@ -192,3 +192,54 @@ func TestPrintTransfers_LiveDataNamesFPLAsTheSourceAndWarnsWhenNoWildcardIsLeft(
 		t.Errorf("a wildcard plan with none available must say so:\n%s", out)
 	}
 }
+
+type fakeBoot struct {
+	gws []fpl.Gameweek
+	err error
+}
+
+func (f fakeBoot) FetchBootstrap(context.Context) (*fpl.Bootstrap, error) {
+	return &fpl.Bootstrap{Gameweeks: f.gws}, f.err
+}
+
+func TestPlanGameweek(t *testing.T) {
+	history := []fpl.PlayerHistory{{GameweekID: 6}, {GameweekID: 7}}
+	deadlinePassed := []fpl.Gameweek{{ID: 7, Finished: true}, {ID: 8, IsCurrent: true}, {ID: 9, IsNext: true}}
+
+	t.Run("the gameweek decided for is FPL's next, not the end of the stored data", func(t *testing.T) {
+		var b strings.Builder
+
+		upcoming, asOf, err := planGameweek(context.Background(), &b, fakeBoot{gws: deadlinePassed}, history)
+
+		if err != nil || upcoming != 9 || asOf != 8 {
+			t.Errorf("upcoming %d asOf %d err %v; want 9, 8, nil: GW8 is locked and has no data yet", upcoming, asOf, err)
+		}
+		if b.Len() != 0 {
+			t.Errorf("nothing is behind yet, so nothing should be printed: %q", b.String())
+		}
+	})
+	t.Run("history behind a finished gameweek is announced", func(t *testing.T) {
+		var b strings.Builder
+		finished := []fpl.Gameweek{{ID: 7, Finished: true}, {ID: 8, Finished: true}, {ID: 9, IsNext: true}}
+
+		if _, _, err := planGameweek(context.Background(), &b, fakeBoot{gws: finished}, history); err != nil {
+			t.Fatal(err)
+		}
+
+		if !strings.Contains(b.String(), "gaffer sync") || !strings.Contains(b.String(), "GW8") {
+			t.Errorf("want the stale-history note: %q", b.String())
+		}
+	})
+	t.Run("no upcoming gameweek is an error", func(t *testing.T) {
+		over := []fpl.Gameweek{{ID: 37, Finished: true}, {ID: 38, Finished: true}}
+
+		if _, _, err := planGameweek(context.Background(), &strings.Builder{}, fakeBoot{gws: over}, history); err == nil {
+			t.Error("want an error when the season is over")
+		}
+	})
+	t.Run("a failure fetching the schedule surfaces", func(t *testing.T) {
+		if _, _, err := planGameweek(context.Background(), &strings.Builder{}, fakeBoot{err: errors.New("fpl down")}, history); err == nil || !strings.Contains(err.Error(), "fpl down") {
+			t.Errorf("err = %v", err)
+		}
+	})
+}

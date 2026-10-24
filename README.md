@@ -70,6 +70,8 @@ go run ./cmd/gaffer lineup         # best XI, captain and bench for the next gam
 go run ./cmd/gaffer transfers      # best moves for your real squad this week
 go run ./cmd/gaffer transfers -wildcard
 go run ./cmd/gaffer squad
+go run ./cmd/gaffer ask "Who should I captain this week?"   # needs ANTHROPIC_API_KEY
+go run ./cmd/gaffer chat                                     # a conversation with follow-ups
 go run ./cmd/gaffer backtest        # how well does the scoring model predict past gameweeks?
 ```
 
@@ -101,6 +103,21 @@ go test -race ./...
 
 The tests truncate every table and refuse to run against a database whose name does not end in `_test`.
 
+## Asking questions (`ask`, `chat`)
+
+`gaffer ask "…"` answers in plain English by letting Claude (Haiku by default; set `ANTHROPIC_MODEL=claude-sonnet-5-5` for richer prose) call five read-only tools: `get_my_team`, `best_lineup`, `suggest_transfers`, `find_players` (structured filters: position, club, price, availability) and `search_news`. `-v` shows which tools it called and the tokens used. `chat` keeps the conversation, so follow-ups see earlier answers and keep their citations.
+
+The model narrates; Go computes and checks. It is told never to calculate, and is not given the chance to:
+
+- **Numbers arrive precomputed and formatted** (`"£6.1m"`, `"xp": 5.1`). After each answer, every number in it must appear in a tool result or in your question; anything else (a sum or a gap the model worked out itself) is flagged under "Checks".
+- **Citations are forced by construction.** News reaches the model as reference numbers with no URL; Go builds the Sources list from its own record, and a cited number that does not exist, or news used without citing it, is flagged. FPL's own injury notes are shown as "official FPL player note", not as a link.
+- **News text is untrusted.** It is delivered with a warning, and every tool is read-only, so a poisoned headline cannot change anything: the assistant cannot make transfers or alter your FPL team.
+- **Freshness is stated by the tools.** Every squad answer carries `squad_as_of` ("now (live from FPL)" or "the GW8 deadline") and notes about an expired session or stored history that lags a finished gameweek.
+- **The upcoming gameweek comes from FPL's schedule**, not from how far the stored data goes: once a deadline passes, that gameweek is locked and you are deciding for the next.
+- A failed turn is not committed to the conversation, so one API error cannot poison the next question.
+
+Known limits: the number check can be satisfied by coincidence (a small number that happens to appear elsewhere in a tool result), and it cannot judge whether a sentence is true. Your question and the tool results, including your squad, are sent to Anthropic's API. News search needs `VOYAGE_API_KEY`; without it that one tool reports itself unavailable.
+
 ## How players are scored
 
 Raw form is a poor forecast, so players are ranked by a projection model (`internal/projection`) built from the gameweek-by-gameweek record: points per 90 minutes with long memory and shrinkage toward the position norm, minutes with short memory (who is starting, who was just dropped), FPL's fixture difficulty for each match (blank gameweeks are worth nothing, doubles both matches), and the chance of playing.
@@ -120,9 +137,10 @@ It beats form in every one of the five gameweeks. Settings were tuned and then r
 Done:
 - **Core data:** hardened FPL client, Postgres + pgvector, worker-pool ingestion, news ingestion and semantic search, your real squad, free-transfer and selling-price modelling.
 - **Decisions:** backtested expected-points model, exact squad optimizer, transfer and Wildcard suggestions, and the **lineup advisor** (best XI, captain, bench order, close calls).
+- **Ask:** a Claude assistant over read-only tools, with Go-enforced citation and number checks.
 
 Planned, in order:
-1. **LLM layer:** Claude behind a small interface, streaming, answers that must cite retrieved stories; a tool-calling router so Go computes (`get_my_team`, `search_news`, `build_squad`, `suggest_transfers`, `best_lineup`) and the model only narrates; an eval harness.
+1. **Eval harness for the assistant:** a fixed set of questions with expected tool choices and checks (cites real stories, no ungrounded numbers, refuses to act), run against the real model, so changes to prompts and tools are measured.
 2. **HTTP API and web UI:**
    - A JSON API in Go on the standard library (`net/http`), bound to localhost, with graceful shutdown, request logging, and short caches for expensive endpoints. The CLI commands and the API share one service layer instead of duplicating logic.
    - A **Next.js (React, TypeScript) UI** in `web/` that calls it through a Next.js rewrite, so there is no CORS and no keys in the browser. One frontend only: Next.js is React, so a second Angular app would mean building every screen twice.

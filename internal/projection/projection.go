@@ -173,16 +173,43 @@ func (m *Model) multiplier(difficulty int) float64 {
 	return math.Max(minMultiplier, 1+m.params.FixtureSlope*float64(3-d))
 }
 
-// Score returns a function giving each player's expected points per gameweek
-// averaged over the next horizon gameweeks, discounted by his chance of playing.
-// It is the figure the transfer search and squad builder rank by.
-func (m *Model) Score(horizon int) func(fpl.Player) float64 {
+// AsOf is the first gameweek with no history: where a model fed this data should
+// start predicting from. It is not necessarily the gameweek being decided for: while
+// a gameweek is under way its deadline has passed but its history is incomplete, so
+// the next deadline is later than AsOf. Use ScoreFrom for that.
+func AsOf(history []fpl.PlayerHistory) int {
+	last := 1
+	for _, h := range history {
+		last = max(last, h.GameweekID)
+	}
+	return last + 1
+}
+
+// Score is ScoreFrom the first gameweek the model has no data for.
+func (m *Model) Score(horizon int) func(fpl.Player) float64 { return m.ScoreFrom(m.next, horizon) }
+
+// ScoreFrom returns a function giving each player's expected points per gameweek
+// averaged over horizon gameweeks starting at start, discounted by his chance of
+// playing. It is the figure the transfer search and squad builder rank by. start is
+// the gameweek being decided for, which can be later than the model's history ends.
+func (m *Model) ScoreFrom(start, horizon int) func(fpl.Player) float64 {
 	horizon = max(horizon, 1)
 	return func(p fpl.Player) float64 {
 		var total float64
-		for g := m.next; g < m.next+horizon; g++ {
+		for g := start; g < start+horizon; g++ {
 			total += m.Expected(p, g)
 		}
 		return total / float64(horizon) * optimizer.AvailabilityFactor(p)
 	}
+}
+
+// HistoryNote says so when stored history is behind the season: asOf is the first
+// gameweek with no data (see AsOf) and lastFinished the latest gameweek FPL says is
+// over. Form and expected points are then a gameweek stale, which a manager should
+// know before trusting them. It returns "" when the data is current.
+func HistoryNote(asOf, lastFinished int) string {
+	if lastFinished == 0 || lastFinished < asOf {
+		return ""
+	}
+	return fmt.Sprintf("Stored player history ends at GW%d but GW%d has finished, so form and expected points are behind: run `gaffer sync`.", asOf-1, lastFinished)
 }

@@ -82,14 +82,17 @@ func runLineup(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	next := team.Event + 1
-	model, err := projection.New(players, history, fixtures, projection.Default, next)
+	next, asOf, err := planGameweek(ctx, os.Stdout, client, history)
+	if err != nil {
+		return err
+	}
+	model, err := projection.New(players, history, fixtures, projection.Default, asOf)
 	if err != nil {
 		return err
 	}
 
 	// A lineup is for one match week, so rank by expected points in that gameweek only.
-	advice, err := lineup.Advise(team.Squad.Players, lineup.Options{XP: model.Score(1)})
+	advice, err := lineup.Advise(team.Squad.Players, lineup.Options{XP: model.ScoreFrom(next, 1)})
 	if err != nil {
 		return err
 	}

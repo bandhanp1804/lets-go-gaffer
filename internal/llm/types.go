@@ -24,6 +24,11 @@ const (
 	TypeText       = "text"
 	TypeToolUse    = "tool_use"
 	TypeToolResult = "tool_result"
+
+	// Thinking blocks must be returned to the API unchanged when a turn continues after a
+	// tool call, so they are kept, but they are never shown.
+	TypeThinking         = "thinking"
+	TypeRedactedThinking = "redacted_thinking"
 )
 
 // Block is one piece of a message: text, a request from the model to run a tool,
@@ -40,6 +45,10 @@ type Block struct {
 	ToolUseID string // tool_result
 	Content   string // tool_result
 	IsError   bool   // tool_result
+
+	Thinking  string // thinking: the model's reasoning, kept only to send back
+	Signature string // thinking: proves the block is the model's own; must be returned with it
+	Data      string // redacted_thinking: encrypted reasoning, returned as is
 }
 
 // Text is a text block.
@@ -48,6 +57,11 @@ func Text(s string) Block { return Block{Type: TypeText, Text: s} }
 // ToolUse is the model's request to run a tool.
 func ToolUse(id, name string, input json.RawMessage) Block {
 	return Block{Type: TypeToolUse, ID: id, Name: name, Input: input}
+}
+
+// Thinking is a thinking block, for replaying the model's own reasoning.
+func Thinking(thinking, signature string) Block {
+	return Block{Type: TypeThinking, Thinking: thinking, Signature: signature}
 }
 
 // ToolResult answers a tool_use. isError tells the model the tool failed.
@@ -81,6 +95,17 @@ func (b Block) MarshalJSON() ([]byte, error) {
 			Content   string `json:"content"`
 			IsError   bool   `json:"is_error,omitempty"`
 		}{b.Type, b.ToolUseID, b.Content, b.IsError})
+	case TypeThinking:
+		return json.Marshal(struct {
+			Type      string `json:"type"`
+			Thinking  string `json:"thinking"`
+			Signature string `json:"signature"`
+		}{b.Type, b.Thinking, b.Signature})
+	case TypeRedactedThinking:
+		return json.Marshal(struct {
+			Type string `json:"type"`
+			Data string `json:"data"`
+		}{b.Type, b.Data})
 	}
 	return nil, fmt.Errorf("llm: cannot encode a block of type %q", b.Type)
 }
@@ -96,12 +121,16 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 		ToolUseID string          `json:"tool_use_id"`
 		Content   string          `json:"content"`
 		IsError   bool            `json:"is_error"`
+		Thinking  string          `json:"thinking"`
+		Signature string          `json:"signature"`
+		Data      string          `json:"data"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 	*b = Block{Type: raw.Type, Text: raw.Text, ID: raw.ID, Name: raw.Name, Input: raw.Input,
-		ToolUseID: raw.ToolUseID, Content: raw.Content, IsError: raw.IsError}
+		ToolUseID: raw.ToolUseID, Content: raw.Content, IsError: raw.IsError,
+		Thinking: raw.Thinking, Signature: raw.Signature, Data: raw.Data}
 	return nil
 }
 
