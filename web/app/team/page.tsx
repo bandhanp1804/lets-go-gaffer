@@ -3,7 +3,7 @@
 import { Async } from "../../components/Async.tsx";
 import { Notes } from "../../components/Notes.tsx";
 import { Pitch } from "../../components/Pitch.tsx";
-import type { MyTeam } from "../../lib/types.ts";
+import type { MyTeam } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
 
 export default function Team() {

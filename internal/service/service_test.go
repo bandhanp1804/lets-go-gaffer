@@ -28,8 +28,10 @@ type rig struct {
 type rigOpts struct {
 	live    *fakeLive
 	session string
-	noEmbed bool
-	mutate  func(*world)
+	// sessionFn replaces session with a token that can change while the service runs.
+	sessionFn func() string
+	noEmbed   bool
+	mutate    func(*world)
 }
 
 func newRig(t *testing.T, o rigOpts) *rig {
@@ -41,6 +43,7 @@ func newRig(t *testing.T, o rigOpts) *rig {
 	r := &rig{store: &fakeStore{w: w}, fpl: newFakeFPL(w), emb: &fakeEmbedder{}, now: new(time.Time)}
 	*r.now = testNow
 	deps := service.Deps{Store: r.store, FPL: r.fpl, Session: o.session, Now: func() time.Time { return *r.now }}
+	deps.SessionFn = o.sessionFn
 	if o.live != nil {
 		deps.Live = o.live
 	}

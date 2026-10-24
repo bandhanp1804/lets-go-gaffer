@@ -35,7 +35,7 @@ func WithLiveSquad(team Team, live *fpl.MyTeam, players []fpl.Player) (Team, Fin
 		Buy:              make(map[int]int, squadSize),
 		Sell:             make(map[int]int, squadSize),
 		PendingTransfers: live.Transfers.Made,
-		PendingHit:       live.Transfers.Cost,
+		PendingHit:       pendingHit(live.Transfers),
 	}
 	for i, pick := range picks {
 		p, ok := byID[pick.Element]
@@ -77,4 +77,15 @@ func WithLiveSquad(team Team, live *fpl.MyTeam, players []fpl.Player) (Team, Fin
 	next.History.Value = live.Transfers.Value
 	next.History.EventTransfers, next.History.EventTransfersCost = 0, 0
 	return next, fin, nil
+}
+
+// pendingHit is the points already lost this gameweek. FPL's transfers.cost is the price of
+// each transfer beyond the free ones, so it reads 4 even when nothing has been made; the hit
+// is that price times the transfers over the allowance. A limit of zero means no fixed
+// allowance (a Wildcard or Free Hit is active), where nothing is ever charged.
+func pendingHit(t fpl.MyTransfers) int {
+	if t.Limit <= 0 {
+		return 0
+	}
+	return max(t.Made-t.Limit, 0) * t.Cost
 }

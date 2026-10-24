@@ -5,7 +5,8 @@ import { Async } from "../../components/Async.tsx";
 import { one } from "../../lib/format.ts";
 import { query } from "../../lib/api.ts";
 import { availability } from "../../lib/pitch.ts";
-import type { Player, Status } from "../../lib/types.ts";
+import { nextSort, pageLabel, type Sort } from "../../lib/paging.ts";
+import type { Players, Status } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
 
 interface Filters {
@@ -13,20 +14,32 @@ interface Filters {
   team: string;
   name: string;
   status: string;
-  sort_by: string;
   min_price: string;
   max_price: string;
-  limit: string;
 }
 
-const initial: Filters = { position: "", team: "", name: "", status: "", sort_by: "", min_price: "", max_price: "", limit: "25" };
+const noFilters: Filters = { position: "", team: "", name: "", status: "", min_price: "", max_price: "" };
 
-export default function Players() {
-  const [f, setF] = useState<Filters>(initial);
-  const [applied, setApplied] = useState(query({ limit: initial.limit }));
-  const clubs = useApi<Status>("/api/status");
-  const data = useApi<{ players: Player[] }>(`/api/players${applied}`);
-  const set = (k: keyof Filters) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+const columns: { key: string; label: string; num?: boolean; title?: string }[] = [
+  { key: "name", label: "Player" },
+  { key: "team", label: "Club" },
+  { key: "position", label: "Pos" },
+  { key: "price", label: "Price", num: true },
+  { key: "xp", label: "xp", num: true, title: "expected points per gameweek, next four gameweeks" },
+  { key: "form", label: "Form", num: true },
+  { key: "points", label: "Points", num: true },
+];
+
+export default function PlayersPage() {
+  const [draft, setDraft] = useState<Filters>(noFilters); // what the form shows
+  const [filters, setFilters] = useState<Filters>(noFilters); // what was searched
+  const [sort, setSort] = useState<Sort>({ by: "xp", dir: "desc" });
+  const [limit, setLimit] = useState(25);
+  const [offset, setOffset] = useState(0);
+
+  const status = useApi<Status>("/api/status");
+  const data = useApi<Players>(`/api/players${query({ ...filters, sort_by: sort.by, sort_dir: sort.dir, limit, offset })}`);
+  const set = (k: keyof Filters) => (e: { target: { value: string } }) => setDraft({ ...draft, [k]: e.target.value });
 
   return (
     <>
@@ -35,12 +48,13 @@ export default function Players() {
         className="form"
         onSubmit={(e) => {
           e.preventDefault();
-          setApplied(query({ ...f }));
+          setFilters(draft);
+          setOffset(0);
         }}
       >
         <label>
           Position
-          <select value={f.position} onChange={set("position")}>
+          <select value={draft.position} onChange={set("position")}>
             <option value="">All</option>
             <option value="GKP">Goalkeepers</option>
             <option value="DEF">Defenders</option>
@@ -50,9 +64,9 @@ export default function Players() {
         </label>
         <label>
           Club
-          <select value={f.team} onChange={set("team")}>
+          <select value={draft.team} onChange={set("team")}>
             <option value="">All</option>
-            {(clubs.data?.clubs ?? []).map((c) => (
+            {(status.data?.clubs ?? []).map((c) => (
               <option key={c.short} value={c.short}>
                 {c.name}
               </option>
@@ -61,88 +75,108 @@ export default function Players() {
         </label>
         <label>
           Availability
-          <select value={f.status} onChange={set("status")}>
+          <select value={draft.status} onChange={set("status")}>
             <option value="">Available</option>
+            <option value="any">Any</option>
             <option value="doubtful">Doubtful</option>
             <option value="injured">Injured</option>
             <option value="suspended">Suspended</option>
             <option value="unavailable">Unavailable</option>
-            <option value="any">Any</option>
-          </select>
-        </label>
-        <label>
-          Sort by
-          <select value={f.sort_by} onChange={set("sort_by")}>
-            <option value="">Expected points</option>
-            <option value="form">Form</option>
-            <option value="price">Price</option>
-            <option value="points">Total points</option>
           </select>
         </label>
         <label>
           Min £m
-          <input type="number" step="0.1" min={0} value={f.min_price} onChange={set("min_price")} />
+          <input type="number" step="0.1" min={0} value={draft.min_price} onChange={set("min_price")} />
         </label>
         <label>
           Max £m
-          <input type="number" step="0.1" min={0} value={f.max_price} onChange={set("max_price")} />
+          <input type="number" step="0.1" min={0} value={draft.max_price} onChange={set("max_price")} />
         </label>
         <label>
           Name
-          <input value={f.name} placeholder="exact name" onChange={set("name")} />
-        </label>
-        <label>
-          Show
-          <select value={f.limit} onChange={set("limit")}>
-            {[10, 25].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
+          <input value={draft.name} placeholder="exact name" onChange={set("name")} />
         </label>
         <button type="submit">Search</button>
       </form>
 
       <Async state={data}>
-        {({ players }) =>
-          players.length === 0 ? (
-            <p className="muted">No players match.</p>
-          ) : (
-            <div className="tablewrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Player</th>
-                    <th>Club</th>
-                    <th>Pos</th>
-                    <th className="num">Price</th>
-                    <th className="num" title="expected points per gameweek, next four gameweeks">xp</th>
-                    <th className="num">Form</th>
-                    <th className="num">Points</th>
-                    <th>Status</th>
-                    <th>Fixture</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {players.map((p) => (
-                    <tr key={p.id} title={p.news || undefined}>
-                      <td>{p.name}</td>
-                      <td>{p.team}</td>
-                      <td>{p.position}</td>
-                      <td className="num">{p.price}</td>
-                      <td className="num">{one(p.xp)}</td>
-                      <td className="num">{p.form}</td>
-                      <td className="num">{p.total_points}</td>
-                      <td className={`status-${availability(p.status)}`}>{p.status}</td>
-                      <td>{p.fixture}</td>
+        {(page) => (
+          <div className={data.loading ? "dim" : undefined}>
+            {page.players.length === 0 ? (
+              <p className="muted">No players match.</p>
+            ) : (
+              <div className="tablewrap">
+                <table>
+                  <thead>
+                    <tr>
+                      {columns.map((c) => (
+                        <th
+                          key={c.key}
+                          className={c.num ? "num" : undefined}
+                          title={c.title}
+                          aria-sort={sort.by === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+                        >
+                          <button
+                            className="sort"
+                            onClick={() => {
+                              setSort(nextSort(sort, c.key));
+                              setOffset(0);
+                            }}
+                          >
+                            {c.label}
+                            <span aria-hidden="true">{sort.by === c.key ? (sort.dir === "asc" ? " ▲" : " ▼") : ""}</span>
+                          </button>
+                        </th>
+                      ))}
+                      <th>Status</th>
+                      <th>Fixture</th>
                     </tr>
+                  </thead>
+                  <tbody>
+                    {page.players.map((p) => (
+                      <tr key={p.id} title={p.news || undefined}>
+                        <td>{p.name}</td>
+                        <td>{p.team}</td>
+                        <td>{p.position}</td>
+                        <td className="num">{p.price}</td>
+                        <td className="num">{one(p.xp)}</td>
+                        <td className="num">{p.form}</td>
+                        <td className="num">{p.total_points}</td>
+                        <td className={`status-${availability(p.status)}`}>{p.status}</td>
+                        <td>{p.fixture}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="pager">
+              <span className="muted">{pageLabel(page.offset, page.players.length, page.total)}</span>
+              <button disabled={page.offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}>
+                ← Previous
+              </button>
+              <button disabled={page.offset + page.players.length >= page.total} onClick={() => setOffset(offset + limit)}>
+                Next →
+              </button>
+              <label className="inline">
+                Per page
+                <select
+                  value={limit}
+                  onChange={(e) => {
+                    setLimit(Number(e.target.value));
+                    setOffset(0);
+                  }}
+                >
+                  {[25, 50, 100].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
                   ))}
-                </tbody>
-              </table>
+                </select>
+              </label>
             </div>
-          )
-        }
+          </div>
+        )}
       </Async>
     </>
   );

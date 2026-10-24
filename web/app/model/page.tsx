@@ -3,7 +3,7 @@
 import { Async } from "../../components/Async.tsx";
 import { Notes } from "../../components/Notes.tsx";
 import { three, two } from "../../lib/format.ts";
-import type { Backtest } from "../../lib/types.ts";
+import type { Backtest } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
 
 export default function Model() {

@@ -1,6 +1,6 @@
 import { availability } from "../lib/pitch.ts";
 import { one } from "../lib/format.ts";
-import type { Player } from "../lib/types.ts";
+import type { Player } from "../lib/types.gen.ts";
 
 export function PlayerCard({ p, role }: { p: Player; role?: "C" | "V" | "" }) {
   const a = availability(p.status);

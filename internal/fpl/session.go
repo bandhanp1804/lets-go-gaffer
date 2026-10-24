@@ -20,7 +20,7 @@ var ErrSessionRejected = errors.New("FPL rejected the session")
 
 type sessionTransport struct {
 	base  http.RoundTripper
-	value string
+	value func() string
 	host  string
 }
 
@@ -36,6 +36,13 @@ type sessionTransport struct {
 //
 // The value is never logged or placed in an error by this package.
 func NewSessionTransport(base http.RoundTripper, value, host string) http.RoundTripper {
+	return NewSessionTransportFunc(base, func() string { return value }, host)
+}
+
+// NewSessionTransportFunc is NewSessionTransport for a token that changes while the
+// program runs: value is asked for on every request, so a fresh token is used as soon
+// as it is available and a long-lived server needs no restart.
+func NewSessionTransportFunc(base http.RoundTripper, value func() string, host string) http.RoundTripper {
 	if base == nil {
 		base = http.DefaultTransport
 	}
@@ -43,11 +50,12 @@ func NewSessionTransport(base http.RoundTripper, value, host string) http.RoundT
 }
 
 func (t *sessionTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if t.value == "" || req.URL.Host != t.host || !secureOrLoopback(req.URL) {
+	value := t.value()
+	if value == "" || req.URL.Host != t.host || !secureOrLoopback(req.URL) {
 		return t.base.RoundTrip(req)
 	}
 	r := req.Clone(req.Context()) // a RoundTripper must not modify the caller's request
-	r.Header.Set("X-Api-Authorization", t.value)
+	r.Header.Set("X-Api-Authorization", value)
 	return t.base.RoundTrip(r)
 }
 

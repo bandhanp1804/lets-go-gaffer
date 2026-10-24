@@ -88,12 +88,15 @@ type Embedder interface {
 
 // Deps are the service's collaborators.
 type Deps struct {
-	Store    Store
-	FPL      FPL
-	Live     Live   // optional
-	Session  string // the session token, read only for its expiry and never printed
-	Embedder Embedder
-	Now      func() time.Time // default time.Now
+	Store   Store
+	FPL     FPL
+	Live    Live   // optional
+	Session string // the session token, read only for its expiry and never printed
+	// SessionFn, when set, supplies the token instead of Session, so a token pasted into
+	// the config while the program runs is used at once. It is asked for on every request.
+	SessionFn func() string
+	Embedder  Embedder
+	Now       func() time.Time // default time.Now
 }
 
 // Config identifies the manager.
@@ -111,6 +114,7 @@ type Service struct {
 	baseAt  time.Time
 	squad   *squadSnap
 	squadAt time.Time
+	squadTk string // the session token the squad snapshot was read with
 
 	btMu   sync.Mutex // the backtest takes seconds, so it has its own lock and cache
 	btKey  string
@@ -201,14 +205,25 @@ func (s *Service) baseSnapshot(ctx context.Context) (*baseSnap, error) {
 	return s.base, nil
 }
 
+// session is the current session token, from SessionFn when there is one.
+func (s *Service) session() string {
+	if s.deps.SessionFn != nil {
+		return strings.TrimSpace(s.deps.SessionFn())
+	}
+	return strings.TrimSpace(s.deps.Session)
+}
+
 func (s *Service) squadSnapshot(ctx context.Context) (*baseSnap, *squadSnap, error) {
 	base, err := s.baseSnapshot(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
+	token := s.session()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.squad != nil && s.deps.Now().Sub(s.squadAt) < snapshotTTL {
+	// A new token means the manager has just logged in again: a squad read without it
+	// (public data) must not be served for the rest of the cache window.
+	if s.squad != nil && s.squadTk == token && s.deps.Now().Sub(s.squadAt) < snapshotTTL {
 		return base, s.squad, nil
 	}
 	if s.cfg.TeamID == 0 {
@@ -221,7 +236,7 @@ func (s *Service) squadSnapshot(ctx context.Context) (*baseSnap, *squadSnap, err
 	}
 	snap := &squadSnap{}
 
-	live, note := s.tryLive(ctx)
+	live, note := s.tryLive(ctx, token)
 	if note != "" {
 		snap.notes = append(snap.notes, note)
 	}
@@ -249,20 +264,20 @@ func (s *Service) squadSnapshot(ctx context.Context) (*baseSnap, *squadSnap, err
 			"This squad is as of the GW%d deadline: FPL hides transfers made since. Anything the manager has changed since then is not reflected.",
 			public.Event))
 	}
-	s.squad, s.squadAt = snap, s.deps.Now()
+	s.squad, s.squadAt, s.squadTk = snap, s.deps.Now(), token
 	return base, snap, nil
 }
 
 // tryLive reads the live squad if a session is configured. It never fails: it
 // returns nil and a note saying why. No note contains the token.
-func (s *Service) tryLive(ctx context.Context) (*fpl.MyTeam, string) {
-	if s.deps.Live == nil || strings.TrimSpace(s.deps.Session) == "" {
+func (s *Service) tryLive(ctx context.Context, token string) (*fpl.MyTeam, string) {
+	if s.deps.Live == nil || token == "" {
 		return nil, ""
 	}
 	now := s.deps.Now()
-	expiry, known := fpl.TokenExpiry(s.deps.Session)
+	expiry, known := fpl.TokenExpiry(token)
 	if known && !expiry.After(now) {
-		return nil, fmt.Sprintf("The FPL session expired %s ago, so only public data is used.", ago(now.Sub(expiry)))
+		return nil, fmt.Sprintf("The FPL session expired %s ago, so only public data is used. Paste a fresh token into .env and it is picked up without a restart.", ago(now.Sub(expiry)))
 	}
 	live, err := s.deps.Live.FetchMyTeam(ctx, s.cfg.TeamID)
 	switch {
@@ -481,52 +496,97 @@ type PlayerQuery struct {
 	Team     string  // club short name ("ARS") or full name
 	Name     string  // an exact player name
 	Status   string  // available (default), doubtful, injured, suspended, unavailable, or any
-	SortBy   string  // xp (default), form, price, points
+	SortBy   string  // xp (default), form, price, points, name, team, position
+	SortDir  string  // asc or desc; the default suits the column (best first, cheapest first, A to Z)
 	MaxPrice float64 // 0 means no ceiling
 	MinPrice float64
-	Limit    int // default 10, at most 25
+	Limit    int // default 10; at most 25 for FindPlayers, 100 for Players
+	Offset   int // players to skip, for paging; Players only
 }
+
+// PlayersView is one page of a player table.
+type PlayersView struct {
+	Players []PlayerView `json:"players"`
+	Total   int          `json:"total"`  // players matching the filters, before paging
+	Offset  int          `json:"offset"` // where this page starts
+	Limit   int          `json:"limit"`  // the page size applied
+}
+
+const maxTablePage = 100
 
 // FindPlayers answers structured questions: the best midfielders under a price, who
 // is injured at a club, and so on. Expected points are averaged over the next four
-// gameweeks and already discounted by the chance of playing.
+// gameweeks and already discounted by the chance of playing. It returns at most 25,
+// which is what a model can usefully read.
 func (s *Service) FindPlayers(ctx context.Context, q PlayerQuery) ([]PlayerView, error) {
+	q.Offset = 0
+	page, err := s.players(ctx, q, maxPlayers)
+	return page.Players, err
+}
+
+// Players is FindPlayers for a table: pages of up to 100, any column to sort by in
+// either direction, and the total number of matches.
+func (s *Service) Players(ctx context.Context, q PlayerQuery) (PlayersView, error) {
+	return s.players(ctx, q, maxTablePage)
+}
+
+// sortKeys are the columns a player list can be sorted by, with the direction that
+// puts the interesting end first.
+var sortKeys = map[string]bool{ // value: ascending by default
+	"xp": false, "form": false, "points": false, "price": true, "name": true, "team": true, "position": true,
+}
+
+func (s *Service) players(ctx context.Context, q PlayerQuery, maxLimit int) (PlayersView, error) {
 	base, err := s.baseSnapshot(ctx)
 	if err != nil {
-		return nil, err
+		return PlayersView{}, err
 	}
 	pos, err := parsePosition(q.Position)
 	if err != nil {
-		return nil, err
+		return PlayersView{}, err
 	}
 	teamID, err := base.teamID(q.Team)
 	if err != nil {
-		return nil, err
+		return PlayersView{}, err
 	}
 	status, err := parseStatus(q.Status)
 	if err != nil {
-		return nil, err
+		return PlayersView{}, err
 	}
 	sortBy := strings.ToLower(strings.TrimSpace(q.SortBy))
 	if sortBy == "" {
 		sortBy = "xp"
 	}
-	if sortBy != "xp" && sortBy != "form" && sortBy != "price" && sortBy != "points" {
-		return nil, badInput("sort_by %q is not one of xp, form, price, points", q.SortBy)
+	ascDefault, ok := sortKeys[sortBy]
+	if !ok {
+		return PlayersView{}, badInput("sort_by %q is not one of xp, form, price, points, name, team, position", q.SortBy)
+	}
+	asc := ascDefault
+	switch strings.ToLower(strings.TrimSpace(q.SortDir)) {
+	case "":
+	case "asc":
+		asc = true
+	case "desc":
+		asc = false
+	default:
+		return PlayersView{}, badInput("sort_dir %q is not asc or desc", q.SortDir)
 	}
 	if q.MaxPrice < 0 || q.MinPrice < 0 {
-		return nil, badInput("prices cannot be negative")
+		return PlayersView{}, badInput("prices cannot be negative")
+	}
+	if q.Offset < 0 {
+		return PlayersView{}, badInput("offset cannot be negative")
 	}
 	limit := q.Limit
 	if limit < 1 {
 		limit = defaultPlayers
 	}
-	limit = min(limit, maxPlayers)
+	limit = min(limit, maxLimit)
 
 	pool := base.players
 	if name := strings.TrimSpace(q.Name); name != "" {
 		if pool, err = s.deps.Store.FindPlayers(ctx, name); err != nil {
-			return nil, err
+			return PlayersView{}, err
 		}
 	}
 	xp := base.model.ScoreFrom(base.next, defaultHorizon)
@@ -548,33 +608,52 @@ func (s *Service) FindPlayers(ctx context.Context, q PlayerQuery) ([]PlayerView,
 		hits = append(hits, scored{p, xp(p)})
 	}
 	form := func(p fpl.Player) float64 { f, _ := strconv.ParseFloat(p.Form, 64); return f }
-	sort.SliceStable(hits, func(i, j int) bool {
-		a, b := hits[i], hits[j]
+	// cmp orders a before b when negative, in ascending terms for the column.
+	cmp := func(a, b scored) int {
 		switch sortBy {
 		case "form":
-			if form(a.p) != form(b.p) {
-				return form(a.p) > form(b.p)
-			}
+			return compareFloat(form(a.p), form(b.p))
 		case "price":
-			if a.p.NowCost != b.p.NowCost {
-				return a.p.NowCost < b.p.NowCost
-			}
+			return a.p.NowCost - b.p.NowCost
 		case "points":
-			if a.p.TotalPoints != b.p.TotalPoints {
-				return a.p.TotalPoints > b.p.TotalPoints
-			}
-		default:
-			if a.xp != b.xp {
-				return a.xp > b.xp
-			}
+			return a.p.TotalPoints - b.p.TotalPoints
+		case "name":
+			return strings.Compare(strings.ToLower(a.p.WebName), strings.ToLower(b.p.WebName))
+		case "team":
+			return strings.Compare(base.short[a.p.TeamID], base.short[b.p.TeamID])
+		case "position":
+			return int(a.p.Position) - int(b.p.Position)
 		}
-		return a.p.ID < b.p.ID
-	})
-	out := []PlayerView{}
-	for _, h := range hits[:min(limit, len(hits))] {
-		out = append(out, base.view(h.p, h.xp))
+		return compareFloat(a.xp, b.xp)
 	}
-	return out, nil
+	sort.SliceStable(hits, func(i, j int) bool {
+		c := cmp(hits[i], hits[j])
+		if !asc {
+			c = -c
+		}
+		if c != 0 {
+			return c < 0
+		}
+		return hits[i].p.ID < hits[j].p.ID // a stable order, so pages never repeat or skip a player
+	})
+
+	page := PlayersView{Players: []PlayerView{}, Total: len(hits), Offset: q.Offset, Limit: limit}
+	if q.Offset < len(hits) {
+		for _, h := range hits[q.Offset:min(q.Offset+limit, len(hits))] {
+			page.Players = append(page.Players, base.view(h.p, h.xp))
+		}
+	}
+	return page, nil
+}
+
+func compareFloat(a, b float64) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	}
+	return 0
 }
 
 func parsePosition(s string) (fpl.Position, error) {

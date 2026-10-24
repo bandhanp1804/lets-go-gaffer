@@ -32,8 +32,9 @@ type SessionView struct {
 type StatusView struct {
 	Gameweek       int         `json:"gameweek"` // the upcoming gameweek, the one being decided for
 	GameweekName   string      `json:"gameweek_name"`
-	Deadline       string      `json:"deadline"`    // RFC 3339
-	DeadlineIn     string      `json:"deadline_in"` // "2d 5h", or "passed"
+	Deadline       string      `json:"deadline"`      // RFC 3339
+	DeadlineIn     string      `json:"deadline_in"`   // "2d 5h", or "passed"
+	LiveGameweek   int         `json:"live_gameweek"` // the gameweek being played now, 0 between gameweeks
 	LastFinished   int         `json:"last_finished_gameweek"`
 	HistoryThrough int         `json:"history_through_gameweek"` // the last gameweek the stored player history covers
 	Players        int         `json:"players"`
@@ -58,6 +59,9 @@ func (s *Service) Status(ctx context.Context) (StatusView, error) {
 		Clubs: []ClubView{}, Notes: append([]string{}, base.notes...),
 	}
 	for _, g := range base.gameweeks {
+		if g.IsCurrent && !g.Finished {
+			v.LiveGameweek = g.ID
+		}
 		if g.ID == base.next {
 			v.GameweekName, v.Deadline = g.Name, g.DeadlineTime
 			if t, err := time.Parse(time.RFC3339, g.DeadlineTime); err == nil {
@@ -78,10 +82,11 @@ func (s *Service) Status(ctx context.Context) (StatusView, error) {
 }
 
 func (s *Service) sessionView(now time.Time) SessionView {
-	if s.deps.Live == nil || s.deps.Session == "" {
+	token := s.session()
+	if s.deps.Live == nil || token == "" {
 		return SessionView{State: "not configured"}
 	}
-	expiry, known := fpl.TokenExpiry(s.deps.Session)
+	expiry, known := fpl.TokenExpiry(token)
 	switch {
 	case !known:
 		return SessionView{Configured: true, State: "unknown expiry"}

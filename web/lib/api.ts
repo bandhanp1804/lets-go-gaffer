@@ -1,5 +1,5 @@
 import { createSSEParser } from "./sse.ts";
-import type { AskDone } from "./types.ts";
+import type { AskDone } from "./types.gen.ts";
 
 export class ApiError extends Error {
   status: number;

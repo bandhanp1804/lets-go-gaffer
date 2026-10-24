@@ -59,7 +59,7 @@ func (s *Server) squad(ctx context.Context, r *http.Request) (any, error) {
 
 func (s *Server) players(ctx context.Context, r *http.Request) (any, error) {
 	q := r.URL.Query()
-	pq := service.PlayerQuery{Position: q.Get("position"), Team: q.Get("team"), Name: q.Get("name"), Status: q.Get("status"), SortBy: q.Get("sort_by")}
+	pq := service.PlayerQuery{Position: q.Get("position"), Team: q.Get("team"), Name: q.Get("name"), Status: q.Get("status"), SortBy: q.Get("sort_by"), SortDir: q.Get("sort_dir")}
 	var err error
 	if pq.MaxPrice, err = floatParam(q.Get("max_price")); err != nil {
 		return nil, badParam("max_price", err)
@@ -70,11 +70,10 @@ func (s *Server) players(ctx context.Context, r *http.Request) (any, error) {
 	if pq.Limit, err = intParam(q.Get("limit")); err != nil {
 		return nil, badParam("limit", err)
 	}
-	players, err := s.cfg.Service.FindPlayers(ctx, pq)
-	if err != nil {
-		return nil, err
+	if pq.Offset, err = intParam(q.Get("offset")); err != nil {
+		return nil, badParam("offset", err)
 	}
-	return map[string]any{"players": players}, nil // an object, so fields can be added without breaking clients
+	return s.cfg.Service.Players(ctx, pq)
 }
 
 func (s *Server) news(ctx context.Context, r *http.Request) (any, error) {
@@ -91,7 +90,10 @@ func (s *Server) news(ctx context.Context, r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"stories": stories}, nil
+	if stories == nil {
+		stories = []service.NewsView{} // an empty list, never null
+	}
+	return NewsResponse{Stories: stories}, nil
 }
 
 func badParam(name string, err error) error {
@@ -137,19 +139,44 @@ type askRequest struct {
 	SessionID string `json:"session_id"`
 }
 
-type toolView struct {
+// AskTool is one tool call, as shown to the UI. Tool outputs are not sent.
+type AskTool struct {
 	Name       string `json:"name"`
 	Input      string `json:"input"`
 	Error      string `json:"error,omitempty"`
 	DurationMS int64  `json:"duration_ms"`
 }
 
-type sourceView struct {
+// AskSource is a story the answer cites.
+type AskSource struct {
 	Ref    int    `json:"ref"`
 	Title  string `json:"title"`
 	URL    string `json:"url"`
 	Source string `json:"source"`
 	Age    string `json:"age"`
+}
+
+// AskUsage is what the question cost in tokens.
+type AskUsage struct {
+	InputTokens     int `json:"input_tokens"`
+	OutputTokens    int `json:"output_tokens"`
+	CacheReadTokens int `json:"cache_read_tokens"`
+}
+
+// AskDone is the final event of an answer stream.
+type AskDone struct {
+	SessionID string      `json:"session_id"`
+	Text      string      `json:"text"`
+	Sources   []AskSource `json:"sources"`
+	Warnings  []string    `json:"warnings"`
+	Tools     []AskTool   `json:"tools"`
+	Rounds    int         `json:"rounds"`
+	Usage     AskUsage    `json:"usage"`
+}
+
+// NewsResponse is the body of GET /api/news.
+type NewsResponse struct {
+	Stories []service.NewsView `json:"stories"`
 }
 
 // ask streams one answer as server-sent events:
@@ -205,7 +232,7 @@ func (s *Server) ask(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	var mu sync.Mutex // the stream has one writer at a time
 	send := func(event string, v any) {
-		b, _ := json.Marshal(v)
+		b, _ := json.Marshal(nonNil(v))
 		mu.Lock()
 		defer mu.Unlock()
 		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, b)
@@ -225,23 +252,18 @@ func (s *Server) ask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	done := struct {
-		SessionID string       `json:"session_id"`
-		Text      string       `json:"text"`
-		Sources   []sourceView `json:"sources"`
-		Warnings  []string     `json:"warnings"`
-		Tools     []toolView   `json:"tools"`
-		Rounds    int          `json:"rounds"`
-		Usage     any          `json:"usage"`
-	}{SessionID: id, Text: ans.Text, Sources: []sourceView{}, Warnings: ans.Warnings(), Tools: []toolView{}, Rounds: ans.Rounds, Usage: ans.Usage}
+	done := AskDone{
+		SessionID: id, Text: ans.Text, Sources: []AskSource{}, Warnings: ans.Warnings(), Tools: []AskTool{}, Rounds: ans.Rounds,
+		Usage: AskUsage{InputTokens: ans.Usage.InputTokens, OutputTokens: ans.Usage.OutputTokens, CacheReadTokens: ans.Usage.CacheReadTokens},
+	}
 	if done.Warnings == nil {
 		done.Warnings = []string{}
 	}
 	for _, src := range ans.Sources {
-		done.Sources = append(done.Sources, sourceView{Ref: src.Ref, Title: src.Title, URL: src.URL, Source: src.Source, Age: src.Age})
+		done.Sources = append(done.Sources, AskSource{Ref: src.Ref, Title: src.Title, URL: src.URL, Source: src.Source, Age: src.Age})
 	}
 	for _, c := range ans.ToolCalls {
-		done.Tools = append(done.Tools, toolView{Name: c.Name, Input: c.Input, Error: c.Error, DurationMS: c.Duration.Milliseconds()})
+		done.Tools = append(done.Tools, AskTool{Name: c.Name, Input: c.Input, Error: c.Error, DurationMS: c.Duration.Milliseconds()})
 	}
 	send("done", done)
 }
@@ -277,7 +299,7 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	b, err := json.Marshal(v)
+	b, err := json.Marshal(nonNil(v)) // lists are never null: see nonNil
 	if err != nil {
 		status, b = http.StatusInternalServerError, []byte(`{"error":"internal error"}`)
 	}

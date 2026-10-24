@@ -1,4 +1,4 @@
-import type { Player } from "./types.ts";
+import type { Player } from "./types.gen.ts";
 
 export const LINES = ["GKP", "DEF", "MID", "FWD"] as const;
 export type Line = (typeof LINES)[number];

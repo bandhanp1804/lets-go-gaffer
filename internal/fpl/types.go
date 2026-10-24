@@ -276,7 +276,8 @@ type MyChip struct {
 
 // MyTransfers is the transfer position for the coming gameweek. Bank and Value are
 // in tenths of £m. Limit is the free transfers available, Made the transfers made so
-// far this gameweek, and Cost the points already lost to transfers beyond the free ones.
+// far this gameweek, and Cost the price in points of each transfer beyond the free ones (4,
+// whether or not any has been made: it is not the points lost so far).
 type MyTransfers struct {
 	Cost   int    `json:"cost"`
 	Status string `json:"status"`

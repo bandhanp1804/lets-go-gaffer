@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Async } from "../components/Async.tsx";
 import { Notes } from "../components/Notes.tsx";
 import { one, signed } from "../lib/format.ts";
-import type { Lineup, Status } from "../lib/types.ts";
+import type { Lineup, Status } from "../lib/types.gen.ts";
 import { useApi } from "../lib/useApi.ts";
 
 export default function Dashboard() {
@@ -20,7 +20,10 @@ export default function Dashboard() {
               <div className="tile">
                 <span className="label">Next deadline</span>
                 <span className="big">{s.gameweek_name || `GW${s.gameweek}`}</span>
-                <span className="sub">in {s.deadline_in}</span>
+                <span className="sub">
+                  in {s.deadline_in}
+                  {s.live_gameweek > 0 ? ` · GW${s.live_gameweek} is being played now` : ""}
+                </span>
               </div>
               <div className="tile">
                 <span className="label">Player data</span>
@@ -37,7 +40,7 @@ export default function Dashboard() {
               <div className="tile">
                 <span className="label">FPL session</span>
                 <span className="big">{s.session.state}</span>
-                <span className="sub">{s.session.expires_in ? `expires in ${s.session.expires_in}` : s.session.state === "expired" ? "showing public data" : " "}</span>
+                <span className="sub">{s.session.expires_in ? `expires in ${s.session.expires_in}` : s.session.state === "expired" ? "public data only: paste a new token into .env, no restart needed" : " "}</span>
               </div>
             </div>
             <Notes notes={s.notes} />

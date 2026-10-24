@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Async } from "../../components/Async.tsx";
 import { query } from "../../lib/api.ts";
 import { webURL } from "../../lib/format.ts";
-import type { Story } from "../../lib/types.ts";
+import type { News } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
 
 export default function News() {
@@ -12,7 +12,7 @@ export default function News() {
   const [player, setPlayer] = useState("");
   const [days, setDays] = useState("");
   const [applied, setApplied] = useState<string | null>(null);
-  const data = useApi<{ stories: Story[] }>(applied === null ? null : `/api/news${applied}`);
+  const data = useApi<{ stories: News[] }>(applied === null ? null : `/api/news${applied}`);
 
   return (
     <>

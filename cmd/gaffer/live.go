@@ -33,8 +33,14 @@ type liveSource interface {
 // sessionClient is an HTTP client that logs requests to FPL in as the manager.
 // The token is attached only for FPL's own host and is never logged.
 func sessionClient(token string) *http.Client {
+	return sessionClientFunc(func() string { return token })
+}
+
+// sessionClientFunc is sessionClient for a token that is replaced while the program
+// runs (a server): it is asked for on every request.
+func sessionClientFunc(token func() string) *http.Client {
 	return &http.Client{Transport: httpx.NewRetryTransport(
-		httpx.NewRateLimitTransport(fpl.NewSessionTransport(http.DefaultTransport, token, fpl.Host), httpx.NewLimiter(100*time.Millisecond)),
+		httpx.NewRateLimitTransport(fpl.NewSessionTransportFunc(http.DefaultTransport, token, fpl.Host), httpx.NewLimiter(100*time.Millisecond)),
 		httpx.RetryConfig{MaxAttempts: 4, BaseDelay: 500 * time.Millisecond, MaxDelay: 10 * time.Second},
 	)}
 }
