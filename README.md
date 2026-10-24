@@ -8,7 +8,7 @@ Go does all the computing and rule checking; an LLM only narrates and retrieves 
 
 **You need:** Go 1.23+, Docker, and Node 20.9+ (Node 23.6+ to run the web tests).
 
-**1. Start the database** (Postgres with pgvector, on port 5433):
+**1. Start the database** (Postgres with pgvector on port 5433, and the Temporal dev server for the optional background workflows):
 
 ```bash
 docker compose -f deploy/docker/docker-compose.yml up -d --wait
@@ -45,6 +45,8 @@ go run ./cmd/gaffer serve
 cd web && npm install && npm run dev
 ```
 
+**Optional: background workflows.** Set `TEMPORAL_ADDRESS=localhost:7233` in `.env`, restart step 4, and run `go run ./cmd/gaffer worker` in a third terminal for scheduled news, watched-player alerts, a gameweek briefing and a nightly model check ([temporal.md](docs/temporal.md)).
+
 Click **Load my team**, enter your team id (the number in the address of your FPL Points page, `.../entry/<ID>/event/N`) and you are in. Switch on **Live squad** if you want transfers made since the deadline; the dialog explains how to get the login token it needs.
 
 ### Prefer the command line?
@@ -74,6 +76,7 @@ See the [command reference](docs/cli.md) for the rest.
 | [Web UI](docs/web-ui.md) | the screens, choosing a team, design notes |
 | [The assistant](docs/assistant.md) | its tools, the checks on what it says, and how it is evaluated |
 | [How the numbers are made](docs/model.md) | the expected-points model, its backtest, lineup, transfers, chips, points |
+| [Background workflows](docs/temporal.md) | Temporal: schedules, alerts, the briefing, backfills |
 | [Development](docs/development.md) | tests, generated types, opt-in live tests, troubleshooting |
 | [Roadmap](docs/roadmap.md) | what is done and what is next |
 

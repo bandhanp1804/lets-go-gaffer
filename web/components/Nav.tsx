@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AlertsBadge } from "./AlertsBadge.tsx";
 import { useTeam } from "./TeamProvider.tsx";
 
 const links = [
@@ -15,6 +16,7 @@ const links = [
   { href: "/news", label: "News" },
   { href: "/ask", label: "Ask" },
   { href: "/model", label: "Model" },
+  { href: "/alerts", label: "Alerts" },
 ];
 
 export function Nav() {
@@ -32,6 +34,7 @@ export function Nav() {
             <li key={l.href}>
               <Link href={l.href} aria-current={active ? "page" : undefined} className={active ? "active" : undefined}>
                 {l.label}
+                {l.href === "/alerts" ? <AlertsBadge /> : null}
               </Link>
             </li>
           );

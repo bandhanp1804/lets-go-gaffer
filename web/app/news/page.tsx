@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { Async } from "../../components/Async.tsx";
 import { NewsRefresh } from "../../components/NewsRefresh.tsx";
+import { WatchButton } from "../../components/WatchButton.tsx";
 import { query } from "../../lib/api.ts";
 import { sourceLabel, webURL } from "../../lib/format.ts";
 import { relevance } from "../../lib/relevance.ts";
 import type { NewsSearch } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
+import { useWatchlist } from "../../lib/watchlist.ts";
 
 export default function News() {
   const [q, setQ] = useState("");
@@ -16,6 +18,7 @@ export default function News() {
   const [applied, setApplied] = useState<{ q: string; player: string; days: string; everything: boolean } | null>(null);
   const path = applied === null ? null : `/api/news${query({ q: applied.q, player: applied.player, days: applied.days, detect: applied.everything ? "off" : undefined })}`;
   const data = useApi<NewsSearch>(path);
+  const watch = useWatchlist();
 
   return (
     <>
@@ -50,7 +53,7 @@ export default function News() {
             <>
               {r.player ? (
                 <div className="panel playerbox">
-                  <strong>{r.player.name}</strong>{" "}
+                  <strong>{r.player.name}</strong> <WatchButton id={r.player.id} name={r.player.name} watch={watch} />{" "}
                   <span className="muted">
                     {r.player.team} · {r.player.position} · {r.player.price}
                   </span>

@@ -3,11 +3,12 @@
 import { Async } from "../../components/Async.tsx";
 import { Notes } from "../../components/Notes.tsx";
 import { three, two } from "../../lib/format.ts";
-import type { Backtest } from "../../lib/types.gen.ts";
+import type { Backtest, Health } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
 
 export default function Model() {
   const bt = useApi<Backtest>("/api/backtest");
+  const health = useApi<Health>("/api/health/runs");
   return (
     <>
       <h1>Model</h1>
@@ -15,6 +16,7 @@ export default function Model() {
         How well each way of scoring players ranked gameweeks that had already been played, using only the gameweeks before each.{" "}
         <strong>Spearman</strong> is rank correlation with actual points (1 is perfect, 0 is noise); <strong>Top-20</strong> is the average actual points of the 20 players ranked highest.
       </p>
+      {health.data ? <ModelHealth h={health.data} /> : null}
       <Async state={bt}>
         {(b) => (
           <>
@@ -130,5 +132,83 @@ export default function Model() {
         )}
       </Async>
     </>
+  );
+}
+
+/** The nightly eval and the after-sync backtests, newest first, as the background workflows recorded them. */
+function ModelHealth({ h }: { h: Health }) {
+  if (h.evals.length === 0 && h.backtests.length === 0) {
+    return (
+      <p className="panel small muted">
+        Model health appears here once the background worker has run a nightly eval or a backtest after a sync.
+        {h.live ? null : " Start it with `gaffer worker`."}
+      </p>
+    );
+  }
+  return (
+    <section className="panel">
+      <h2>Model health</h2>
+      <div className="health">
+        <div>
+          <h3>Assistant eval (nightly)</h3>
+          {h.evals.length === 0 ? (
+            <p className="muted small">No run yet.</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th className="num">Passed</th>
+                  <th>Failing</th>
+                </tr>
+              </thead>
+              <tbody>
+                {h.evals.map((e, i) => (
+                  <tr key={i} className={e.pass_rate < 0.9 ? "status-out" : undefined}>
+                    <td>{e.age} ago</td>
+                    <td className="num">{Math.round(e.pass_rate * 100)}%</td>
+                    <td className="small">{e.failing.length > 0 ? e.failing.join(", ") : "none"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <div>
+          <h3>Default model backtest (after each sync)</h3>
+          {h.backtests.length === 0 ? (
+            <p className="muted small">No run yet.</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Through</th>
+                  <th className="num">Spearman</th>
+                  <th className="num">Error</th>
+                  <th>When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {h.backtests.map((b, i) => (
+                  <tr key={i}>
+                    <td>GW{b.through_gameweek}</td>
+                    <td className="num">{three(b.spearman)}</td>
+                    <td className="num">{two(b.mae)}</td>
+                    <td>{b.age} ago</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+      {h.temporal_ui ? (
+        <p className="small">
+          <a href={h.temporal_ui} target="_blank" rel="noopener noreferrer">
+            Workflows in Temporal ↗
+          </a>
+        </p>
+      ) : null}
+    </section>
   );
 }

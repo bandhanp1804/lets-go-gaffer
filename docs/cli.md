@@ -17,6 +17,8 @@ All commands read `.env` (see [configuration.md](configuration.md)). Run them as
 | `chat [-v]` | A conversation: follow-ups see earlier answers and keep their citations. |
 | `eval [-run NAME] [-n 3] [-workers 2] [-min 0.9]` | Runs the assistant's evaluation scenarios ([assistant.md](assistant.md#evaluating-it)). Spends API tokens. |
 | `serve [-addr 127.0.0.1:8080] [-origins ...]` | The HTTP API ([api.md](api.md)). |
+| `worker` | Runs the background workflows on Temporal and keeps their schedules up to date ([temporal.md](temporal.md)). |
+| `workflow [-detach] NAME` | Starts one workflow by hand: `news`, `sync [-force]`, `backtest`, `eval`, `relink`, `reembed`, `briefing`. Waits and prints the result unless `-detach`. |
 
 ## Details worth knowing
 
