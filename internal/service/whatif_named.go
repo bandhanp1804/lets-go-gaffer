@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
 )
@@ -63,9 +64,17 @@ func fold(s string) string {
 		"é", "e", "è", "e", "ê", "e", "ë", "e", "ğ", "g", "í", "i", "ì", "i", "î", "i", "ï", "i", "ı", "i", "ł", "l",
 		"ñ", "n", "ó", "o", "ò", "o", "ô", "o", "ö", "o", "õ", "o", "ø", "o", "ő", "o", "œ", "oe", "š", "s", "ś", "s",
 		"ß", "ss", "ú", "u", "ù", "u", "û", "u", "ü", "u", "ű", "u", "ý", "y", "ÿ", "y", "ž", "z", "ź", "z",
-		".", " ", "-", " ", "'", "",
+		"'", "", "’", "", // O'Brien and O’Brien are both obrien
 	)
-	return strings.Join(strings.Fields(repl.Replace(strings.ToLower(s))), " ")
+	// Everything that is not a letter or a digit separates words: a name followed by a comma, a
+	// question mark or a bracket is still the same name.
+	words := strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
+		}
+		return ' '
+	}, repl.Replace(strings.ToLower(s)))
+	return strings.Join(strings.Fields(words), " ")
 }
 
 // match returns the players whose name is the query, or failing that, contains it.

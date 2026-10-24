@@ -14,7 +14,7 @@
 | `GET /api/chips` | When to play Triple Captain, Bench Boost, Free Hit and Wildcard. `captain` (a player id) makes the Triple Captain card about that player. |
 | `GET /api/squad` | `horizon` (default 4): the best legal squad from scratch under £100.0m. |
 | `GET /api/players` | `position`, `team`, `name`, `status`, `min_price`, `max_price`, `sort_by` (`xp`, `form`, `price`, `points`, `name`, `team`, `position`), `sort_dir`, `limit` (up to 100), `offset`. Returns `players`, `total`, `offset`, `limit`. |
-| `GET /api/news` | `q` (required), `player`, `days`, `limit`: stories ranked by meaning. |
+| `GET /api/news` | `q` (required), `player`, `days`, `limit`, `detect=off`. Stories ranked by meaning, with a `similarity` for each. A player named in the question (accents and case ignored: "joao pedro" finds João Pedro) narrows the search to stories about him, because otherwise "injured" matches injury notes for anyone; `detect=off` searches everything instead. The result also carries `player` (who it narrowed to, with FPL's status and note), `player_detected`, `notes` (what the search did: nothing is stored about him, the matches are loose, the stored news is old) and `newest_story_age`. |
 | `GET /api/backtest` | How the scoring model did on played gameweeks, including the out-of-sample check. Cached until new history arrives. |
 | `POST /api/ask` | `{"question": "...", "session_id": "..."}`, answered as a server-sent-event stream (below). |
 | `GET /api/healthz` | Liveness. |

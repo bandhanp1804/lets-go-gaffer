@@ -1418,3 +1418,21 @@ tr.benchrow td {
   padding: 3px 12px;
   cursor: pointer;
 }
+
+/* news */
+.playerbox {
+  display: grid;
+  gap: 4px;
+}
+.pill.rel-strong {
+  background: var(--good-bg);
+  color: var(--good);
+}
+.pill.rel-ok {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.pill.rel-loose {
+  background: var(--warn-bg);
+  color: var(--warn);
+}

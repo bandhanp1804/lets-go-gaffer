@@ -88,11 +88,11 @@ func (s *svc) Players(_ context.Context, q service.PlayerQuery) (service.Players
 	s.mu.Unlock()
 	return service.PlayersView{Players: []service.PlayerView{{Name: "Rice"}}, Total: 668, Offset: q.Offset, Limit: 25}, s.err
 }
-func (s *svc) SearchNews(_ context.Context, q service.NewsQuery) ([]service.NewsView, error) {
+func (s *svc) Search(_ context.Context, q service.NewsQuery) (service.NewsSearchView, error) {
 	s.mu.Lock()
 	s.news = q
 	s.mu.Unlock()
-	return []service.NewsView{{Title: "Saka doubt"}}, s.err
+	return service.NewsSearchView{Stories: []service.NewsView{{Title: "Saka doubt"}}, Notes: []string{}}, s.err
 }
 
 // conv is a Conversation that streams two pieces and counts its questions.
@@ -230,7 +230,7 @@ func TestQueryParametersReachTheService(t *testing.T) {
 
 	r.do("GET", "/api/transfers?wildcard=true&free_transfers=2&horizon=6&max_transfers=3", "", nil)
 	r.do("GET", "/api/players?position=MID&team=ARS&name=Rice&status=any&sort_by=price&sort_dir=desc&max_price=8.5&min_price=5&limit=7&offset=14", "", nil)
-	r.do("GET", "/api/news?q=injury&player=Saka&days=3&limit=4", "", nil)
+	r.do("GET", "/api/news?q=injury&player=Saka&days=3&limit=4&detect=off", "", nil)
 
 	two := 2
 	if got := r.svc.transfr; !got.Wildcard || *got.Free != two || got.Horizon != 6 || got.Max != 3 {
@@ -239,7 +239,7 @@ func TestQueryParametersReachTheService(t *testing.T) {
 	if got := r.svc.players; got != (service.PlayerQuery{Position: "MID", Team: "ARS", Name: "Rice", Status: "any", SortBy: "price", SortDir: "desc", MaxPrice: 8.5, MinPrice: 5, Limit: 7, Offset: 14}) {
 		t.Errorf("player query = %+v", got)
 	}
-	if got := r.svc.news; got != (service.NewsQuery{Query: "injury", Player: "Saka", Days: 3, Limit: 4}) {
+	if got := r.svc.news; got != (service.NewsQuery{Query: "injury", Player: "Saka", Days: 3, Limit: 4, NoDetect: true}) {
 		t.Errorf("news query = %+v", got)
 	}
 }

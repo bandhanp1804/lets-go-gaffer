@@ -35,6 +35,7 @@ const (
 	snapshotTTL = 3 * time.Minute
 
 	defaultHorizon  = 4
+	stalePlayers    = 24 * time.Hour
 	defaultPlayers  = 10
 	maxPlayers      = 25
 	defaultNews     = 5
@@ -66,6 +67,7 @@ type Store interface {
 	FindPlayers(ctx context.Context, name string) ([]fpl.Player, error)
 	SearchNews(ctx context.Context, query []float32, f db.SearchFilter) ([]db.Hit, error)
 	CountNews(ctx context.Context) (db.NewsCounts, error)
+	PlayersUpdatedAt(ctx context.Context) (time.Time, error)
 }
 
 // FPL is FPL's public API.
@@ -139,9 +141,10 @@ type baseSnap struct {
 	history   []fpl.PlayerHistory
 	fixtures  fpl.Fixtures
 	gameweeks []fpl.Gameweek
-	asOf      int      // the last gameweek the stored history covers
-	next      int      // the gameweek being decided for: the one whose deadline has not passed
-	notes     []string // problems with the data itself, shown with every squad answer
+	asOf      int       // the last gameweek the stored history covers
+	playersAt time.Time // when the stored players were last written
+	next      int       // the gameweek being decided for: the one whose deadline has not passed
+	notes     []string  // problems with the data itself, shown with every squad answer
 	model     *projection.Model
 }
 
@@ -198,11 +201,17 @@ func (s *Service) baseSnapshot(ctx context.Context) (*baseSnap, error) {
 	if n := projection.HistoryNote(asOf, fpl.LastFinishedGameweek(boot.Gameweeks)); n != "" {
 		notes = append(notes, n)
 	}
+	// Injuries, prices and form come from the stored players, which only change when a sync or a
+	// news run writes them. Everything built on them inherits their age, so say so.
+	playersAt, _ := s.deps.Store.PlayersUpdatedAt(ctx)
+	if !playersAt.IsZero() && s.deps.Now().Sub(playersAt) > stalePlayers {
+		notes = append(notes, fmt.Sprintf("Player data (injuries, prices, form) was last updated %s ago: run `gaffer news` or `gaffer sync` for the latest.", age(s.deps.Now(), playersAt)))
+	}
 	short := make(map[int]string, len(teams))
 	for _, t := range teams {
 		short[t.ID] = t.ShortName
 	}
-	s.base = &baseSnap{players: players, teams: teams, short: short, history: history, fixtures: fixtures, gameweeks: boot.Gameweeks, asOf: asOf, next: next, notes: notes, model: model}
+	s.base = &baseSnap{players: players, teams: teams, short: short, history: history, fixtures: fixtures, gameweeks: boot.Gameweeks, asOf: asOf, next: next, notes: notes, model: model, playersAt: playersAt}
 	s.baseAt = s.deps.Now()
 	return s.base, nil
 }
@@ -798,78 +807,8 @@ type NewsQuery struct {
 	Player string // restrict to stories about this player (exact name)
 	Days   int    // only stories from the last N days; 0 means any age
 	Limit  int    // default 5, at most 10
-}
-
-// SearchNews finds the stories closest in meaning to the question. A player's
-// official FPL note counts only while it is that player's current note.
-func (s *Service) SearchNews(ctx context.Context, q NewsQuery) ([]NewsView, error) {
-	if s.deps.Embedder == nil {
-		return nil, ErrNewsUnavailable
-	}
-	query := strings.TrimSpace(q.Query)
-	switch {
-	case query == "":
-		return nil, badInput("a news query is required")
-	case q.Days < 0:
-		return nil, badInput("days cannot be negative")
-	}
-	limit := q.Limit
-	if limit < 1 {
-		limit = defaultNews
-	}
-	limit = min(limit, maxNews)
-
-	base, err := s.baseSnapshot(ctx)
-	if err != nil {
-		return nil, err
-	}
-	filter := db.SearchFilter{Limit: limit}
-	if name := strings.TrimSpace(q.Player); name != "" {
-		matches, err := s.deps.Store.FindPlayers(ctx, name)
-		if err != nil {
-			return nil, err
-		}
-		switch len(matches) {
-		case 0:
-			return nil, badInput("no player named %q", name)
-		case 1:
-			filter.PlayerIDs = []int{matches[0].ID}
-		default:
-			opts := make([]string, len(matches))
-			for i, m := range matches {
-				opts[i] = fmt.Sprintf("%s (%s)", m.WebName, base.short[m.TeamID])
-			}
-			return nil, badInput("%q matches %d players: %s; use the exact web name", name, len(matches), strings.Join(opts, ", "))
-		}
-	}
-	now := s.deps.Now()
-	if q.Days > 0 {
-		filter.Since = now.Add(-time.Duration(q.Days) * 24 * time.Hour)
-	}
-
-	// A question is embedded as a Query, not a Document: Voyage embeds them differently.
-	vecs, err := s.deps.Embedder.Embed(ctx, []string{query}, embed.Query)
-	if err != nil {
-		return nil, fmt.Errorf("embed question: %w", err)
-	}
-	hits, err := s.deps.Store.SearchNews(ctx, vecs[0], filter)
-	if err != nil {
-		return nil, err
-	}
-	out := []NewsView{}
-	for _, h := range hits {
-		nv := NewsView{
-			Title: h.Title, Content: h.Content, Source: h.Source, URL: h.URL,
-			Published: h.PublishedAt.UTC().Format(time.RFC3339), Age: age(now, h.PublishedAt), Similarity: round2(h.Similarity),
-		}
-		for _, id := range h.PlayerIDs {
-			if n := nameOf(base.players, id); n != "" {
-				nv.Players = append(nv.Players, n)
-			}
-		}
-		out = append(out, nv)
-	}
-	return out, nil
+	// NoDetect stops a player named in the question being used to narrow the search.
+	NoDetect bool
 }
 
 // captainOptions lists the starters as captains, best first, with what choosing each gives up.

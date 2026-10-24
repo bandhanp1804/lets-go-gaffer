@@ -107,6 +107,8 @@ type fakeStore struct {
 	searchQuery [][]float32
 	hits        []db.Hit
 	searchErr   error
+	newest      time.Time // when the newest stored story was published
+	playersAt   time.Time // when the stored players were last written
 }
 
 func (s *fakeStore) ListPlayers(context.Context) ([]fpl.Player, error) {
@@ -115,8 +117,9 @@ func (s *fakeStore) ListPlayers(context.Context) ([]fpl.Player, error) {
 	s.mu.Unlock()
 	return append([]fpl.Player(nil), s.w.players...), nil
 }
+func (s *fakeStore) PlayersUpdatedAt(context.Context) (time.Time, error) { return s.playersAt, nil }
 func (s *fakeStore) CountNews(context.Context) (db.NewsCounts, error) {
-	return db.NewsCounts{Articles: 12, Chunks: 15, PlayerLinks: 20}, nil
+	return db.NewsCounts{Articles: 12, Chunks: 15, PlayerLinks: 20, Newest: s.newest}, nil
 }
 func (s *fakeStore) ListTeams(context.Context) ([]fpl.Team, error) { return s.w.teams, nil }
 func (s *fakeStore) ListHistory(context.Context) ([]fpl.PlayerHistory, error) {

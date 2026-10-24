@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -116,6 +117,19 @@ func (s *Store) CountPlayers(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("count players: %w", err)
 	}
 	return n, nil
+}
+
+// PlayersUpdatedAt is when any player row was last written: how fresh the injuries, prices and
+// form are. It is the zero time when there are no players.
+func (s *Store) PlayersUpdatedAt(ctx context.Context) (time.Time, error) {
+	var at *time.Time
+	if err := s.pool.QueryRow(ctx, `SELECT max(updated_at) FROM players`).Scan(&at); err != nil {
+		return time.Time{}, fmt.Errorf("players updated at: %w", err)
+	}
+	if at == nil {
+		return time.Time{}, nil
+	}
+	return *at, nil
 }
 
 func (s *Store) GetPlayer(ctx context.Context, id int) (fpl.Player, error) {

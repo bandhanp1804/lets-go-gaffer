@@ -99,7 +99,7 @@ func (s *Server) players(ctx context.Context, r *http.Request) (any, error) {
 
 func (s *Server) news(ctx context.Context, r *http.Request) (any, error) {
 	q := r.URL.Query()
-	nq := service.NewsQuery{Query: q.Get("q"), Player: q.Get("player")}
+	nq := service.NewsQuery{Query: q.Get("q"), Player: q.Get("player"), NoDetect: q.Get("detect") == "off"}
 	var err error
 	if nq.Days, err = intParam(q.Get("days")); err != nil {
 		return nil, badParam("days", err)
@@ -107,14 +107,7 @@ func (s *Server) news(ctx context.Context, r *http.Request) (any, error) {
 	if nq.Limit, err = intParam(q.Get("limit")); err != nil {
 		return nil, badParam("limit", err)
 	}
-	stories, err := s.cfg.Service.SearchNews(ctx, nq)
-	if err != nil {
-		return nil, err
-	}
-	if stories == nil {
-		stories = []service.NewsView{} // an empty list, never null
-	}
-	return NewsResponse{Stories: stories}, nil
+	return s.cfg.Service.Search(ctx, nq)
 }
 
 func badParam(name string, err error) error {
@@ -213,11 +206,6 @@ type AskDone struct {
 	Tools     []AskTool   `json:"tools"`
 	Rounds    int         `json:"rounds"`
 	Usage     AskUsage    `json:"usage"`
-}
-
-// NewsResponse is the body of GET /api/news.
-type NewsResponse struct {
-	Stories []service.NewsView `json:"stories"`
 }
 
 // ask streams one answer as server-sent events:

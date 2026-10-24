@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/pgvector/pgvector-go"
@@ -17,6 +18,7 @@ type NewsCounts struct {
 	Articles    int
 	Chunks      int
 	PlayerLinks int
+	Newest      time.Time // when the newest stored story was published; zero with none
 }
 
 // ExistingURLs returns which of urls are already stored as articles.
@@ -98,12 +100,17 @@ func (s *Store) SaveNews(ctx context.Context, items []news.Embedded) error {
 // CountNews returns the size of each news table.
 func (s *Store) CountNews(ctx context.Context) (NewsCounts, error) {
 	var c NewsCounts
+	var newest *time.Time // null when there are no stories
 	err := s.pool.QueryRow(ctx, `SELECT
 		(SELECT count(*) FROM news_articles),
 		(SELECT count(*) FROM news_chunks),
-		(SELECT count(*) FROM chunk_players)`).Scan(&c.Articles, &c.Chunks, &c.PlayerLinks)
+		(SELECT count(*) FROM chunk_players),
+		(SELECT max(published_at) FROM news_articles)`).Scan(&c.Articles, &c.Chunks, &c.PlayerLinks, &newest)
 	if err != nil {
 		return NewsCounts{}, fmt.Errorf("count news: %w", err)
+	}
+	if newest != nil {
+		c.Newest = *newest
 	}
 	return c, nil
 }

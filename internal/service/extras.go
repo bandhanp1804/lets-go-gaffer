@@ -40,6 +40,8 @@ type StatusView struct {
 	Players        int         `json:"players"`
 	Clubs          []ClubView  `json:"clubs"`
 	NewsArticles   int         `json:"news_articles"`
+	PlayersAge     string      `json:"players_updated_age"`   // how old the stored injuries, prices and form are
+	NewsNewestAge  string      `json:"news_newest_age"`       // how old the newest stored story is; empty with none
 	NewsSearch     bool        `json:"news_search_available"` // an embedding key is configured
 	TeamConfigured bool        `json:"team_configured"`
 	Session        SessionView `json:"session"`
@@ -54,6 +56,12 @@ func (s *Service) Status(ctx context.Context) (StatusView, error) {
 	}
 	now := s.deps.Now()
 	v := StatusView{
+		PlayersAge: func() string {
+			if base.playersAt.IsZero() {
+				return ""
+			}
+			return age(now, base.playersAt)
+		}(),
 		Gameweek: base.next, LastFinished: fpl.LastFinishedGameweek(base.gameweeks), HistoryThrough: base.asOf - 1,
 		Players: len(base.players), NewsSearch: s.deps.Embedder != nil, TeamConfigured: s.cfg.TeamID != 0,
 		Clubs: []ClubView{}, Notes: append([]string{}, base.notes...),
@@ -76,6 +84,9 @@ func (s *Service) Status(ctx context.Context) (StatusView, error) {
 		v.Notes = append(v.Notes, "The number of stored news articles could not be read.")
 	} else {
 		v.NewsArticles = c.Articles
+		if !c.Newest.IsZero() {
+			v.NewsNewestAge = age(now, c.Newest)
+		}
 	}
 	_, token, err := s.who(ctx)
 	if err != nil { // no team yet: there is no squad whose session could be reported
