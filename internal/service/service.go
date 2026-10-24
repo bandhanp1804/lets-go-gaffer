@@ -393,7 +393,12 @@ func (s *Service) MyTeam(ctx context.Context) (MyTeamView, error) {
 	gwPoints := map[int]int{}
 	if v.Points != nil {
 		for _, pp := range v.Points.Players {
+			// What he adds to the team, as FPL shows it: the captain's doubled (tripled with Triple
+			// Captain). A bench player adds nothing, so he shows what he scored instead.
 			gwPoints[pp.ID] = pp.Points
+			if pp.Multiplier > 1 {
+				gwPoints[pp.ID] = pp.Counted
+			}
 		}
 	}
 	for _, p := range sq.team.Squad.Players {
