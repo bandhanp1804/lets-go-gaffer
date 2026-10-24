@@ -41,6 +41,17 @@ const (
 	defaultTopMoves = 5
 )
 
+// InputError means the request itself was wrong (an unknown club, a negative price),
+// not that the system failed. Its message is written for the person who asked, so a
+// caller may show it and should answer with a client error rather than a server one.
+type InputError struct{ Msg string }
+
+func (e *InputError) Error() string { return e.Msg }
+
+func badInput(format string, args ...any) error {
+	return &InputError{Msg: fmt.Sprintf(format, args...)}
+}
+
 // ErrNewsUnavailable means no embedder is configured, so news cannot be searched.
 var ErrNewsUnavailable = errors.New("news search is unavailable: no embedding key is configured")
 
@@ -449,6 +460,9 @@ func (s *Service) Transfers(ctx context.Context, req TransfersRequest) (Transfer
 		}
 		v.Suggestions = append(v.Suggestions, sv)
 	}
+	for i := range v.Suggestions { // computed here so the model never has to subtract two nets
+		v.Suggestions[i].NetVsFirst = round1(found[i].Net - found[0].Net)
+	}
 	return v, nil
 }
 
@@ -489,10 +503,10 @@ func (s *Service) FindPlayers(ctx context.Context, q PlayerQuery) ([]PlayerView,
 		sortBy = "xp"
 	}
 	if sortBy != "xp" && sortBy != "form" && sortBy != "price" && sortBy != "points" {
-		return nil, fmt.Errorf("sort_by %q is not one of xp, form, price, points", q.SortBy)
+		return nil, badInput("sort_by %q is not one of xp, form, price, points", q.SortBy)
 	}
 	if q.MaxPrice < 0 || q.MinPrice < 0 {
-		return nil, errors.New("prices cannot be negative")
+		return nil, badInput("prices cannot be negative")
 	}
 	limit := q.Limit
 	if limit < 1 {
@@ -567,7 +581,7 @@ func parsePosition(s string) (fpl.Position, error) {
 	case "fwd", "forward", "forwards", "striker":
 		return fpl.FWD, nil
 	}
-	return 0, fmt.Errorf("position %q is not one of GKP, DEF, MID, FWD", s)
+	return 0, badInput("position %q is not one of GKP, DEF, MID, FWD", s)
 }
 
 // parseStatus returns "" for "any", and defaults to "a" (available).
@@ -586,7 +600,7 @@ func parseStatus(s string) (string, error) {
 	case "unavailable":
 		return "u", nil
 	}
-	return "", fmt.Errorf("status %q is not one of available, doubtful, injured, suspended, unavailable, any", s)
+	return "", badInput("status %q is not one of available, doubtful, injured, suspended, unavailable, any", s)
 }
 
 func statusMatches(p fpl.Player, status string) bool { return p.Status == status }
@@ -601,7 +615,7 @@ func (b *baseSnap) teamID(name string) (int, error) {
 			return t.ID, nil
 		}
 	}
-	return 0, fmt.Errorf("no club named %q (use a short name such as ARS or the full name)", name)
+	return 0, badInput("no club named %q (use a short name such as ARS or the full name)", name)
 }
 
 // NewsQuery searches stored news by meaning.
@@ -621,9 +635,9 @@ func (s *Service) SearchNews(ctx context.Context, q NewsQuery) ([]NewsView, erro
 	query := strings.TrimSpace(q.Query)
 	switch {
 	case query == "":
-		return nil, errors.New("a news query is required")
+		return nil, badInput("a news query is required")
 	case q.Days < 0:
-		return nil, errors.New("days cannot be negative")
+		return nil, badInput("days cannot be negative")
 	}
 	limit := q.Limit
 	if limit < 1 {
@@ -643,7 +657,7 @@ func (s *Service) SearchNews(ctx context.Context, q NewsQuery) ([]NewsView, erro
 		}
 		switch len(matches) {
 		case 0:
-			return nil, fmt.Errorf("no player named %q", name)
+			return nil, badInput("no player named %q", name)
 		case 1:
 			filter.PlayerIDs = []int{matches[0].ID}
 		default:
@@ -651,7 +665,7 @@ func (s *Service) SearchNews(ctx context.Context, q NewsQuery) ([]NewsView, erro
 			for i, m := range matches {
 				opts[i] = fmt.Sprintf("%s (%s)", m.WebName, base.short[m.TeamID])
 			}
-			return nil, fmt.Errorf("%q matches %d players: %s; use the exact web name", name, len(matches), strings.Join(opts, ", "))
+			return nil, badInput("%q matches %d players: %s; use the exact web name", name, len(matches), strings.Join(opts, ", "))
 		}
 	}
 	now := s.deps.Now()

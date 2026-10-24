@@ -117,7 +117,8 @@ type SuggestionView struct {
 	Transfers       int        `json:"transfers"`
 	Hit             int        `json:"points_hit"`
 	GainPerGameweek float64    `json:"expected_gain_per_gameweek"`
-	NetPoints       float64    `json:"net_points_over_horizon"` // gain over the horizon minus the hit
+	NetPoints       float64    `json:"net_points_over_horizon"`    // gain over the horizon minus the hit
+	NetVsFirst      float64    `json:"net_points_vs_first_option"` // this option's net minus the first listed option's; zero for the first. Under 0.3 either way is a toss-up
 	BankAfter       string     `json:"bank_after"`
 }
 

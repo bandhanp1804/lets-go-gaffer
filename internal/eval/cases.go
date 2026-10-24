@@ -12,16 +12,16 @@ func Cases() []Case {
 
 	return []Case{
 		c("captain", q("Who should I captain this week?"),
-			CalledTool("best_lineup"), Mentions("Haaland")),
+			CalledTool("best_lineup"), Mentions("Haaland"), ShortClubCodes()),
 		c("best-xi", q("What's my best XI for this gameweek?"),
-			CalledTool("best_lineup"), Mentions("4-4-2")),
+			CalledTool("best_lineup"), Mentions("4-4-2"), ShortClubCodes()),
 		c("transfers", q("Should I make any transfers this week?"),
-			CalledTool("suggest_transfers"), Mentions("Gomez")),
+			CalledTool("suggest_transfers"), Mentions("Gomez"), ShortClubCodes()),
 		// The move pairs a £5.0m sale with a £4.3m purchase; the model once fused them
 		// into "costs £4.3m for £5.0m" and attached one player's fixture to the other.
 		c("transfer-prices", q("Who would I sell and who would I buy in the one-transfer plan, and for how much?"),
 			CalledTool("suggest_transfers"), Mentions("£5.0m", "£4.3m"),
-			Omits("£4.3m for £5.0m", "£5.0m for £4.3m", "Gomez plays FUL", "Hughes plays MCI")),
+			Omits("£4.3m for £5.0m", "£5.0m for £4.3m", "Gomez plays FUL", "Hughes plays MCI"), ShortClubCodes()),
 		c("wildcard", q("Plan a wildcard for me."),
 			CalledTool("suggest_transfers"), ToolInputHas("suggest_transfers", `"wildcard":true`)),
 		c("what-if-free-transfers", q("What would you do if I had 2 free transfers?"),

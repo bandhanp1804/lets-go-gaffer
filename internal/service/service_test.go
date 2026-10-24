@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -249,6 +250,14 @@ func TestTransfers_FindsTheObviousUpgradeAndCountsFreeTransfers(t *testing.T) {
 	}
 	if !slices.Contains(sold, "Own01") || !slices.Contains(bought, "Mkt00") {
 		t.Errorf("top suggestion sells %v buys %v, want Own01 -> Mkt00", sold, bought)
+	}
+	if top.NetVsFirst != 0 {
+		t.Errorf("the first option compares with itself: %v", top.NetVsFirst)
+	}
+	for i, sg := range got.Suggestions[1:] {
+		if want := math.Round((sg.NetPoints-top.NetPoints)*10) / 10; math.Abs(sg.NetVsFirst-want) > 0.11 {
+			t.Errorf("option %d: net_points_vs_first_option = %v, want about %v", i+2, sg.NetVsFirst, want)
+		}
 	}
 	if got.Suggestions[0].Moves[0].Out.SellPrice == "" || top.BankAfter == "" {
 		t.Errorf("the sale price and bank after must be shown: %+v", top)

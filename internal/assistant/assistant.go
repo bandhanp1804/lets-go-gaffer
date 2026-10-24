@@ -29,7 +29,7 @@ type Model interface {
 // Config tunes an Assistant. Every field has a default.
 type Config struct {
 	Model       string        // default llm.DefaultModel
-	MaxTokens   int           // per model call; default 1500
+	MaxTokens   int           // per model call; default 4000 (the model's reasoning counts too)
 	MaxRounds   int           // model calls per question, so a tool loop cannot run away; default 6
 	ToolTimeout time.Duration // per tool call; default 90s (a news search may wait on a rate limiter)
 }
@@ -49,7 +49,7 @@ func New(m Model, b Backend, cfg Config) *Assistant {
 		cfg.Model = llm.DefaultModel
 	}
 	if cfg.MaxTokens < 1 {
-		cfg.MaxTokens = 1500
+		cfg.MaxTokens = 4000
 	}
 	if cfg.MaxRounds < 1 {
 		cfg.MaxRounds = 6
