@@ -32,7 +32,7 @@ export function PlayerCard({ p, role, onClick, selected, mark }: Props) {
       </div>
       {p.fixture ? <div className="pfix">{p.fixture}</div> : null}
       {p.gw_points !== undefined ? (
-        <span className="gwpts" title="points this gameweek (before the captain's double)">
+        <span className="gwpts" title="points this gameweek (the captain's doubled, as on FPL)">
           {p.gw_points}
         </span>
       ) : null}

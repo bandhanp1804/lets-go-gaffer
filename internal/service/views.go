@@ -28,7 +28,7 @@ type PlayerView struct {
 	Status      string  `json:"status"` // "available", "doubtful (50%)", "injured", ...
 	News        string  `json:"news,omitempty"`
 	Fixture     string  `json:"fixture,omitempty"`   // next gameweek, e.g. "ARS (H)"
-	GWPoints    *int    `json:"gw_points,omitempty"` // points in the gameweek being scored, on My team only
+	GWPoints    *int    `json:"gw_points,omitempty"` // points in the gameweek being scored, the captain's multiplied (as FPL shows them); My team only
 }
 
 // MyTeamView is the manager's squad.

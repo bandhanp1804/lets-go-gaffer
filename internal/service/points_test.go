@@ -68,7 +68,7 @@ func TestPoints_ACaptainScoresTwiceAndTheBenchNotAtAll(t *testing.T) {
 
 func TestPoints_EachPlayerCardGetsItsPointsForTheGameweek(t *testing.T) {
 	r := newRig(t, rigOpts{})
-	r.fpl.livePoints = map[int]int{101: 2, 110: 9}
+	r.fpl.livePoints = map[int]int{101: 2, 110: 9, 115: 3}
 
 	v := myTeam(t, r)
 
@@ -76,8 +76,14 @@ func TestPoints_EachPlayerCardGetsItsPointsForTheGameweek(t *testing.T) {
 	for _, pl := range append(append([]service.PlayerView{}, v.Starting...), v.Bench...) {
 		byName[pl.Name] = pl.GWPoints
 	}
-	if byName["Own01"] == nil || *byName["Own01"] != 2 || byName["Own10"] == nil || *byName["Own10"] != 9 {
+	if byName["Own01"] == nil || *byName["Own01"] != 2 {
 		t.Errorf("points on cards: %v", byName)
+	}
+	if byName["Own10"] == nil || *byName["Own10"] != 18 {
+		t.Errorf("the captain (Own10, 9 points) shows his doubled 18, as FPL does: %v", byName["Own10"])
+	}
+	if byName["Own15"] == nil || *byName["Own15"] != 3 {
+		t.Errorf("a bench player shows what he scored, not the 0 he adds: %v", byName["Own15"])
 	}
 	if byName["Own02"] == nil || *byName["Own02"] != 0 {
 		t.Errorf("a player who scored nothing shows 0, not nothing: %v", byName["Own02"])
