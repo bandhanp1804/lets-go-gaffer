@@ -1,0 +1,49 @@
+# HTTP API
+
+`gaffer serve [-addr 127.0.0.1:8080] [-origins http://localhost:3001,...]` serves the same service layer the CLI uses, as JSON. It needs `GAFFER_DSN`; `/api/ask` also needs `ANTHROPIC_API_KEY`, and news search `VOYAGE_API_KEY`.
+
+## Endpoints
+
+| Endpoint | Parameters and what it returns |
+|---|---|
+| `GET /api/status` | The dashboard: upcoming gameweek, the gameweek in play, the deadline countdown, how far the stored history goes, player, club and news counts, and the FPL session state (never the token). |
+| `GET /api/team` | Your squad, bank and free transfers with `squad_as_of` and freshness notes, and `points`: how the team is scoring in the gameweek being played, with each player's match-by-match breakdown. |
+| `GET /api/lineup` | The best XI, captain, bench order and close calls for the upcoming gameweek. `formation` (such as `3-5-2`) shows that formation; `captain` and `vice` (player ids) choose the armband. Returns `all_formations`, and `captain_options` (each starter's expected points, his double, and what choosing him gives up). |
+| `GET /api/transfers` | `wildcard`, `free_transfers`, `horizon`, `max_transfers`: ranked moves with hit, net gain and bank. |
+| `POST /api/whatif` | Your own plan: `{"moves": [{"out": 101, "in": 201}], "horizon": 4, "free_transfers": 1}`. Checks the rules and returns the verdict, the hit, the money, the lineup before and after, and plain-sentence insights. It changes nothing; it is a POST only because the plan is a body. |
+| `GET /api/chips` | When to play Triple Captain, Bench Boost, Free Hit and Wildcard. `captain` (a player id) makes the Triple Captain card about that player. |
+| `GET /api/squad` | `horizon` (default 4): the best legal squad from scratch under £100.0m. |
+| `GET /api/players` | `position`, `team`, `name`, `status`, `min_price`, `max_price`, `sort_by` (`xp`, `form`, `price`, `points`, `name`, `team`, `position`), `sort_dir`, `limit` (up to 100), `offset`. Returns `players`, `total`, `offset`, `limit`. |
+| `GET /api/news` | `q` (required), `player`, `days`, `limit`: stories ranked by meaning. |
+| `GET /api/backtest` | How the scoring model did on played gameweeks, including the out-of-sample check. Cached until new history arrives. |
+| `POST /api/ask` | `{"question": "...", "session_id": "..."}`, answered as a server-sent-event stream (below). |
+| `GET /api/healthz` | Liveness. |
+
+```bash
+curl -s 'localhost:8080/api/players?position=MID&max_price=8&limit=3'
+curl -sN -H 'Content-Type: application/json' -d '{"question":"Who should I captain?"}' localhost:8080/api/ask
+```
+
+## Conventions
+
+- **Errors** are JSON `{"error": "...", "code": "..."}`. A bad parameter or an unknown club is `400` with a message written for the caller; `code` (for example `team_required`) is for a client to act on. An internal failure is a generic `500`: the detail is in the server log, never the response.
+- **Lists are never `null`.** The JSON writer turns every nil list into `[]` (`internal/api/nonnil.go`), and the generated TypeScript types rely on it.
+- **Types are generated.** `web/lib/types.gen.ts` comes from the Go response structs (`go run ./cmd/gentypes`), so the client cannot drift from the server.
+
+## `/api/ask` streaming
+
+Events arrive in this order: `session` (the conversation id, sent first), a stream of `text` deltas, then one `done` event carrying the full text, `sources`, `warnings` (the assistant's own checks), the `tools` used and token `usage`. Send the `session_id` back to continue the conversation. One question runs at a time per conversation (a second gets `409`), a conversation is forgotten after 30 idle minutes, and a conversation belongs to the team it started with. A failure after streaming starts arrives as an `error` event with a generic message.
+
+## Whose squad
+
+The web app sends the team id in `X-Gaffer-Team` and, for a live squad, the manager's token in `X-Gaffer-Token`. They are headers, never the URL, so they are not in logs or browser history. The server uses the token for that one request, sends it only to `fantasy.premierleague.com`, and keeps nothing: the squad cache is keyed by team and a *hash* of the token, a conversation is bound to the team it started with, and the server's own configured token is never applied to anyone else's team. With no headers the API serves the team in `GAFFER_TEAM_ID`.
+
+## Why it refuses some requests
+
+The server has no login, because it is for your own machine, and it will not listen on anything but loopback. But a browser will call `localhost` on behalf of any page you have open, so a hostile site could read your squad or spend your API credits. Three rules stop that:
+
+1. A request whose `Origin` is not on the `-origins` list gets 403.
+2. A request whose `Host` is not `localhost` or `127.0.0.1` gets 403. This defeats DNS rebinding, where a hostile name is re-pointed at 127.0.0.1 and the browser sends no `Origin`.
+3. A `POST` must be `application/json`, which a page cannot send cross-origin without a CORS preflight that this server never answers.
+
+No CORS headers are sent at all: the web app reaches the API through a Next.js rewrite, so it is same-origin.
