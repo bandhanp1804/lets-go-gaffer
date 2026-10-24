@@ -51,4 +51,5 @@ The project rules are in `CLAUDE.md`: stdlib first (ask before adding a dependen
 | "FPL rejected the session" or "expired" | The login token lasts about an hour. Paste a fresh one ([configuration.md](configuration.md#your-live-squad)); a running server picks it up without a restart. |
 | Port 5432 is taken | Postgres here is on **5433** on purpose (a native Postgres often owns 5432). |
 | `next build` fails with `Duplicate identifier 'LayoutProps'` | Stray `… 2.ts` copies in `web/.next/types`. Delete them (the tsconfig now ignores them). Build into a separate folder with `GAFFER_DIST=.next-test` so a build never collides with a running `next dev`. |
+| News search returns old or unrelated stories | Nothing refreshes the stored news: run `gaffer news` (the page says how old it is). Without a player named, a word like "injured" matches injury notes for anyone, so name the player. |
 | A first `news` run is slow | Voyage accounts without a payment method are limited to 3 requests a minute (`VOYAGE_RPM`). Progress is saved, so it resumes. |

@@ -11,7 +11,7 @@
 | `suggest_transfers` | Ranked moves with their hit, including Wildcard and "what if I had two free transfers". |
 | `evaluate_transfers` | "What if I swap Hughes for Gomez?" The same rule-checked what-if as the web page, with players given by name. |
 | `find_players` | Structured filters: position, club, price, availability. |
-| `search_news` | News and injury notes by meaning. |
+| `search_news` | News and injury notes by meaning. A player named in the question narrows it to stories about him. |
 | `fixture_outlook` | A player's next gameweeks week by week: fixtures with difficulty (doubles and blanks), expected points, what he would score as captain and with Triple Captain, and his best week. |
 | `chip_planner` | When to play each chip, with a verdict and a figure per gameweek. |
 

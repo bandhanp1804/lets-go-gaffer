@@ -53,7 +53,31 @@ func counts(t *testing.T, s *db.Store) db.NewsCounts {
 	if err != nil {
 		t.Fatal(err)
 	}
+	c.Newest = time.Time{} // checked by its own test; the others compare sizes
 	return c
+}
+
+func TestStore_CountNewsReportsWhenTheNewestStoryWasPublished(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+	withPlayers(t, s, 1)
+
+	empty, err := s.CountNews(ctx)
+	if err != nil || !empty.Newest.IsZero() {
+		t.Fatalf("with no stories there is no newest: %v %v", empty.Newest, err)
+	}
+
+	older, newer := story("https://a/old", "Old", 0.1, 1), story("https://a/new", "New", 0.2, 1)
+	older.PublishedAt = time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	newer.PublishedAt = time.Date(2026, 10, 21, 22, 51, 56, 0, time.UTC)
+	if err := s.SaveNews(ctx, []news.Embedded{older, newer}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.CountNews(ctx)
+	if err != nil || !got.Newest.Equal(newer.PublishedAt) {
+		t.Errorf("newest = %v, want %v (err %v)", got.Newest, newer.PublishedAt, err)
+	}
 }
 
 func TestStore_SaveNewsStoresArticleChunkVectorAndLinks(t *testing.T) {
@@ -194,5 +218,22 @@ func TestStore_DeletingAnArticleCascadesToChunksAndLinks(t *testing.T) {
 
 	if got := counts(t, s); got != (db.NewsCounts{}) {
 		t.Errorf("after deleting articles: %+v, want chunks and links gone too", got)
+	}
+}
+
+func TestStore_PlayersUpdatedAtIsWhenAnyPlayerWasLastWritten(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+
+	none, err := s.PlayersUpdatedAt(ctx)
+	if err != nil || !none.IsZero() {
+		t.Fatalf("with no players there is no time: %v %v", none, err)
+	}
+
+	withPlayers(t, s, 1)
+	got, err := s.PlayersUpdatedAt(ctx)
+
+	if err != nil || time.Since(got) > time.Minute || time.Since(got) < -time.Minute {
+		t.Errorf("updated at %v (err %v): the upsert just wrote it", got, err)
 	}
 }

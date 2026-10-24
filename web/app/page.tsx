@@ -57,12 +57,12 @@ export default function Home() {
             <div className="cell">
               <span className="label">Data through</span>
               <span className="digits">GW{s.history_through_gameweek}</span>
-              <span className="sub">{s.players} players</span>
+              <span className="sub">{s.players} players{s.players_updated_age ? `, updated ${s.players_updated_age} ago` : ""}</span>
             </div>
             <div className="cell">
               <span className="label">News stored</span>
               <span className="digits">{s.news_articles}</span>
-              <span className="sub">{s.news_search_available ? "search on" : "search off"}</span>
+              <span className="sub">{s.news_newest_age ? `newest ${s.news_newest_age} old` : s.news_search_available ? "search on" : "search off"}</span>
             </div>
           </div>
         ) : null}

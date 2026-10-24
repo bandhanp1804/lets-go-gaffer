@@ -177,6 +177,14 @@ export interface Players {
   limit: number;
 }
 
+export interface NewsSearch {
+  stories: News[];
+  player: NewsPlayer | null;
+  player_detected: boolean;
+  notes: string[];
+  newest_story_age: string;
+}
+
 export interface News {
   title: string;
   content: string;
@@ -186,6 +194,15 @@ export interface News {
   age: string;
   players?: string[];
   similarity: number;
+}
+
+export interface NewsPlayer {
+  name: string;
+  team: string;
+  position: string;
+  price: string;
+  status: string;
+  news?: string;
 }
 
 export interface Status {
@@ -199,6 +216,8 @@ export interface Status {
   players: number;
   clubs: Club[];
   news_articles: number;
+  players_updated_age: string;
+  news_newest_age: string;
   news_search_available: boolean;
   team_configured: boolean;
   session: Session;
@@ -402,10 +421,6 @@ export interface OutlookWeek {
   best_other_in_squad: string;
   best_other_in_squad_xp: number;
   lead_over_squad: number;
-}
-
-export interface NewsResponse {
-  stories: News[];
 }
 
 export interface AskDone {

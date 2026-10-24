@@ -40,7 +40,7 @@ func newRig(t *testing.T, o rigOpts) *rig {
 	if o.mutate != nil {
 		o.mutate(w)
 	}
-	r := &rig{store: &fakeStore{w: w}, fpl: newFakeFPL(w), emb: &fakeEmbedder{}, now: new(time.Time)}
+	r := &rig{store: &fakeStore{w: w, newest: testNow.Add(-2 * time.Hour), playersAt: testNow.Add(-time.Hour)}, fpl: newFakeFPL(w), emb: &fakeEmbedder{}, now: new(time.Time)}
 	*r.now = testNow
 	deps := service.Deps{Store: r.store, FPL: r.fpl, Session: o.session, Now: func() time.Time { return *r.now }}
 	deps.SessionFn = o.sessionFn

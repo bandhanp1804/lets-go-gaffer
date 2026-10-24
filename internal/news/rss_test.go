@@ -185,3 +185,31 @@ func TestRSSSource_HTTPErrorIsTyped(t *testing.T) {
 		t.Errorf("err = %q, want it to say which feed failed", err)
 	}
 }
+
+func TestIsBoilerplate(t *testing.T) {
+	for _, title := range []string{"Get in touch here", "find out more here", "  Find out more  ", "Read more.", "CLICK HERE"} {
+		if !news.IsBoilerplate(title) {
+			t.Errorf("%q is link text, not a story", title)
+		}
+	}
+	for _, title := range []string{"Saka injury 'does not look good'", "Get in touch with your inner striker: Haaland's masterclass", "Find out more about the Premier League's new offside rule", "", "Here"} {
+		if news.IsBoilerplate(title) {
+			t.Errorf("%q is a headline and must be kept", title)
+		}
+	}
+}
+
+// BBC's live pages end with "Get in touch here" links that the feed carries as items of their own.
+func TestParseRSS_DropsLinkTextThatIsNotAStory(t *testing.T) {
+	feed := `<?xml version="1.0"?><rss version="2.0"><channel>
+<item><title>Get in touch here</title><link>https://www.bbc.co.uk/sport/a</link><pubDate>Mon, 08 Jun 2026 10:00:00 GMT</pubDate></item>
+<item><title>Find out more here</title><link>https://www.bbc.co.uk/sport/b</link><pubDate>Mon, 08 Jun 2026 10:00:00 GMT</pubDate></item>
+<item><title>Spurs lack confidence - De Zerbi</title><link>https://www.bbc.co.uk/sport/c</link><pubDate>Mon, 08 Jun 2026 10:00:00 GMT</pubDate></item>
+</channel></rss>`
+
+	items, skipped, err := news.ParseRSS(strings.NewReader(feed), "bbc")
+
+	if err != nil || len(items) != 1 || items[0].Title != "Spurs lack confidence - De Zerbi" || skipped != 2 {
+		t.Errorf("items %+v skipped %d err %v", items, skipped, err)
+	}
+}

@@ -25,7 +25,7 @@ type Service interface {
 	LineupWith(ctx context.Context, req service.LineupRequest) (service.LineupView, error)
 	Transfers(ctx context.Context, req service.TransfersRequest) (service.TransfersView, error)
 	Players(ctx context.Context, q service.PlayerQuery) (service.PlayersView, error)
-	SearchNews(ctx context.Context, q service.NewsQuery) ([]service.NewsView, error)
+	Search(ctx context.Context, q service.NewsQuery) (service.NewsSearchView, error)
 	Status(ctx context.Context) (service.StatusView, error)
 	BuildSquad(ctx context.Context, req service.SquadRequest) (service.SquadView, error)
 	Backtest(ctx context.Context) (service.BacktestView, error)

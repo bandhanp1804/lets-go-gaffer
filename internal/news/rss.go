@@ -23,6 +23,18 @@ const (
 
 var tagRE = regexp.MustCompile(`<[^>]*>`)
 
+// boilerplate are feed entries that are not stories: BBC's live pages end with links such as
+// "Get in touch here", which the feed carries as items of their own.
+var boilerplate = map[string]bool{
+	"get in touch here": true, "get in touch": true, "find out more here": true, "find out more": true,
+	"read more": true, "read more here": true, "click here": true, "watch here": true, "listen here": true, "more here": true,
+}
+
+// IsBoilerplate reports whether a title is one of those link texts and not a headline.
+func IsBoilerplate(title string) bool {
+	return boilerplate[strings.ToLower(strings.TrimRight(strings.TrimSpace(title), ".!:"))]
+}
+
 // ParseRSS reads an RSS 2.0 feed. Items missing a title, link, or parseable date
 // are skipped and counted rather than failing the whole feed.
 func ParseRSS(r io.Reader, source string) (items []Item, skipped int, err error) {
@@ -46,7 +58,7 @@ func ParseRSS(r io.Reader, source string) (items []Item, skipped int, err error)
 		title := cleanText(raw.Title)
 		link := canonicalURL(raw.Link)
 		published, ok := parseTime(raw.PubDate)
-		if title == "" || link == "" || !ok {
+		if title == "" || link == "" || !ok || IsBoilerplate(title) {
 			skipped++
 			continue
 		}
