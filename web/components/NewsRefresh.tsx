@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getJSON, postJSON } from "../lib/api.ts";
-import { ago } from "../lib/format.ts";
+import { ago, sourceLabel } from "../lib/format.ts";
 import type { RefreshStatus } from "../lib/types.gen.ts";
 
 const POLL_MS = 2000;
@@ -67,6 +67,8 @@ export function NewsRefresh({ onFinished }: { onFinished: () => void }) {
               ? `Last refreshed ${ago(st.last_finished)}: ${st.last_new} new of ${st.last_fetched} fetched.`
               : "Not refreshed since the server started."}
         {st.every && !st.running ? ` Refreshes by itself every ${st.every}.` : ""}
+        {/* An older API sends no last_failed_feeds. */}
+        {!st.running && (st.last_failed_feeds ?? []).length > 0 ? ` Could not read: ${st.last_failed_feeds.map(sourceLabel).join(", ")}.` : ""}
       </span>
       {problem ? <span className="error"> {problem}</span> : null}
     </p>

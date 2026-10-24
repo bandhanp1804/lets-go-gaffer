@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { Async } from "../../components/Async.tsx";
+import { WatchButton } from "../../components/WatchButton.tsx";
 import { one } from "../../lib/format.ts";
 import { query } from "../../lib/api.ts";
 import { availability } from "../../lib/pitch.ts";
 import { nextSort, pageLabel, type Sort } from "../../lib/paging.ts";
 import type { Players, Status } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
+import { useWatchlist } from "../../lib/watchlist.ts";
 
 interface Filters {
   position: string;
@@ -39,11 +41,13 @@ export default function PlayersPage() {
 
   const status = useApi<Status>("/api/status");
   const data = useApi<Players>(`/api/players${query({ ...filters, sort_by: sort.by, sort_dir: sort.dir, limit, offset })}`);
+  const watch = useWatchlist();
   const set = (k: keyof Filters) => (e: { target: { value: string } }) => setDraft({ ...draft, [k]: e.target.value });
 
   return (
     <>
       <h1>Players</h1>
+      <p className="muted small">Click ☆ beside a name to watch him: his news and status changes arrive on the Alerts page.</p>
       <form
         className="form"
         onSubmit={(e) => {
@@ -135,7 +139,9 @@ export default function PlayersPage() {
                   <tbody>
                     {page.players.map((p) => (
                       <tr key={p.id} title={p.news || undefined}>
-                        <td>{p.name}</td>
+                        <td>
+                          <WatchButton id={p.id} name={p.name} watch={watch} /> {p.name}
+                        </td>
                         <td>{p.team}</td>
                         <td>{p.position}</td>
                         <td className="num">{p.price}</td>

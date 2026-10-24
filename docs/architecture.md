@@ -44,11 +44,13 @@ Everything that computes lives in a handful of pure packages (`optimizer`, `proj
 | `internal/llm/` | Anthropic Messages API client: streaming, tool use, thinking blocks |
 | `internal/assistant/` | the tool-calling assistant and its checks |
 | `internal/eval/` | the assistant's evaluation scenarios and stub backend |
+| `internal/workflows/` | the Temporal workflows and activities, their schedules, and the clients the API uses ([temporal.md](temporal.md)) |
+| `internal/notify/` | alerts: the inbox and ntfy push |
 | `internal/api/` | the HTTP API, sessions and the localhost guard |
 | `internal/tsgen/` | the Go-to-TypeScript type generator |
 | `internal/config/` | `.env` loading, including values re-read while running |
 | `migrations/` | SQL schema migrations |
-| `deploy/docker/` | Postgres + pgvector via docker compose |
+| `deploy/docker/` | Postgres + pgvector and the Temporal dev server via docker compose |
 | `web/` | the Next.js UI ([web-ui.md](web-ui.md)) |
 
 ## Decisions worth knowing
