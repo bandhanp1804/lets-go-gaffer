@@ -32,6 +32,9 @@ type Config struct {
 	MaxTokens   int           // per model call; default 4000 (the model's reasoning counts too)
 	MaxRounds   int           // model calls per question, so a tool loop cannot run away; default 6
 	ToolTimeout time.Duration // per tool call; default 90s (a news search may wait on a rate limiter)
+	// Clubs maps a club's short code to its name for this season. The model is told it, and
+	// an answer that names a club the data never mentioned is flagged. Optional.
+	Clubs map[string]string
 }
 
 // Assistant is stateless and safe for concurrent use; conversations live in Sessions.
@@ -41,6 +44,8 @@ type Assistant struct {
 	cfg     Config
 	byName  map[string]tool
 	specs   []llm.Tool
+	system  string
+	clubs   clubSet
 }
 
 // New returns an Assistant.
@@ -57,7 +62,7 @@ func New(m Model, b Backend, cfg Config) *Assistant {
 	if cfg.ToolTimeout <= 0 {
 		cfg.ToolTimeout = 90 * time.Second
 	}
-	a := &Assistant{model: m, backend: b, cfg: cfg, byName: map[string]tool{}}
+	a := &Assistant{model: m, backend: b, cfg: cfg, byName: map[string]tool{}, system: systemFor(cfg.Clubs), clubs: newClubSet(cfg.Clubs)}
 	for _, t := range tools() {
 		a.byName[t.spec.Name] = t
 		a.specs = append(a.specs, t.spec)
@@ -96,6 +101,7 @@ type Answer struct {
 	BadCitations []int    // cited references that do not exist
 	UncitedNews  bool     // news was retrieved but no story is cited
 	Ungrounded   []string // numbers in the answer that no tool produced
+	UnknownClubs []string // clubs the answer names that appear nowhere in the data or the question
 	Truncated    bool     // the model hit its token limit
 }
 
@@ -108,11 +114,12 @@ type Session struct {
 	messages []llm.Message
 	refs     *refs
 	known    map[string]bool // numbers the manager or a tool has produced, normalised
+	clubSeen map[string]bool // club codes the manager or a tool has mentioned
 }
 
 // NewSession starts an empty conversation.
 func (a *Assistant) NewSession() *Session {
-	return &Session{a: a, refs: newRefs(), known: map[string]bool{}}
+	return &Session{a: a, refs: newRefs(), known: map[string]bool{}, clubSeen: map[string]bool{}}
 }
 
 // Ask answers a question, streaming text to onText (which may be nil) as it is
@@ -136,6 +143,11 @@ func (s *Session) Ask(ctx context.Context, question string, onText func(string))
 	for _, n := range numbersIn(question) {
 		known[normalise(n)] = true
 	}
+	seen := make(map[string]bool, len(s.clubSeen))
+	for k := range s.clubSeen {
+		seen[k] = true
+	}
+	s.a.clubs.markMentioned(question, seen)
 
 	var (
 		ans      Answer
@@ -162,7 +174,7 @@ func (s *Session) Ask(ctx context.Context, question string, onText func(string))
 			return ans, err
 		}
 		resp, err := s.a.model.Stream(ctx, llm.Request{
-			Model: s.a.cfg.Model, System: systemPrompt, Messages: msgs, Tools: s.a.specs, MaxTokens: s.a.cfg.MaxTokens,
+			Model: s.a.cfg.Model, System: s.a.system, Messages: msgs, Tools: s.a.specs, MaxTokens: s.a.cfg.MaxTokens,
 		}, collect)
 		addUsage(resp.Usage)
 		if err != nil {
@@ -184,7 +196,8 @@ func (s *Session) Ask(ctx context.Context, question string, onText func(string))
 			ans.BadCitations = bad
 			ans.UncitedNews = s.refs.count() > returned && len(ans.Sources) == 0
 			ans.Ungrounded = ungrounded(ans.Text, known)
-			s.messages, s.known = msgs, known
+			ans.UnknownClubs = s.a.clubs.unknownIn(ans.Text, seen)
+			s.messages, s.known, s.clubSeen = msgs, known, seen
 			return ans, nil
 		}
 		if round == s.a.cfg.MaxRounds {
@@ -193,12 +206,13 @@ func (s *Session) Ask(ctx context.Context, question string, onText func(string))
 
 		results, calls := s.runTools(ctx, uses)
 		ans.ToolCalls = append(ans.ToolCalls, calls...)
-		for i, c := range calls {
-			if c.Error == "" {
-				for _, n := range numbersIn(results[i].Content) {
-					known[normalise(n)] = true
-				}
+		for i := range calls {
+			// An error's text is written by Go as well (it lists the squad, says how many players
+			// there are), so what it states is as grounded as a result's.
+			for _, n := range numbersIn(results[i].Content) {
+				known[normalise(n)] = true
 			}
+			s.a.clubs.markMentioned(results[i].Content, seen)
 		}
 		msgs = append(msgs, llm.Message{Role: llm.User, Content: results})
 	}

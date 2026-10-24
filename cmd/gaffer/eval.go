@@ -74,7 +74,8 @@ func runEval(ctx context.Context, w io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	a := assistant.New(model, eval.NewFixture(), assistant.Config{Model: llm.ModelFromEnv()})
+	fix := eval.NewFixture()
+	a := assistant.New(model, fix, assistant.Config{Model: llm.ModelFromEnv(), Clubs: fix.Clubs()})
 
 	fmt.Fprintf(w, "model %s, %d cases x %d runs\n\n", llm.ModelFromEnv(), len(cases), o.runs)
 	results := eval.Runner{NewSession: a.NewSession, Runs: o.runs, Workers: o.workers}.Run(ctx, cases)

@@ -135,8 +135,7 @@ func TestChecks(t *testing.T) {
 		{"mentions: one missing", eval.Mentions("a", "b"), eval.Result{Answers: []assistant.Answer{ans("a")}}, true},
 		{"any: second matches", eval.MentionsAny("x", "y"), eval.Result{Answers: []assistant.Answer{ans("y")}}, false},
 		{"any: none", eval.MentionsAny("x", "y"), eval.Result{Answers: []assistant.Answer{ans("z")}}, true},
-		{"club codes: a remembered name", eval.ShortClubCodes(), eval.Result{Answers: []assistant.Answer{ans("Haaland faces Brighton at home")}}, true},
-		{"club codes: codes only", eval.ShortClubCodes(), eval.Result{Answers: []assistant.Answer{ans("Haaland faces BHA (H)")}}, false},
+		{"grounded: a club named from memory", eval.Grounded(), eval.Result{Answers: []assistant.Answer{{UnknownClubs: []string{"Bournemouth"}}}}, true},
 		{"omits: present", eval.Omits("BANANA"), eval.Result{Answers: []assistant.Answer{ans("banana")}}, true},
 		{"omits: absent", eval.Omits("BANANA"), eval.Result{Answers: []assistant.Answer{ans("apple")}}, false},
 		{"the last answer is the one judged", eval.Mentions("b"), eval.Result{Answers: []assistant.Answer{ans("b"), ans("a")}}, true},
@@ -243,5 +242,27 @@ func TestWrite_ShowsFailuresAndTheOverallRate(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("report lacks %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestFixture_WhatIfNamedAppliesTheSameKindsOfRule(t *testing.T) {
+	f := eval.NewFixture()
+	ctx := context.Background()
+
+	ok, err := f.WhatIfNamed(ctx, service.WhatIfNamedRequest{Moves: []service.NamedMove{{Out: "hughes", In: "GOMEZ"}}})
+	if err != nil || !ok.Valid || ok.Verdict != "worth_it" || ok.NetPoints != 8.8 || ok.BankAfter != "£1.6m" {
+		t.Errorf("a clear upgrade: err %v %+v", err, ok)
+	}
+	bad, err := f.WhatIfNamed(ctx, service.WhatIfNamedRequest{Moves: []service.NamedMove{{Out: "Raya", In: "Haaland"}}})
+	if err != nil || bad.Valid || len(bad.Problems) != 1 || !strings.Contains(bad.Problems[0], "like for like") {
+		t.Errorf("a goalkeeper for a forward: err %v %+v", err, bad)
+	}
+	var in *service.InputError
+	if _, err := f.WhatIfNamed(ctx, service.WhatIfNamedRequest{Moves: []service.NamedMove{{Out: "Messi", In: "Gomez"}}}); !errors.As(err, &in) {
+		t.Errorf("an unknown player must be an input error, got %v", err)
+	}
+	broke, _ := f.WhatIfNamed(ctx, service.WhatIfNamedRequest{Moves: []service.NamedMove{{Out: "Hughes", In: "Haaland"}}})
+	if broke.Valid || len(broke.Problems) == 0 {
+		t.Errorf("£15.0m for £5.0m with £0.9m in the bank is over budget: %+v", broke)
 	}
 }

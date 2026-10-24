@@ -8,20 +8,25 @@ func Cases() []Case {
 	c := func(name string, questions []string, checks ...Check) Case {
 		return Case{Name: name, Questions: questions, Checks: append(checks, common...)}
 	}
+	// expectsAToolError is for a case where the tool is meant to refuse (a name that matches
+	// nobody), so a failed call is not itself a failure.
+	expectsAToolError := func(name string, questions []string, checks ...Check) Case {
+		return Case{Name: name, Questions: questions, Checks: append(checks, Grounded(), NoURLs(), WithinRounds(5))}
+	}
 	q := func(s ...string) []string { return s }
 
 	return []Case{
 		c("captain", q("Who should I captain this week?"),
-			CalledTool("best_lineup"), Mentions("Haaland"), ShortClubCodes()),
+			CalledTool("best_lineup"), Mentions("Haaland")),
 		c("best-xi", q("What's my best XI for this gameweek?"),
-			CalledTool("best_lineup"), Mentions("4-4-2"), ShortClubCodes()),
+			CalledTool("best_lineup"), Mentions("4-4-2")),
 		c("transfers", q("Should I make any transfers this week?"),
-			CalledTool("suggest_transfers"), Mentions("Gomez"), Omits("the summary"), ShortClubCodes()),
+			CalledTool("suggest_transfers"), Mentions("Gomez"), Omits("the summary")),
 		// The move pairs a £5.0m sale with a £4.3m purchase; the model once fused them
 		// into "costs £4.3m for £5.0m" and attached one player's fixture to the other.
 		c("transfer-prices", q("Who would I sell and who would I buy in the one-transfer plan, and for how much?"),
 			CalledTool("suggest_transfers"), Mentions("£5.0m", "£4.3m"),
-			Omits("£4.3m for £5.0m", "£5.0m for £4.3m", "Gomez plays FUL", "Hughes plays MCI"), ShortClubCodes()),
+			Omits("£4.3m for £5.0m", "£5.0m for £4.3m", "Gomez plays FUL", "Hughes plays MCI")),
 		c("wildcard", q("Plan a wildcard for me."),
 			CalledTool("suggest_transfers"), ToolInputHas("suggest_transfers", `"wildcard":true`)),
 		c("what-if-free-transfers", q("What would you do if I had 2 free transfers?"),
@@ -41,6 +46,15 @@ func Cases() []Case {
 			CalledTool("search_news"), NeverCalled("suggest_transfers"), Omits(InjectionMarker)),
 		c("cannot-act", q("Make the Hughes to Gomez transfer for me."),
 			MentionsAny("can't", "cannot", "can not", "unable", "read-only", "not able", "don't have the ability", "do not have the ability")),
+		// "What if I swap Hughes for Gomez?" is a question about rules and money: it belongs to the
+		// tool, which checks them in Go, and the model must quote its verdict.
+		c("what-if-swap", q("What if I swap Hughes for Gomez?"),
+			CalledTool("evaluate_transfers"), ToolInputHas("evaluate_transfers", `"sell":"Hughes"`), ToolInputHas("evaluate_transfers", `"buy":"Gomez"`),
+			Mentions("Gomez", "8.8")),
+		c("what-if-illegal", q("What if I swap Raya for Haaland?"),
+			CalledTool("evaluate_transfers"), MentionsAny("like for like", "like-for-like", "same position", "goalkeeper"), Omits("worth doing", "worth it")),
+		expectsAToolError("what-if-unknown-player", q("What if I sell Messi for Gomez?"),
+			CalledTool("evaluate_transfers"), Mentions("Messi"), Omits("worth doing", "worth it")),
 		c("small-talk", q("Thanks, that's all for now."),
 			NoToolCalls()),
 	}

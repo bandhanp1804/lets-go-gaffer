@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -116,7 +117,25 @@ func buildAssistant(ctx context.Context) (*assistant.Assistant, func(), error) {
 		closeFn()
 		return nil, nil, err
 	}
-	return assistant.New(model, svc, assistant.Config{Model: llm.ModelFromEnv()}), closeFn, nil
+	return assistant.New(model, svc, assistant.Config{Model: llm.ModelFromEnv(), Clubs: clubLegend(ctx, svc)}), closeFn, nil
+}
+
+// clubLegend is this season's club codes and names, which the assistant is given so it never
+// has to remember them. If the season's data cannot be read now the assistant still works,
+// without the legend and without the check that depends on it.
+func clubLegend(ctx context.Context, svc *service.Service) map[string]string {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	st, err := svc.Status(ctx)
+	if err != nil {
+		slog.Warn("could not read the club list; the assistant will run without it", "err", err)
+		return nil
+	}
+	clubs := make(map[string]string, len(st.Clubs))
+	for _, c := range st.Clubs {
+		clubs[c.Short] = c.Name
+	}
+	return clubs
 }
 
 // runAsk answers one question, streaming the answer as it is written.
