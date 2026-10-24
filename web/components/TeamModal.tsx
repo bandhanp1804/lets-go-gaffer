@@ -125,7 +125,9 @@ export function TeamModal() {
                   <pre>{captureSnippet}</pre>
                 </details>
               </li>
-              <li>Refresh the page. A box appears in the corner holding your token (it is copied for you if the browser allows it).</li>
+              <li>
+                Refresh the page. A box appears in the corner holding your token (it is copied for you if the browser allows it). The console will have printed "listening"; if no box appears after a refresh, the page may have kept its own copy of the network calls: use the by-hand method below, which always works.
+              </li>
               <li>Paste it below.</li>
             </ol>
 

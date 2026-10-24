@@ -383,13 +383,21 @@ func (s *Service) MyTeam(ctx context.Context) (MyTeamView, error) {
 }
 
 // Lineup recommends the best XI for the upcoming gameweek.
-func (s *Service) Lineup(ctx context.Context) (LineupView, error) {
+func (s *Service) Lineup(ctx context.Context) (LineupView, error) { return s.LineupFormation(ctx, "") }
+
+// LineupFormation is Lineup for a chosen formation such as "3-4-3"; empty means the best.
+// The captain, bench and close calls are worked out within the chosen formation, and the
+// list of formations still compares every one with the best.
+func (s *Service) LineupFormation(ctx context.Context, formation string) (LineupView, error) {
 	base, sq, err := s.squadSnapshot(ctx)
 	if err != nil {
 		return LineupView{}, err
 	}
 	xp := base.model.ScoreFrom(base.next, 1)
-	advice, err := lineup.Advise(sq.team.Squad.Players, lineup.Options{XP: xp})
+	advice, err := lineup.Advise(sq.team.Squad.Players, lineup.Options{XP: xp, Formation: formation})
+	if errors.Is(err, lineup.ErrUnknownFormation) {
+		return LineupView{}, badInput("%q is not a formation FPL allows (such as 4-4-2 or 3-5-2)", formation)
+	}
 	if err != nil {
 		return LineupView{}, err
 	}
@@ -411,8 +419,15 @@ func (s *Service) Lineup(ctx context.Context) (LineupView, error) {
 	for _, c := range advice.CloseCalls {
 		v.CloseCalls = append(v.CloseCalls, CloseCallView{Bench: c.Bench.Player.WebName, Displaces: c.Displaces.Player.WebName, Margin: round2(c.Margin)})
 	}
-	for _, f := range advice.Formations {
-		if f.Formation != advice.Formation {
+	v.AllFormations = []FormationView{}
+	for i, f := range advice.Formations {
+		if i == 0 {
+			v.BestFormation = f.Formation // the list is best first
+		}
+		v.AllFormations = append(v.AllFormations, FormationView{Formation: f.Formation, Delta: round1(f.Delta)})
+		if f.Formation == advice.Formation {
+			v.VsBest = round1(f.Delta)
+		} else {
 			v.OtherFormations = append(v.OtherFormations, FormationView{Formation: f.Formation, Delta: round1(f.Delta)})
 		}
 	}

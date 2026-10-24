@@ -1,6 +1,7 @@
 package lineup_test
 
 import (
+	"errors"
 	"math"
 	"math/rand"
 	"slices"
@@ -336,6 +337,66 @@ func TestChanges(t *testing.T) {
 		in, out := lineup.Changes(tc.prev, tc.now)
 		if !slices.Equal(in, tc.wantIn) || !slices.Equal(out, tc.want) {
 			t.Errorf("%s: in %v out %v, want in %v out %v", tc.name, in, out, tc.wantIn, tc.want)
+		}
+	}
+}
+
+func TestAdvise_AForcedFormationGivesThatFormationsBestXI(t *testing.T) {
+	r := rand.New(rand.NewSource(7))
+	for trial := 0; trial < 30; trial++ {
+		table := map[int]float64{}
+		for id := 1; id <= 15; id++ {
+			table[id] = math.Round(r.Float64()*100) / 10
+		}
+		free := advise(t, squad15(), xpOf(table))
+
+		for _, f := range free.Formations {
+			o := xpOf(table)
+			o.Formation = f.Formation
+			forced := advise(t, squad15(), o)
+
+			if forced.Formation != f.Formation {
+				t.Fatalf("asked for %s, got %s", f.Formation, forced.Formation)
+			}
+			if math.Abs(forced.Total-f.Total) > 1e-9 {
+				t.Errorf("%s: forced total %v, but the unforced list says %v", f.Formation, forced.Total, f.Total)
+			}
+			// The list still compares every formation with the best overall, whichever is shown.
+			for i, g := range forced.Formations {
+				if g.Formation != free.Formations[i].Formation || math.Abs(g.Delta-free.Formations[i].Delta) > 1e-9 {
+					t.Errorf("%s: formation list changed when forcing: %+v vs %+v", f.Formation, g, free.Formations[i])
+				}
+			}
+			if len(forced.Starting) != 11 || len(forced.Bench) != 4 {
+				t.Errorf("%s: starting %d bench %d", f.Formation, len(forced.Starting), len(forced.Bench))
+			}
+			// Captain and vice are the best two starters of the shown XI.
+			if forced.Captain.XP < forced.ViceCaptain.XP {
+				t.Errorf("%s: captain %v below vice %v", f.Formation, forced.Captain.XP, forced.ViceCaptain.XP)
+			}
+		}
+	}
+}
+
+func TestAdvise_ForcingTheBestFormationChangesNothing(t *testing.T) {
+	table := map[int]float64{1: 4, 3: 2, 4: 2, 8: 6, 9: 6, 13: 9, 14: 9, 15: 9}
+	free := advise(t, squad15(), xpOf(table))
+	o := xpOf(table)
+	o.Formation = free.Formation
+
+	forced := advise(t, squad15(), o)
+
+	if forced.Total != free.Total || len(forced.CloseCalls) != len(free.CloseCalls) {
+		t.Errorf("forced %+v vs free %+v", forced.Total, free.Total)
+	}
+}
+
+func TestAdvise_UnknownFormationsAreRejected(t *testing.T) {
+	for _, bad := range []string{"6-3-1", "4-4-3", "4-4", "x-y-z", "442", "4-4-2 ", "04-4-2", "3-4-3-0"} {
+		o := xpOf(nil)
+		o.Formation = bad
+		if _, err := lineup.Advise(squad15(), o); !errors.Is(err, lineup.ErrUnknownFormation) {
+			t.Errorf("%q: err = %v, want ErrUnknownFormation", bad, err)
 		}
 	}
 }

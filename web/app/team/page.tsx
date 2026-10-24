@@ -1,13 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { Async } from "../../components/Async.tsx";
+import { PlayerDetail } from "../../components/PlayerDetail.tsx";
 import { Notes } from "../../components/Notes.tsx";
 import { Pitch } from "../../components/Pitch.tsx";
-import type { MyTeam } from "../../lib/types.gen.ts";
+import type { MyTeam, Player } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
 
 export default function Team() {
   const team = useApi<MyTeam>("/api/team");
+  const [picked, setPicked] = useState<Player | null>(null);
   return (
     <>
       <h1>My team</h1>
@@ -28,7 +31,9 @@ export default function Team() {
               ))}
             </div>
             <Notes notes={t.notes} />
-            <Pitch starting={t.starting} bench={t.bench} captain={t.captain} vice={t.vice_captain} />
+            <p className="muted">Click a player for details.</p>
+            {picked ? <PlayerDetail p={picked} onClose={() => setPicked(null)} /> : null}
+            <Pitch starting={t.starting} bench={t.bench} captain={t.captain} vice={t.vice_captain} onSelect={(p) => setPicked(picked?.id === p.id ? null : p)} selectedId={picked?.id} />
           </>
         )}
       </Async>

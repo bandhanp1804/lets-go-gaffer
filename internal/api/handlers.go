@@ -133,6 +133,26 @@ func floatParam(v string) (float64, error) {
 	return f, nil
 }
 
+// whatIf weighs a transfer plan. It is a POST because the plan is a body, not because it
+// changes anything: nothing is stored and nothing is sent to FPL.
+func (s *Server) whatIf(w http.ResponseWriter, r *http.Request) {
+	var req service.WhatIfRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "send a JSON body like {\"moves\": [{\"out\": 101, \"in\": 201}]}")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ReadTimeout)
+	defer cancel()
+	v, err := s.cfg.Service.WhatIf(ctx, req)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
 // askRequest is the body of POST /api/ask.
 type askRequest struct {
 	Question  string `json:"question"`

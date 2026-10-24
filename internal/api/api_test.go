@@ -23,14 +23,16 @@ const ui = "http://localhost:3001"
 
 // svc is a Service returning canned views and remembering the requests it saw.
 type svc struct {
-	viewer   service.Viewer
-	squadReq service.SquadRequest
-	mu       sync.Mutex
-	err      error
-	panics   bool
-	transfr  service.TransfersRequest
-	players  service.PlayerQuery
-	news     service.NewsQuery
+	whatIfReq service.WhatIfRequest
+	formation string
+	viewer    service.Viewer
+	squadReq  service.SquadRequest
+	mu        sync.Mutex
+	err       error
+	panics    bool
+	transfr   service.TransfersRequest
+	players   service.PlayerQuery
+	news      service.NewsQuery
 }
 
 func (s *svc) Status(context.Context) (service.StatusView, error) {
@@ -41,6 +43,12 @@ func (s *svc) BuildSquad(_ context.Context, r service.SquadRequest) (service.Squ
 	s.squadReq = r
 	s.mu.Unlock()
 	return service.SquadView{Formation: "3-4-3", Budget: "£100.0m"}, s.err
+}
+func (s *svc) WhatIf(_ context.Context, r service.WhatIfRequest) (service.WhatIfView, error) {
+	s.mu.Lock()
+	s.whatIfReq = r
+	s.mu.Unlock()
+	return service.WhatIfView{Gameweek: 9, Valid: true, NetPoints: 1.5, Verdict: "worth_it"}, s.err
 }
 func (s *svc) Backtest(context.Context) (service.BacktestView, error) {
 	return service.BacktestView{FirstGameweek: 3, LastGameweek: 8}, s.err
@@ -54,7 +62,10 @@ func (s *svc) MyTeam(ctx context.Context) (service.MyTeamView, error) {
 	s.mu.Unlock()
 	return service.MyTeamView{TeamName: "Test FC", Gameweek: 9}, s.err
 }
-func (s *svc) Lineup(context.Context) (service.LineupView, error) {
+func (s *svc) LineupFormation(_ context.Context, f string) (service.LineupView, error) {
+	s.mu.Lock()
+	s.formation = f
+	s.mu.Unlock()
 	return service.LineupView{Formation: "4-4-2", Captain: "Haaland"}, s.err
 }
 func (s *svc) Transfers(_ context.Context, r service.TransfersRequest) (service.TransfersView, error) {
@@ -221,6 +232,19 @@ func TestQueryParametersReachTheService(t *testing.T) {
 	}
 	if got := r.svc.news; got != (service.NewsQuery{Query: "injury", Player: "Saka", Days: 3, Limit: 4}) {
 		t.Errorf("news query = %+v", got)
+	}
+}
+
+func TestLineupFormationReachesTheService(t *testing.T) {
+	r := newRig(t, nil)
+
+	r.do("GET", "/api/lineup?formation=3-4-3", "", nil)
+	if r.svc.formation != "3-4-3" {
+		t.Errorf("formation = %q", r.svc.formation)
+	}
+	r.do("GET", "/api/lineup", "", nil)
+	if r.svc.formation != "" {
+		t.Errorf("no parameter means the best formation, got %q", r.svc.formation)
 	}
 }
 
@@ -564,4 +588,38 @@ func TestAskWhileAnotherQuestionRunsIs409AndAClosedTabFreesTheConversation(t *te
 		}
 	}
 	close(block) // let the stub finish any call still waiting
+}
+
+func TestWhatIfBodyReachesTheService(t *testing.T) {
+	r := newRig(t, nil)
+	free := 2
+
+	w := r.do("POST", "/api/whatif", `{"moves":[{"out":101,"in":201},{"out":102,"in":202}],"horizon":6,"free_transfers":2}`, nil)
+
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"verdict":"worth_it"`) {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	got := r.svc.whatIfReq
+	if len(got.Moves) != 2 || got.Moves[1] != (service.WhatIfMoveRequest{Out: 102, In: 202}) || got.Horizon != 6 || got.Free == nil || *got.Free != free {
+		t.Errorf("request = %+v", got)
+	}
+}
+
+func TestWhatIfRejectsBadBodiesAndMapsServiceInputErrors(t *testing.T) {
+	r := newRig(t, nil)
+	for _, body := range []string{`nope`, `{"moves":[{"out":1,"in":2,"extra":3}]}`, `{"moves":"x"}`, `{"moves":[{"out":"a","in":2}]}`} {
+		if w := r.do("POST", "/api/whatif", body, nil); w.Code != 400 {
+			t.Errorf("%s: status %d", body, w.Code)
+		}
+	}
+	r.svc.err = &service.InputError{Msg: "horizon must be between 1 and 10 gameweeks"}
+	if w := r.do("POST", "/api/whatif", `{"moves":[]}`, nil); w.Code != 400 || !strings.Contains(errorOf(t, w), "horizon") {
+		t.Errorf("%d %s", w.Code, w.Body)
+	}
+}
+
+func TestWhatIfIsAPostOnly(t *testing.T) {
+	if w := newRig(t, nil).do("GET", "/api/whatif", "", nil); w.Code != 405 {
+		t.Errorf("GET = %d, want 405", w.Code)
+	}
 }
