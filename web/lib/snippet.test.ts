@@ -27,8 +27,8 @@ function page() {
     return {};
   };
   vm.createContext(ctx);
-  vm.runInContext(captureSnippet, ctx);
-  return { ctx, XHR, box, appended, logs, sent };
+  const returned = vm.runInContext(captureSnippet, ctx);
+  return { ctx, XHR, box, appended, logs, sent, returned };
 }
 
 test("it shows the token from a fetch made with a plain headers object", async () => {
@@ -74,4 +74,37 @@ test("it makes no network request of its own", () => {
   new p.XHR().setRequestHeader("x-api-authorization", "Bearer a.b.c");
   assert.equal(p.sent.length, 0);
   assert.ok(!/\bfetch\s*\(|XMLHttpRequest\s*\(|\.open\(|sendBeacon|WebSocket|new Image/.test(captureSnippet.replace(/realFetch\.apply|window\.fetch = function/g, "")), "the script must not contain a call that sends data");
+});
+
+test("it returns a readable message, so the console does not just echo undefined", () => {
+  const p = page();
+  assert.equal(typeof p.returned, "string");
+  assert.match(p.returned as string, /listening/);
+});
+
+// FPL's page may send the header before its login state has loaded, with a placeholder.
+test("a placeholder like undefined or null is ignored and it keeps listening for the real token", () => {
+  const p = page();
+  for (const junk of ["undefined", "null", "Bearer undefined", "", "Bearer ", "abc", "a.b"]) new p.XHR().setRequestHeader("x-api-authorization", junk);
+  assert.equal(p.appended.length, 0, "a non-token must never be shown as the token");
+
+  new p.XHR().setRequestHeader("x-api-authorization", "Bearer real.token.value");
+
+  assert.equal(p.box.value, "Bearer real.token.value");
+});
+
+test("it reads headers given as pairs and as a Request's headers", async () => {
+  const pairs = page();
+  await (pairs.ctx.fetch as (u: string, i: object) => Promise<unknown>)("https://x/", { headers: [["Content-Type", "x"], ["X-Api-Authorization", "Bearer p.a.irs"]] });
+  assert.equal(pairs.box.value, "Bearer p.a.irs");
+
+  const req = page();
+  await (req.ctx.fetch as (u: unknown) => Promise<unknown>)(new Request("https://x/", { headers: { "x-api-authorization": "Bearer r.e.quest" } }));
+  assert.equal(req.box.value, "Bearer r.e.quest");
+});
+
+test("a failure inside the page's own call never breaks the page", async () => {
+  const p = page();
+  const weird = { get: () => { throw new Error("boom"); } };
+  await assert.doesNotReject(() => (p.ctx.fetch as (u: string, i: object) => Promise<unknown>)("https://x/", { headers: weird }));
 });

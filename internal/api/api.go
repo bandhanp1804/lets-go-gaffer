@@ -22,13 +22,14 @@ import (
 // Service is what the endpoints read. *service.Service satisfies it.
 type Service interface {
 	MyTeam(ctx context.Context) (service.MyTeamView, error)
-	Lineup(ctx context.Context) (service.LineupView, error)
+	LineupFormation(ctx context.Context, formation string) (service.LineupView, error)
 	Transfers(ctx context.Context, req service.TransfersRequest) (service.TransfersView, error)
 	Players(ctx context.Context, q service.PlayerQuery) (service.PlayersView, error)
 	SearchNews(ctx context.Context, q service.NewsQuery) ([]service.NewsView, error)
 	Status(ctx context.Context) (service.StatusView, error)
 	BuildSquad(ctx context.Context, req service.SquadRequest) (service.SquadView, error)
 	Backtest(ctx context.Context) (service.BacktestView, error)
+	WhatIf(ctx context.Context, req service.WhatIfRequest) (service.WhatIfView, error)
 }
 
 // Conversation is one assistant conversation. *assistant.Session satisfies it.
@@ -90,10 +91,13 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	mux.HandleFunc("GET /api/squad", s.read(s.squad))
 	mux.HandleFunc("GET /api/backtest", s.read(func(ctx context.Context, r *http.Request) (any, error) { return cfg.Service.Backtest(ctx) }))
 	mux.HandleFunc("GET /api/team", s.read(func(ctx context.Context, r *http.Request) (any, error) { return cfg.Service.MyTeam(ctx) }))
-	mux.HandleFunc("GET /api/lineup", s.read(func(ctx context.Context, r *http.Request) (any, error) { return cfg.Service.Lineup(ctx) }))
+	mux.HandleFunc("GET /api/lineup", s.read(func(ctx context.Context, r *http.Request) (any, error) {
+		return cfg.Service.LineupFormation(ctx, r.URL.Query().Get("formation"))
+	}))
 	mux.HandleFunc("GET /api/transfers", s.read(s.transfers))
 	mux.HandleFunc("GET /api/players", s.read(s.players))
 	mux.HandleFunc("GET /api/news", s.read(s.news))
+	mux.HandleFunc("POST /api/whatif", s.whatIf)
 	mux.HandleFunc("POST /api/ask", s.ask)
 
 	s.handler = recoverer(s.log, logRequests(s.log, guard(cfg.AllowedOrigins, s.withViewer(mux))))

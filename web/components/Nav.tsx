@@ -9,6 +9,7 @@ const links = [
   { href: "/team", label: "My team" },
   { href: "/lineup", label: "Best XI" },
   { href: "/transfers", label: "Transfers" },
+  { href: "/whatif", label: "What if?" },
   { href: "/squad", label: "Squad builder" },
   { href: "/players", label: "Players" },
   { href: "/news", label: "News" },

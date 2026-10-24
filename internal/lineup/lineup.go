@@ -21,6 +21,9 @@ const defaultCloseCall = 0.5
 // ErrInvalidSquad means the 15 players are not a legal FPL squad.
 var ErrInvalidSquad = errors.New("invalid squad")
 
+// ErrUnknownFormation means Options.Formation is not one FPL allows.
+var ErrUnknownFormation = errors.New("unknown formation")
+
 // Options configures Advise.
 type Options struct {
 	// XP is each player's expected points for the gameweek. Required.
@@ -28,6 +31,10 @@ type Options struct {
 	// CloseCallMargin is the largest expected-points gap reported as a close call;
 	// default 0.5.
 	CloseCallMargin float64
+	// Formation, such as "3-4-3", forces that formation instead of the best one. The
+	// captain, bench and close calls are then worked out within it; Formations still
+	// lists every legal one, compared with the best overall.
+	Formation string
 }
 
 // Entry is a player with his expected points.
@@ -88,9 +95,23 @@ func Advise(squad []fpl.Player, o Options) (Advice, error) {
 		sortEntries(byPos[pos])
 	}
 
-	best, ok := bestXI(byPos, 0)
+	var only *[3]int
+	if o.Formation != "" {
+		f, ok := parseFormation(o.Formation)
+		if !ok {
+			return Advice{}, fmt.Errorf("%w: %q", ErrUnknownFormation, o.Formation)
+		}
+		only = &f
+	}
+	best, ok := bestXI(byPos, 0, only)
 	if !ok {
 		return Advice{}, fmt.Errorf("%w: no legal XI", ErrInvalidSquad)
+	}
+	overall := best // the best of every formation, for comparing the chosen one with
+	if only != nil {
+		if overall, ok = bestXI(byPos, 0, nil); !ok {
+			return Advice{}, fmt.Errorf("%w: no legal XI", ErrInvalidSquad)
+		}
 	}
 
 	started := map[int]bool{}
@@ -126,7 +147,7 @@ func Advise(squad []fpl.Player, o Options) (Advice, error) {
 	}
 
 	for _, b := range bench {
-		alt, ok := bestXI(byPos, b.Player.ID)
+		alt, ok := bestXI(byPos, b.Player.ID, only)
 		if !ok {
 			continue
 		}
@@ -149,7 +170,7 @@ func Advise(squad []fpl.Player, o Options) (Advice, error) {
 
 	for _, f := range optimizer.LegalFormations() {
 		if x, ok := bestForFormation(byPos, f, 0); ok {
-			advice.Formations = append(advice.Formations, FormationOption{Formation: x.name, Total: x.total, Delta: x.total - best.total})
+			advice.Formations = append(advice.Formations, FormationOption{Formation: x.name, Total: x.total, Delta: x.total - overall.total})
 		}
 	}
 	sort.SliceStable(advice.Formations, func(i, j int) bool { return advice.Formations[i].Total > advice.Formations[j].Total })
@@ -185,12 +206,29 @@ type xi struct {
 	total float64
 }
 
-// bestXI is the best lineup over all formations; if forced is a player id, he
-// must start.
-func bestXI(byPos [5][]Entry, forced int) (xi, bool) {
+// parseFormation reads "3-4-3" and checks FPL allows it.
+func parseFormation(name string) ([3]int, bool) {
+	var f [3]int
+	if n, err := fmt.Sscanf(name, "%d-%d-%d", &f[0], &f[1], &f[2]); err != nil || n != 3 || fmt.Sprintf("%d-%d-%d", f[0], f[1], f[2]) != name {
+		return f, false
+	}
+	for _, legal := range optimizer.LegalFormations() {
+		if legal == f {
+			return f, true
+		}
+	}
+	return f, false
+}
+
+// bestXI is the best lineup over all formations, or over just one when only is set; if
+// forced is a player id, he must start.
+func bestXI(byPos [5][]Entry, forced int, only *[3]int) (xi, bool) {
 	var best xi
 	found := false
 	for _, f := range optimizer.LegalFormations() {
+		if only != nil && f != *only {
+			continue
+		}
 		if x, ok := bestForFormation(byPos, f, forced); ok && (!found || x.total > best.total) {
 			best, found = x, true
 		}

@@ -48,6 +48,9 @@ export interface Lineup {
   captain_lead_over_vice: number;
   close_calls: CloseCall[];
   other_formations: Formation[];
+  best_formation: string;
+  expected_points_vs_best: number;
+  all_formations: Formation[];
   compared_with: string;
   same_xi_as_current: boolean;
   players_in?: string[];
@@ -208,6 +211,62 @@ export interface WalkForward {
   tuned_spearman: number;
   default_spearman: number;
   old_scorer_spearman: number;
+}
+
+export interface WhatIf {
+  gameweek: number;
+  horizon_gameweeks: number;
+  valid: boolean;
+  problems: string[];
+  moves: WhatIfMove[];
+  transfers: number;
+  free_transfers_left: number;
+  points_hit: number;
+  free_transfers_next_week: number;
+  bank_before: string;
+  bank_after: string;
+  expected_gain_per_gameweek: number;
+  net_points_over_horizon: number;
+  verdict: string;
+  insights: string[];
+  weeks: WhatIfWeek[];
+  before: WhatIfLineup;
+  after: WhatIfLineup;
+  notes: string[];
+}
+
+export interface WhatIfMove {
+  out: Player;
+  in: Player;
+  out_run: string[];
+  in_run: string[];
+}
+
+export interface WhatIfWeek {
+  gameweek: number;
+  before: number;
+  after: number;
+  delta: number;
+}
+
+export interface WhatIfLineup {
+  formation: string;
+  expected_points: number;
+  captain: string;
+  vice_captain: string;
+  starting: Player[];
+  bench: Player[];
+}
+
+export interface WhatIfRequest {
+  moves: WhatIfMoveRequest[];
+  horizon: number;
+  free_transfers: number | null;
+}
+
+export interface WhatIfMoveRequest {
+  out: number;
+  in: number;
 }
 
 export interface NewsResponse {

@@ -643,6 +643,9 @@ th button.sort:focus-visible {
 }
 .teamchip {
   margin-left: auto;
+  position: sticky; /* stays in view when the links scroll sideways on a narrow screen */
+  right: 0;
+  background: var(--surface);
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
@@ -1049,4 +1052,166 @@ dialog.modal footer .actions {
   .nav {
     gap: 10px;
   }
+}
+
+/* clickable players, details, formations */
+button.card {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+button.card:hover,
+button.card:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.card {
+  transition: transform 0.1s, border-color 0.1s, box-shadow 0.1s;
+}
+.card.selected {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(245, 197, 66, 0.55);
+}
+.card.mark-out {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.5);
+  opacity: 0.85;
+}
+.markline {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--bad);
+  font-weight: 700;
+}
+.formations {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 8px;
+}
+.chip.button.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+  font-weight: 650;
+}
+.detail {
+  margin: 8px 0;
+}
+.detailhead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.detailhead .x {
+  margin-left: auto;
+}
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: 8px 0;
+}
+.facts div {
+  display: flex;
+  flex-direction: column;
+}
+.facts dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.facts dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* what-if */
+.form.compact {
+  margin: 6px 0;
+}
+.plan {
+  list-style: none;
+  margin: 6px 0 10px;
+  padding: 0;
+}
+.plan li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  padding: 4px 0;
+}
+.plan .out {
+  color: var(--bad);
+  font-weight: 650;
+}
+.plan .in {
+  color: var(--good);
+  font-weight: 650;
+}
+.candidates .scroll {
+  max-height: 340px;
+  overflow: auto;
+}
+button.buy {
+  background: var(--good-bg);
+  color: var(--good);
+  border-color: var(--good);
+  font-weight: 650;
+  cursor: pointer;
+  padding: 3px 12px;
+}
+.verdict {
+  border-width: 2px;
+}
+.verdict.good {
+  border-color: var(--good);
+  background: var(--good-bg);
+}
+.verdict.warn {
+  border-color: var(--warn);
+  background: var(--warn-bg);
+}
+.verdict.bad {
+  border-color: var(--bad);
+  background: var(--bad-bg);
+}
+.verdicthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+}
+.verdicthead strong {
+  font-size: 1.15rem;
+}
+.bignum {
+  font-size: 1.8rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.insights {
+  padding-left: 20px;
+}
+.insights li {
+  margin: 5px 0;
+}
+.run {
+  color: var(--muted);
+  font-size: 0.82rem;
+  white-space: normal;
+  max-width: 420px;
+}
+.afterpitch summary {
+  cursor: pointer;
+  color: var(--accent);
+  margin: 10px 0;
+}
+a.trylink {
+  display: inline-block;
+  margin-top: 6px;
 }

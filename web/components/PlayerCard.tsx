@@ -2,11 +2,24 @@ import { availability } from "../lib/pitch.ts";
 import { one } from "../lib/format.ts";
 import type { Player } from "../lib/types.gen.ts";
 
-export function PlayerCard({ p, role }: { p: Player; role?: "C" | "V" | "" }) {
+export type Mark = "out" | "in";
+
+interface Props {
+  p: Player;
+  role?: "C" | "V" | "";
+  /** Makes the card a button. */
+  onClick?: () => void;
+  selected?: boolean;
+  /** "out" for a player being sold in a what-if, "in" for one being bought. */
+  mark?: Mark;
+}
+
+export function PlayerCard({ p, role, onClick, selected, mark }: Props) {
   const a = availability(p.status);
   const title = [p.status !== "available" ? p.status : "", p.news ?? ""].filter(Boolean).join(": ");
-  return (
-    <div className={`card pos-${p.position}`} title={title || undefined}>
+  const cls = `card pos-${p.position}${selected ? " selected" : ""}${mark ? ` mark-${mark}` : ""}${onClick ? " clickable" : ""}`;
+  const body = (
+    <>
       <div className="shirt">
         {p.team}
         {role ? <span className={`badge role-${role}`}>{role}</span> : null}
@@ -18,6 +31,19 @@ export function PlayerCard({ p, role }: { p: Player; role?: "C" | "V" | "" }) {
         <span>{p.price}</span>
       </div>
       {p.fixture ? <div className="pfix">{p.fixture}</div> : null}
+      {mark === "out" ? <div className="markline">selling</div> : null}
+    </>
+  );
+  if (onClick) {
+    return (
+      <button type="button" className={cls} title={title || undefined} onClick={onClick} aria-pressed={selected ?? false} aria-label={`${p.name}, ${p.team}, ${p.position}`}>
+        {body}
+      </button>
+    );
+  }
+  return (
+    <div className={cls} title={title || undefined}>
+      {body}
     </div>
   );
 }

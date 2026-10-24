@@ -586,3 +586,48 @@ func TestNoUpcomingGameweekIsAnErrorNotAGuess(t *testing.T) {
 		t.Errorf("err = %v, want one about there being no upcoming gameweek", err)
 	}
 }
+
+func TestLineupFormation_ShowsTheChosenFormationAndStillComparesAllWithTheBest(t *testing.T) {
+	r := newRig(t, rigOpts{})
+	ctx := context.Background()
+	best, err := r.svc.Lineup(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if best.BestFormation != best.Formation || best.VsBest != 0 || len(best.AllFormations) != 8 {
+		t.Fatalf("best %q shown %q vs %v, %d formations", best.BestFormation, best.Formation, best.VsBest, len(best.AllFormations))
+	}
+	other := ""
+	for _, f := range best.OtherFormations {
+		other = f.Formation
+	}
+
+	got, err := r.svc.LineupFormation(ctx, other)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Formation != other || got.BestFormation != best.Formation {
+		t.Errorf("shown %q (asked %q), best %q", got.Formation, other, got.BestFormation)
+	}
+	if got.VsBest > 0 || (other != best.Formation && got.ExpectedPoints > best.ExpectedPoints+1e-9) {
+		t.Errorf("a formation cannot beat the best: %v vs %v (delta %v)", got.ExpectedPoints, best.ExpectedPoints, got.VsBest)
+	}
+	if len(got.Starting) != 11 || len(got.Bench) != 4 || len(got.AllFormations) != 8 {
+		t.Errorf("starting %d bench %d formations %d", len(got.Starting), len(got.Bench), len(got.AllFormations))
+	}
+	for i, f := range got.AllFormations {
+		if f != best.AllFormations[i] {
+			t.Errorf("the comparison must not change with the chosen formation: %+v vs %+v", f, best.AllFormations[i])
+		}
+	}
+}
+
+func TestLineupFormation_ABadFormationIsAnInputError(t *testing.T) {
+	r := newRig(t, rigOpts{})
+	_, err := r.svc.LineupFormation(context.Background(), "9-9-9")
+	var in *service.InputError
+	if !errors.As(err, &in) {
+		t.Errorf("err = %v, want an InputError (a 400)", err)
+	}
+}

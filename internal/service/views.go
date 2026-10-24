@@ -76,7 +76,10 @@ type LineupView struct {
 	CaptainLead     float64         `json:"captain_lead_over_vice"` // under 0.3 is a toss-up
 	CloseCalls      []CloseCallView `json:"close_calls"`
 	OtherFormations []FormationView `json:"other_formations"`
-	CurrentLineupIs string          `json:"compared_with"` // what the squad's current XI is
+	BestFormation   string          `json:"best_formation"`          // the best of all, whichever is shown
+	VsBest          float64         `json:"expected_points_vs_best"` // the shown formation against the best: zero or negative
+	AllFormations   []FormationView `json:"all_formations"`          // every legal formation, best first, with the shown one included
+	CurrentLineupIs string          `json:"compared_with"`           // what the squad's current XI is
 	SameAsCurrent   bool            `json:"same_xi_as_current"`
 	PlayersIn       []string        `json:"players_in,omitempty"`
 	PlayersOut      []string        `json:"players_out,omitempty"`

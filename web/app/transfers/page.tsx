@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Async } from "../../components/Async.tsx";
 import { Notes } from "../../components/Notes.tsx";
 import { one, signed } from "../../lib/format.ts";
 import { query } from "../../lib/api.ts";
 import type { Transfers } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
+import { movesToParam } from "../../lib/whatif.ts";
 
 export default function TransfersPage() {
   const [wildcard, setWildcard] = useState(false);
@@ -88,6 +90,12 @@ export default function TransfersPage() {
                       </li>
                     ))}
                   </ul>
+                  <Link
+                    className="trylink"
+                    href={`/whatif?${new URLSearchParams({ moves: movesToParam(s.moves.map((m) => ({ out: m.out.id, in: m.in.id }))), horizon: String(t.horizon_gameweeks), free: String(t.free_transfers_left) })}`}
+                  >
+                    Try this in What if? →
+                  </Link>
                 </div>
               ))
             )}
