@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -488,4 +489,38 @@ type truncating struct{}
 func (truncating) Stream(_ context.Context, _ llm.Request, onText func(string)) (llm.Response, error) {
 	onText("A long answer that")
 	return llm.Response{Content: []llm.Block{llm.Text("A long answer that")}, StopReason: "max_tokens"}, nil
+}
+
+// whoBackend records whose squad each tool call was made for.
+type whoBackend struct {
+	*backend
+	mu   sync.Mutex
+	seen []service.Viewer
+}
+
+func (b *whoBackend) MyTeam(ctx context.Context) (service.MyTeamView, error) {
+	b.mu.Lock()
+	b.seen = append(b.seen, service.ViewerFrom(ctx))
+	b.mu.Unlock()
+	return b.backend.MyTeam(ctx)
+}
+
+// The web client says whose squad a question is about in the request; the model's tool calls
+// must carry that through, or it would answer about the wrong manager.
+func TestAsk_ToolCallsSeeTheViewerOfTheRequest(t *testing.T) {
+	m := &scripted{turns: []turn{
+		{calls: []call{{name: "get_my_team"}}},
+		{text: []string{"done"}},
+	}}
+	b := &whoBackend{backend: newBackend()}
+	s := assistant.New(m, b, assistant.Config{Model: "claude-test"}).NewSession()
+	want := service.Viewer{TeamID: 4242, Token: "Bearer abc"}
+
+	if _, err := s.Ask(service.WithViewer(context.Background(), want), "my team?", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(b.seen) != 1 || b.seen[0] != want {
+		t.Errorf("the tool saw %+v, want %+v", b.seen, want)
+	}
 }

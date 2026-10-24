@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTeam } from "./TeamProvider.tsx";
 
 const links = [
-  { href: "/", label: "Dashboard" },
+  { href: "/", label: "Home" },
   { href: "/team", label: "My team" },
   { href: "/lineup", label: "Best XI" },
   { href: "/transfers", label: "Transfers" },
@@ -17,10 +18,11 @@ const links = [
 
 export function Nav() {
   const path = usePathname();
+  const { identity, ready, openModal } = useTeam();
   return (
     <nav className="nav" aria-label="Main">
       <Link href="/" className="brand">
-        Let’s Go Gaffer
+        <span className="ball" aria-hidden="true">⚽</span> Let’s Go Gaffer
       </Link>
       <ul>
         {links.map((l) => {
@@ -34,6 +36,10 @@ export function Nav() {
           );
         })}
       </ul>
+      <button type="button" className="teamchip" onClick={openModal} aria-haspopup="dialog">
+        {!ready ? "…" : identity.teamId === null ? "Pick your team" : `Team ${identity.teamId}`}
+        {ready && identity.teamId !== null ? <span className={identity.token ? "tag live" : "tag"}>{identity.token ? "live" : "public"}</span> : null}
+      </button>
     </nav>
   );
 }

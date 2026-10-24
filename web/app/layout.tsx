@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Nav } from "../components/Nav.tsx";
+import { TeamModal } from "../components/TeamModal.tsx";
+import { TeamProvider } from "../components/TeamProvider.tsx";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,8 +14,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <Nav />
-        <main>{children}</main>
+        <TeamProvider>
+          <Nav />
+          <main>{children}</main>
+          <TeamModal />
+        </TeamProvider>
       </body>
     </html>
   );

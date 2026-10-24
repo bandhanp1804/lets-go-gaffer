@@ -204,7 +204,7 @@ func (s *Server) ask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("the question must be between 1 and %d characters", maxQuestion))
 		return
 	}
-	id, conv, release, err := s.sessions.acquire(req.SessionID, s.cfg.NewConversation)
+	id, conv, release, err := s.sessions.acquire(req.SessionID, owner(service.ViewerFrom(r.Context())), s.cfg.NewConversation)
 	if err != nil {
 		status := http.StatusInternalServerError
 		switch {
@@ -284,6 +284,8 @@ func askError(ctx context.Context, err error) string {
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	var in *service.InputError
 	switch {
+	case errors.Is(err, service.ErrTeamRequired):
+		writeJSON(w, http.StatusBadRequest, ErrorBody{Error: err.Error(), Code: "team_required"})
 	case errors.As(err, &in):
 		writeError(w, http.StatusBadRequest, in.Msg)
 	case errors.Is(err, service.ErrNewsUnavailable):
@@ -309,6 +311,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_, _ = w.Write(append(b, '\n'))
 }
 
+// ErrorBody is the body of every error response. Code, when set, is for the client to act
+// on (for example to ask for a team id) and does not change with the wording of Error.
+type ErrorBody struct {
+	Error string `json:"error"`
+	Code  string `json:"code,omitempty"`
+}
+
 func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
+	writeJSON(w, status, ErrorBody{Error: msg})
 }

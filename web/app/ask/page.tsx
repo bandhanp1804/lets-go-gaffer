@@ -5,6 +5,7 @@ import { Markdown } from "../../components/Markdown.tsx";
 import { ApiError, ask } from "../../lib/api.ts";
 import { webURL } from "../../lib/format.ts";
 import type { AskDone } from "../../lib/types.gen.ts";
+import { useTeam } from "../../components/TeamProvider.tsx";
 
 interface Turn {
   question: string;
@@ -16,6 +17,7 @@ interface Turn {
 const examples = ["Who should I captain this week?", "Should I make any transfers this week?", "Which goalkeepers are injured?", "What's the latest on Saka?"];
 
 export default function Ask() {
+  const { headers, ready } = useTeam();
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -31,6 +33,12 @@ export default function Ask() {
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
   }, [turns]);
+  // A conversation is about one team: choosing another starts a fresh one.
+  const who = JSON.stringify(headers);
+  useEffect(() => {
+    session.current = undefined;
+    setTurns([]);
+  }, [who]);
 
   const patchLast = (f: (t: Turn) => Turn) => setTurns((ts) => ts.map((t, i) => (i === ts.length - 1 ? f(t) : t)));
 
@@ -52,6 +60,7 @@ export default function Ask() {
           onError: (message) => patchLast((t) => ({ ...t, error: message })),
         },
         abort.current.signal,
+        headers,
       );
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) session.current = undefined; // the conversation expired on the server
@@ -138,7 +147,7 @@ export default function Ask() {
         }}
       >
         <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask about your squad, a player, or the news…" aria-label="Your question" maxLength={2000} autoFocus />
-        <button type="submit" disabled={busy || !input.trim()}>
+        <button type="submit" disabled={busy || !ready || !input.trim()}>
           {busy ? "Answering…" : "Ask"}
         </button>
       </form>

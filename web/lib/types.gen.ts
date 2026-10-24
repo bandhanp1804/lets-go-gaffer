@@ -244,3 +244,8 @@ export interface AskUsage {
   output_tokens: number;
   cache_read_tokens: number;
 }
+
+export interface ErrorBody {
+  error: string;
+  code?: string;
+}

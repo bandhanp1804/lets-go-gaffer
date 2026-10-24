@@ -281,3 +281,37 @@ func TestSessionTransportFunc_AnEmptyTokenSendsNothing(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionTransport_ATokenOnTheRequestContextReplacesTheConfiguredOne(t *testing.T) {
+	var seen []http.Header
+	srv := sessionServer(t, &seen)
+	// The transport is configured with a token that FPL would reject.
+	hc := &http.Client{Transport: fpl.NewSessionTransport(nil, "wrong-configured-token", hostOf(srv))}
+	client := fpl.NewHTTPClientWithBaseURL(hc, srv.URL)
+
+	if _, err := client.FetchMyTeam(context.Background(), 4321); !errors.Is(err, fpl.ErrSessionRejected) {
+		t.Fatalf("the configured token should be rejected, err = %v", err)
+	}
+	if _, err := client.FetchMyTeam(fpl.WithSessionToken(context.Background(), secret), 4321); err != nil {
+		t.Errorf("the request's own token must be used: %v", err)
+	}
+}
+
+// Another manager's request must never be sent with the owner's configured token.
+func TestSessionTransport_AnEmptyTokenOnTheContextSendsNothingEvenWhenOneIsConfigured(t *testing.T) {
+	var seen []http.Header
+	srv := sessionServer(t, &seen)
+	hc := &http.Client{Transport: fpl.NewSessionTransport(nil, secret, hostOf(srv))}
+	client := fpl.NewHTTPClientWithBaseURL(hc, srv.URL)
+
+	_, err := client.FetchMyTeam(fpl.WithSessionToken(context.Background(), ""), 4321)
+
+	if !errors.Is(err, fpl.ErrSessionRejected) {
+		t.Errorf("err = %v, want the request to go out unauthenticated", err)
+	}
+	for _, h := range seen {
+		if h.Get("X-Api-Authorization") != "" {
+			t.Error("the configured token leaked onto a request that opted out")
+		}
+	}
+}

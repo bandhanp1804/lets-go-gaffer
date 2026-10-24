@@ -96,7 +96,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	mux.HandleFunc("GET /api/news", s.read(s.news))
 	mux.HandleFunc("POST /api/ask", s.ask)
 
-	s.handler = recoverer(s.log, logRequests(s.log, guard(cfg.AllowedOrigins, mux)))
+	s.handler = recoverer(s.log, logRequests(s.log, guard(cfg.AllowedOrigins, s.withViewer(mux))))
 	return s, nil
 }
 

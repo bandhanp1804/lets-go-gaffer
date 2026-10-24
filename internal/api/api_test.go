@@ -23,6 +23,7 @@ const ui = "http://localhost:3001"
 
 // svc is a Service returning canned views and remembering the requests it saw.
 type svc struct {
+	viewer   service.Viewer
 	squadReq service.SquadRequest
 	mu       sync.Mutex
 	err      error
@@ -44,10 +45,13 @@ func (s *svc) BuildSquad(_ context.Context, r service.SquadRequest) (service.Squ
 func (s *svc) Backtest(context.Context) (service.BacktestView, error) {
 	return service.BacktestView{FirstGameweek: 3, LastGameweek: 8}, s.err
 }
-func (s *svc) MyTeam(context.Context) (service.MyTeamView, error) {
+func (s *svc) MyTeam(ctx context.Context) (service.MyTeamView, error) {
 	if s.panics {
 		panic("boom")
 	}
+	s.mu.Lock()
+	s.viewer = service.ViewerFrom(ctx)
+	s.mu.Unlock()
 	return service.MyTeamView{TeamName: "Test FC", Gameweek: 9}, s.err
 }
 func (s *svc) Lineup(context.Context) (service.LineupView, error) {

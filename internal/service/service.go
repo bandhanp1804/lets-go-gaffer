@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/db"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/embed"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/httpx"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/lineup"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/myteam"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/projection"
@@ -109,12 +111,10 @@ type Service struct {
 	deps Deps
 	cfg  Config
 
-	mu      sync.Mutex
-	base    *baseSnap
-	baseAt  time.Time
-	squad   *squadSnap
-	squadAt time.Time
-	squadTk string // the session token the squad snapshot was read with
+	mu     sync.Mutex
+	base   *baseSnap
+	baseAt time.Time
+	squads map[squadKey]*squadEntry
 
 	btMu   sync.Mutex // the backtest takes seconds, so it has its own lock and cache
 	btKey  string
@@ -214,75 +214,90 @@ func (s *Service) session() string {
 }
 
 func (s *Service) squadSnapshot(ctx context.Context) (*baseSnap, *squadSnap, error) {
+	team, token, err := s.who(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	base, err := s.baseSnapshot(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	token := s.session()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// A new token means the manager has just logged in again: a squad read without it
-	// (public data) must not be served for the rest of the cache window.
-	if s.squad != nil && s.squadTk == token && s.deps.Now().Sub(s.squadAt) < snapshotTTL {
-		return base, s.squad, nil
+	// One entry per manager and token: a new token is a new key, so a squad read without it
+	// (public data) is not served for the rest of the cache window after the manager logs in.
+	e := s.entryFor(newSquadKey(team, token))
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.snap != nil && s.deps.Now().Sub(e.at) < snapshotTTL {
+		return base, e.snap, nil
 	}
-	if s.cfg.TeamID == 0 {
-		return nil, nil, errors.New("no FPL team id is configured")
-	}
-
-	public, err := myteam.Load(ctx, s.deps.FPL, s.cfg.TeamID, base.players)
+	snap, err := s.loadSquad(ctx, base, team, token)
 	if err != nil {
 		return nil, nil, err
 	}
+	e.snap, e.at = snap, s.deps.Now()
+	return base, snap, nil
+}
+
+// loadSquad reads one manager's squad: the live one when the token works, the public one
+// otherwise, with notes saying which and why.
+func (s *Service) loadSquad(ctx context.Context, base *baseSnap, teamID int, token string) (*squadSnap, error) {
+	public, err := myteam.Load(ctx, s.deps.FPL, teamID, base.players)
+	var se *httpx.StatusError
+	if errors.As(err, &se) && se.StatusCode == http.StatusNotFound {
+		return nil, badInput("FPL has no squad for team id %d: check the number (it is in the address of your Points page)", teamID)
+	}
+	if err != nil {
+		return nil, err
+	}
 	snap := &squadSnap{}
 
-	live, note := s.tryLive(ctx, token)
+	live, note := s.tryLive(ctx, teamID, token)
 	if note != "" {
 		snap.notes = append(snap.notes, note)
 	}
 	if live != nil {
 		team, fin, err := myteam.WithLiveSquad(public, live, base.players)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		snap.team, snap.fin, snap.live = team, fin, true
-	} else {
-		ids := make([]int, len(public.Squad.Players))
-		for i, p := range public.Squad.Players {
-			ids[i] = p.ID
-		}
-		start, err := s.deps.Store.StartingPrices(ctx, ids)
-		if err != nil {
-			return nil, nil, err
-		}
-		fin, err := myteam.LoadFinances(ctx, s.deps.FPL, s.cfg.TeamID, public, start)
-		if err != nil {
-			return nil, nil, err
-		}
-		snap.team, snap.fin = public, fin
-		snap.notes = append(snap.notes, fmt.Sprintf(
-			"This squad is as of the GW%d deadline: FPL hides transfers made since. Anything the manager has changed since then is not reflected.",
-			public.Event))
+		return snap, nil
 	}
-	s.squad, s.squadAt, s.squadTk = snap, s.deps.Now(), token
-	return base, snap, nil
+	ids := make([]int, len(public.Squad.Players))
+	for i, p := range public.Squad.Players {
+		ids[i] = p.ID
+	}
+	start, err := s.deps.Store.StartingPrices(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	fin, err := myteam.LoadFinances(ctx, s.deps.FPL, teamID, public, start)
+	if err != nil {
+		return nil, err
+	}
+	snap.team, snap.fin = public, fin
+	snap.notes = append(snap.notes, fmt.Sprintf(
+		"This squad is as of the GW%d deadline: FPL hides transfers made since. Anything the manager has changed since then is not reflected.",
+		public.Event))
+	return snap, nil
 }
 
-// tryLive reads the live squad if a session is configured. It never fails: it
-// returns nil and a note saying why. No note contains the token.
-func (s *Service) tryLive(ctx context.Context, token string) (*fpl.MyTeam, string) {
+// tryLive reads the live squad if there is a token. It never fails: it returns nil and a
+// note saying why. No note contains the token. The token is attached to this request's
+// context, so it is used for this call and kept nowhere.
+func (s *Service) tryLive(ctx context.Context, teamID int, token string) (*fpl.MyTeam, string) {
 	if s.deps.Live == nil || token == "" {
 		return nil, ""
 	}
 	now := s.deps.Now()
 	expiry, known := fpl.TokenExpiry(token)
 	if known && !expiry.After(now) {
-		return nil, fmt.Sprintf("The FPL session expired %s ago, so only public data is used. Paste a fresh token into .env and it is picked up without a restart.", ago(now.Sub(expiry)))
+		return nil, fmt.Sprintf("The FPL session expired %s ago, so only public data is used. Enter a fresh token to see your live squad.", ago(now.Sub(expiry)))
 	}
-	live, err := s.deps.Live.FetchMyTeam(ctx, s.cfg.TeamID)
+	live, err := s.deps.Live.FetchMyTeam(fpl.WithSessionToken(ctx, token), teamID)
 	switch {
 	case errors.Is(err, fpl.ErrSessionRejected):
-		return nil, "FPL rejected the session (it has probably expired), so only public data is used."
+		return nil, "FPL rejected the session: it has expired, or it belongs to a different team than this one. Only public data is used."
 	case err != nil:
 		return nil, fmt.Sprintf("The live squad could not be read from FPL (%v), so only public data is used.", err)
 	}

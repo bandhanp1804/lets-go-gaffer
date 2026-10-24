@@ -1,6 +1,7 @@
 package fpl
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -49,8 +50,20 @@ func NewSessionTransportFunc(base http.RoundTripper, value func() string, host s
 	return &sessionTransport{base: base, value: value, host: host}
 }
 
+type tokenKey struct{}
+
+// WithSessionToken returns a context whose requests carry this token instead of the
+// transport's own. A server answering several managers uses it so that each one's
+// token is used for that one request only, and is never kept anywhere.
+func WithSessionToken(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, tokenKey{}, token)
+}
+
 func (t *sessionTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	value := t.value()
+	if v, ok := req.Context().Value(tokenKey{}).(string); ok {
+		value = v // a request's own token replaces the configured one, even when empty
+	}
 	if value == "" || req.URL.Host != t.host || !secureOrLoopback(req.URL) {
 		return t.base.RoundTrip(req)
 	}
