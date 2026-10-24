@@ -95,19 +95,24 @@ type backend struct {
 	players  []service.PlayerView
 	news     []service.NewsView
 
-	teamErr    error
-	newsErr    error
-	panicOn    string
-	delay      time.Duration
-	calls      []string
-	whatIf     service.WhatIfView
-	whatIfErr  error
-	lastWhatIf service.WhatIfNamedRequest
-	lastNews   service.NewsQuery
-	lastTr     service.TransfersRequest
-	lastPl     service.PlayerQuery
-	running    int
-	maxPar     int
+	teamErr     error
+	newsErr     error
+	panicOn     string
+	delay       time.Duration
+	calls       []string
+	chips       service.ChipsView
+	chipsErr    error
+	outlook     service.OutlookView
+	outlookErr  error
+	lastOutlook service.OutlookRequest
+	whatIf      service.WhatIfView
+	whatIfErr   error
+	lastWhatIf  service.WhatIfNamedRequest
+	lastNews    service.NewsQuery
+	lastTr      service.TransfersRequest
+	lastPl      service.PlayerQuery
+	running     int
+	maxPar      int
 }
 
 func (b *backend) enter(name string) func() {
@@ -145,6 +150,15 @@ func (b *backend) WhatIfNamed(_ context.Context, r service.WhatIfNamedRequest) (
 	defer b.enter("evaluate_transfers")()
 	b.lastWhatIf = r
 	return b.whatIf, b.whatIfErr
+}
+func (b *backend) Outlook(_ context.Context, r service.OutlookRequest) (service.OutlookView, error) {
+	defer b.enter("fixture_outlook")()
+	b.lastOutlook = r
+	return b.outlook, b.outlookErr
+}
+func (b *backend) Chips(context.Context) (service.ChipsView, error) {
+	defer b.enter("chip_planner")()
+	return b.chips, b.chipsErr
 }
 func (b *backend) SearchNews(_ context.Context, q service.NewsQuery) ([]service.NewsView, error) {
 	defer b.enter("search_news")()

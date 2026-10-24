@@ -169,15 +169,29 @@ func equalFold(a, b string) bool {
 type fakeFPL struct {
 	w *world
 
-	mu             sync.Mutex
-	entryCalls     int
-	fixtureCalls   int
-	bank           int
-	currentEvent   int
-	captainSlot    int
-	viceSlot       int
-	entryErr       error
-	missing        map[int]bool // team ids FPL answers 404 for
+	mu           sync.Mutex
+	entryCalls   int
+	fixtureCalls int
+	bank         int
+	currentEvent int
+	captainSlot  int
+	viceSlot     int
+	entryErr     error
+	missing      map[int]bool // team ids FPL answers 404 for
+
+	// What FPL says about the gameweek being scored.
+	livePoints     map[int]int             // player id -> points; absent means 0
+	liveMinutes    map[int]int             // player id -> minutes; absent means 0
+	liveExplain    map[int][]fpl.LiveMatch // player id -> where his points came from
+	chipsPlayed    []fpl.ChipUse           // chips the manager has already played
+	historyCalls   int
+	liveErr        error
+	liveCalls      int
+	picksCalls     int
+	picksErr       error
+	autoSubs       []fpl.AutoSub
+	chip           *string
+	transferCost   int
 	extraTransfers []fpl.Transfer
 }
 
@@ -199,15 +213,50 @@ func (f *fakeFPL) FetchEntry(_ context.Context, id int) (*fpl.Entry, error) {
 }
 
 func (f *fakeFPL) FetchPicks(context.Context, int, int) (*fpl.Picks, error) {
+	f.mu.Lock()
+	f.picksCalls++
+	f.mu.Unlock()
+	if f.picksErr != nil {
+		return nil, f.picksErr
+	}
 	var picks []fpl.Pick
 	for p := 1; p <= 15; p++ {
-		picks = append(picks, fpl.Pick{Element: 100 + p, Position: p, Multiplier: 1, ElementType: slotPosition(p),
+		mult := 1 // the XI scores once, the captain twice, the bench not at all
+		switch {
+		case p > 11:
+			mult = 0
+		case p == f.captainSlot:
+			mult = 2
+		}
+		picks = append(picks, fpl.Pick{Element: 100 + p, Position: p, Multiplier: mult, ElementType: slotPosition(p),
 			IsCaptain: p == f.captainSlot, IsViceCaptain: p == f.viceSlot})
 	}
-	return &fpl.Picks{Picks: picks, EntryHistory: fpl.EntryHistory{Event: f.currentEvent, Points: 55, OverallRank: 1234567, Bank: f.bank, Value: 1000}}, nil
+	return &fpl.Picks{Picks: picks, ActiveChip: f.chip, AutomaticSubs: f.autoSubs,
+		EntryHistory: fpl.EntryHistory{Event: f.currentEvent, Points: 55, TotalPoints: 400, OverallRank: 1234567, Bank: f.bank, Value: 1000, EventTransfersCost: f.transferCost}}, nil
+}
+
+func (f *fakeFPL) FetchLive(context.Context, int) (*fpl.LiveEvent, error) {
+	f.mu.Lock()
+	f.liveCalls++
+	f.mu.Unlock()
+	if f.liveErr != nil {
+		return nil, f.liveErr
+	}
+	var ev fpl.LiveEvent
+	for id := 100; id <= 230; id++ {
+		var lp fpl.LivePlayer
+		lp.ID = id
+		lp.Stats.TotalPoints, lp.Stats.Minutes = f.livePoints[id], f.liveMinutes[id]
+		lp.Explain = f.liveExplain[id]
+		ev.Elements = append(ev.Elements, lp)
+	}
+	return &ev, nil
 }
 
 func (f *fakeFPL) FetchHistory(context.Context, int) (*fpl.History, error) {
+	f.mu.Lock()
+	f.historyCalls++
+	f.mu.Unlock()
 	var cur []fpl.GameweekHistory
 	for gw := 1; gw <= f.currentEvent; gw++ {
 		g := fpl.GameweekHistory{Event: gw}
@@ -216,7 +265,7 @@ func (f *fakeFPL) FetchHistory(context.Context, int) (*fpl.History, error) {
 		}
 		cur = append(cur, g)
 	}
-	return &fpl.History{Current: cur}, nil
+	return &fpl.History{Current: cur, Chips: f.chipsPlayed}, nil
 }
 
 func (f *fakeFPL) FetchTransfers(context.Context, int) ([]fpl.Transfer, error) {

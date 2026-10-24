@@ -1215,3 +1215,206 @@ a.trylink {
   display: inline-block;
   margin-top: 6px;
 }
+
+/* points */
+.card {
+  position: relative;
+}
+.gwpts {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: #1a1503;
+  font-weight: 800;
+  font-size: 0.75rem;
+  line-height: 22px;
+  text-align: center;
+  border: 2px solid var(--surface);
+}
+.pointspanel {
+  border-width: 2px;
+}
+.pointspanel.live {
+  border-color: var(--good);
+}
+.pointspanel.waiting {
+  border-color: var(--warn);
+}
+.pointshead {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.pointshead .bignum {
+  font-size: 3rem;
+  line-height: 1;
+  min-width: 70px;
+  text-align: center;
+}
+.pill {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.pill.live {
+  background: var(--good-bg);
+  color: var(--good);
+}
+.pill.waiting {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.small {
+  font-size: 0.85rem;
+}
+tr.benchrow td {
+  color: var(--muted);
+}
+
+/* breakdown (FPL-style) */
+.breakdown {
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+  padding-top: 8px;
+}
+.breakdown h3 {
+  margin: 0 0 6px;
+}
+.matchbox {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0;
+}
+.matchhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.matchhead .score {
+  background: var(--surface);
+  padding: 2px 10px;
+  border-radius: 6px;
+  margin: 0 6px;
+}
+.matchbox table {
+  width: 100%;
+}
+
+/* chip planner */
+.chipgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+.chipcard header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.chipcard p {
+  margin: 6px 0;
+}
+.chipcard.unavailable {
+  opacity: 0.65;
+}
+.pill.verdict-good_week_now {
+  background: var(--good-bg);
+  color: var(--good);
+}
+.pill.verdict-wait {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.pill.verdict-unavailable,
+.pill.verdict-no_clear_week {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.chipbars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 96px;
+  margin: 10px 0 6px;
+}
+.chipbar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  position: relative;
+  border-radius: 4px;
+}
+.chipbar .col {
+  width: 70%;
+  background: var(--muted);
+  opacity: 0.55;
+  border-radius: 3px 3px 0 0;
+}
+.chipbar.best .col {
+  background: var(--accent);
+  opacity: 1;
+}
+.chipbar.now {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+.chipbar .val {
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+.chipbar .gw {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+.chipbar .dbl {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  font-size: 0.62rem;
+  background: var(--gold);
+  color: #1a1503;
+  border-radius: 6px;
+  padding: 0 3px;
+  font-weight: 700;
+}
+.chipnotes {
+  grid-column: 1 / -1;
+}
+
+/* captain choice */
+.detailactions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.captainpicker tr.iscaptain td {
+  background: var(--surface-2);
+  font-weight: 650;
+}
+.captainpicker td.actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.captainpicker td.actions button {
+  padding: 3px 12px;
+  cursor: pointer;
+}

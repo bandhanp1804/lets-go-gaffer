@@ -77,6 +77,10 @@ type squadEntry struct {
 	mu   sync.Mutex
 	snap *squadSnap
 	at   time.Time
+
+	cmu     sync.Mutex // guards the chip planner's result, which takes a few solves to compute
+	chips   *ChipsView
+	chipsAt time.Time
 }
 
 const maxCachedSquads = 64

@@ -18,6 +18,8 @@ export interface MyTeam {
   points_hit_so_far: number;
   chips_available?: string[];
   notes: string[];
+  xp_basis: string;
+  points: Points | null;
 }
 
 export interface Player {
@@ -33,6 +35,56 @@ export interface Player {
   status: string;
   news?: string;
   fixture?: string;
+  gw_points?: number;
+}
+
+export interface Points {
+  gameweek: number;
+  in_play: boolean;
+  started: boolean;
+  gross_points: number;
+  transfer_hit: number;
+  net_points: number;
+  points_on_bench: number;
+  chip?: string;
+  season_points: number;
+  overall_rank: number;
+  players: PointsPlayer[];
+  note: string;
+}
+
+export interface PointsPlayer {
+  id: number;
+  name: string;
+  team: string;
+  position: string;
+  points: number;
+  multiplier: number;
+  counted: number;
+  minutes: number;
+  captain: boolean;
+  vice_captain: boolean;
+  bench: boolean;
+  subbed_on: boolean;
+  subbed_off: boolean;
+  matches: MatchBreakdown[];
+}
+
+export interface MatchBreakdown {
+  home: string;
+  away: string;
+  home_score: number | null;
+  away_score: number | null;
+  status: string;
+  kickoff: string;
+  stats: StatRow[];
+  points: number;
+}
+
+export interface StatRow {
+  label: string;
+  value: number;
+  points: number;
 }
 
 export interface Lineup {
@@ -46,8 +98,15 @@ export interface Lineup {
   captain: string;
   vice_captain: string;
   captain_lead_over_vice: number;
+  captain_id: number;
+  vice_captain_id: number;
+  captain_chosen: boolean;
+  recommended_captain: string;
+  captain_cost: number;
+  captain_options: CaptainOption[];
   close_calls: CloseCall[];
   other_formations: Formation[];
+  xp_basis: string;
   best_formation: string;
   expected_points_vs_best: number;
   all_formations: Formation[];
@@ -56,6 +115,17 @@ export interface Lineup {
   players_in?: string[];
   players_out?: string[];
   notes: string[];
+}
+
+export interface CaptainOption {
+  id: number;
+  name: string;
+  team: string;
+  xp: number;
+  as_captain: number;
+  cost: number;
+  is_captain: boolean;
+  is_vice_captain: boolean;
 }
 
 export interface CloseCall {
@@ -79,6 +149,7 @@ export interface Transfers {
   horizon_gameweeks: number;
   transfers_already_made: number;
   points_hit_so_far: number;
+  xp_basis: string;
   suggestions: Suggestion[];
   notes: string[];
 }
@@ -157,6 +228,7 @@ export interface Squad {
   starting: Player[];
   bench: Player[];
   notes: string[];
+  xp_basis: string;
 }
 
 export interface Backtest {
@@ -267,6 +339,69 @@ export interface WhatIfRequest {
 export interface WhatIfMoveRequest {
   out: number;
   in: number;
+}
+
+export interface Chips {
+  first_gameweek: number;
+  gameweeks: number;
+  chips: ChipAdvice[];
+  notes: string[];
+  availability_note?: string;
+}
+
+export interface ChipAdvice {
+  chip: string;
+  name: string;
+  available: boolean;
+  verdict: string;
+  best_gameweek: number;
+  best_value: number;
+  this_week_value: number;
+  headline: string;
+  insights: string[];
+  weeks: ChipWeek[];
+}
+
+export interface ChipWeek {
+  gameweek: number;
+  value: number;
+  detail: string;
+  double: boolean;
+}
+
+export interface Outlook {
+  first_gameweek: number;
+  gameweeks: number;
+  players: OutlookPlayer[];
+  notes: string[];
+}
+
+export interface OutlookPlayer {
+  name: string;
+  team: string;
+  position: string;
+  price: string;
+  status: string;
+  news?: string;
+  in_your_squad: boolean;
+  weeks: OutlookWeek[];
+  best_gameweek: number;
+  best_gameweek_xp: number;
+  other_gameweeks_within_a_toss_up: number[];
+  total_xp: number;
+}
+
+export interface OutlookWeek {
+  gameweek: number;
+  fixtures: string[];
+  fixture_difficulty: number[];
+  xp: number;
+  as_captain: number;
+  as_triple_captain: number;
+  triple_captain_extra: number;
+  best_other_in_squad: string;
+  best_other_in_squad_xp: number;
+  lead_over_squad: number;
 }
 
 export interface NewsResponse {

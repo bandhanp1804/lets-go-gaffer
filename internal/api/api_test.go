@@ -23,6 +23,8 @@ const ui = "http://localhost:3001"
 
 // svc is a Service returning canned views and remembering the requests it saw.
 type svc struct {
+	lineupReq service.LineupRequest
+	chipsReq  service.ChipsRequest
 	whatIfReq service.WhatIfRequest
 	formation string
 	viewer    service.Viewer
@@ -50,6 +52,12 @@ func (s *svc) WhatIf(_ context.Context, r service.WhatIfRequest) (service.WhatIf
 	s.mu.Unlock()
 	return service.WhatIfView{Gameweek: 9, Valid: true, NetPoints: 1.5, Verdict: "worth_it"}, s.err
 }
+func (s *svc) ChipsFor(_ context.Context, r service.ChipsRequest) (service.ChipsView, error) {
+	s.mu.Lock()
+	s.chipsReq = r
+	s.mu.Unlock()
+	return service.ChipsView{FirstGameweek: 9, Gameweeks: 8, Chips: []service.ChipAdviceView{{Chip: "3xc", Name: "Triple Captain", Verdict: "wait", BestGameweek: 11}}}, s.err
+}
 func (s *svc) Backtest(context.Context) (service.BacktestView, error) {
 	return service.BacktestView{FirstGameweek: 3, LastGameweek: 8}, s.err
 }
@@ -62,9 +70,9 @@ func (s *svc) MyTeam(ctx context.Context) (service.MyTeamView, error) {
 	s.mu.Unlock()
 	return service.MyTeamView{TeamName: "Test FC", Gameweek: 9}, s.err
 }
-func (s *svc) LineupFormation(_ context.Context, f string) (service.LineupView, error) {
+func (s *svc) LineupWith(_ context.Context, r service.LineupRequest) (service.LineupView, error) {
 	s.mu.Lock()
-	s.formation = f
+	s.formation, s.lineupReq = r.Formation, r
 	s.mu.Unlock()
 	return service.LineupView{Formation: "4-4-2", Captain: "Haaland"}, s.err
 }
@@ -196,6 +204,7 @@ func TestReadEndpointsReturnJSON(t *testing.T) {
 		{"/api/status", `"deadline_in":"2d 3h"`},
 		{"/api/squad", `"formation":"3-4-3"`},
 		{"/api/backtest", `"last_gameweek":8`},
+		{"/api/chips", `"verdict":"wait"`},
 		{"/api/team", `"team_name":"Test FC"`},
 		{"/api/lineup", `"captain":"Haaland"`},
 		{"/api/transfers", `"gameweek":9`},
@@ -621,5 +630,32 @@ func TestWhatIfRejectsBadBodiesAndMapsServiceInputErrors(t *testing.T) {
 func TestWhatIfIsAPostOnly(t *testing.T) {
 	if w := newRig(t, nil).do("GET", "/api/whatif", "", nil); w.Code != 405 {
 		t.Errorf("GET = %d, want 405", w.Code)
+	}
+}
+
+func TestLineupCaptainAndViceReachTheService(t *testing.T) {
+	r := newRig(t, nil)
+
+	r.do("GET", "/api/lineup?formation=3-5-2&captain=14&vice=22", "", nil)
+
+	if got := r.svc.lineupReq; got != (service.LineupRequest{Formation: "3-5-2", Captain: 14, Vice: 22}) {
+		t.Errorf("request = %+v", got)
+	}
+	if w := r.do("GET", "/api/lineup?captain=salah", "", nil); w.Code != 400 || !strings.Contains(errorOf(t, w), "captain") {
+		t.Errorf("%d %s", w.Code, w.Body)
+	}
+	if w := r.do("GET", "/api/lineup?vice=x", "", nil); w.Code != 400 {
+		t.Errorf("%d", w.Code)
+	}
+}
+
+func TestChipsCaptainReachesTheService(t *testing.T) {
+	r := newRig(t, nil)
+	r.do("GET", "/api/chips?captain=14", "", nil)
+	if r.svc.chipsReq.Captain != 14 {
+		t.Errorf("request = %+v", r.svc.chipsReq)
+	}
+	if w := r.do("GET", "/api/chips?captain=x", "", nil); w.Code != 400 {
+		t.Errorf("%d", w.Code)
 	}
 }

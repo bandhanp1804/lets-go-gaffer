@@ -29,6 +29,8 @@ type Backend interface {
 	FindPlayers(ctx context.Context, q service.PlayerQuery) ([]service.PlayerView, error)
 	SearchNews(ctx context.Context, q service.NewsQuery) ([]service.NewsView, error)
 	WhatIfNamed(ctx context.Context, req service.WhatIfNamedRequest) (service.WhatIfView, error)
+	Outlook(ctx context.Context, req service.OutlookRequest) (service.OutlookView, error)
+	Chips(ctx context.Context) (service.ChipsView, error)
 }
 
 // tool is a function the model may ask to run.
@@ -86,6 +88,7 @@ func tools() []tool {
 				Name: "get_my_team",
 				Description: "The manager's own squad: starting XI and bench with each player's expected points for the next gameweek and next opponent, " +
 					"the bank, free transfers left, transfers already made this week, chips available, and whether the data is live or as of the last deadline. " +
+					"It also has the points the team has scored so far in the gameweek being played (\"points\": each player's points, the captain doubled, the transfer hit, the net score; in_play means provisional). " +
 					"Use for questions about their own team.",
 				InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 			},
@@ -184,8 +187,9 @@ func tools() []tool {
 					return "", err
 				}
 				return marshal(struct {
+					XPBasis string               `json:"xp_basis"`
 					Players []service.PlayerView `json:"players"`
-				}{v})
+				}{service.PlayersXPBasis, v})
 			},
 		},
 		{
@@ -287,6 +291,54 @@ func tools() []tool {
 				// formation and captain, drop the player lists, so the answer stays short.
 				v.Before.Starting, v.Before.Bench = []service.PlayerView{}, []service.PlayerView{}
 				v.After.Starting, v.After.Bench = []service.PlayerView{}, []service.PlayerView{}
+				return marshal(v)
+			},
+		},
+		{
+			spec: llm.Tool{
+				Name: "fixture_outlook",
+				Description: "Looks ahead week by week using the fixture list: for chosen players (by name; with none named, the manager's captain " +
+					"and best options), each of the next gameweeks' fixtures with their difficulty (double and blank gameweeks included), the player's expected points that gameweek, " +
+					"what he would score as captain and with Triple Captain that week, how far ahead of the rest of the manager's squad he is that week, " +
+					"and his best gameweek (with any other week within a toss-up of it). Use for 'when should I triple captain X', fixture runs, " +
+					"and 'is X's next month good'. The numbers are computed for you: choose between weeks by them and never work out a total yourself.",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{` +
+					`"players":{"type":"array","maxItems":6,"items":{"type":"string"},"description":"Player names as the manager said them. Omit to use the manager's captain and best captaincy options."},` +
+					`"gameweeks":{"type":"integer","minimum":1,"maximum":8,"description":"How many gameweeks ahead. Default 4."}}}`),
+			},
+			run: func(ctx context.Context, b Backend, in json.RawMessage, _ *refs) (string, error) {
+				var args struct {
+					Players   []string `json:"players"`
+					Gameweeks int      `json:"gameweeks"`
+				}
+				if err := decode(in, &args); err != nil {
+					return "", err
+				}
+				v, err := b.Outlook(ctx, service.OutlookRequest{Players: args.Players, Gameweeks: args.Gameweeks})
+				if err != nil {
+					return "", err
+				}
+				return marshal(v)
+			},
+		},
+		{
+			spec: llm.Tool{
+				Name: "chip_planner",
+				Description: "When to play each chip (Triple Captain, Bench Boost, Free Hit, Wildcard) from the fixture list ahead: for each chip, whether the manager still has it, " +
+					"a verdict (good_week_now, wait, no_clear_week, unavailable), the best gameweek, this week's value against the best, a one-sentence headline, " +
+					"and the value week by week. Use for 'should I play my wildcard/free hit/bench boost/triple captain now?' and 'which week is best for X'. " +
+					"The verdicts are computed for you: relay them and their numbers, and add nothing you worked out yourself. " +
+					"For one named player's fixtures, use fixture_outlook instead.",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+			},
+			run: func(ctx context.Context, b Backend, in json.RawMessage, _ *refs) (string, error) {
+				if err := decode(in, &struct{}{}); err != nil {
+					return "", err
+				}
+				v, err := b.Chips(ctx)
+				if err != nil {
+					return "", err
+				}
 				return marshal(v)
 			},
 		},

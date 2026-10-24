@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Async } from "../../components/Async.tsx";
+import { CaptainPicker } from "../../components/CaptainPicker.tsx";
+import { ChipPlanner } from "../../components/ChipPlanner.tsx";
 import { PlayerDetail } from "../../components/PlayerDetail.tsx";
 import { Notes } from "../../components/Notes.tsx";
 import { Pitch } from "../../components/Pitch.tsx";
@@ -13,7 +15,14 @@ import { useApi } from "../../lib/useApi.ts";
 export default function LineupPage() {
   const [formation, setFormation] = useState(""); // empty: the best
   const [picked, setPicked] = useState<Player | null>(null);
-  const lineup = useApi<Lineup>(`/api/lineup${query({ formation })}`);
+  // The manager's own choice of armband; null means the recommendation.
+  const [captain, setCaptain] = useState<number | null>(null);
+  const [vice, setVice] = useState<number | null>(null);
+  const lineup = useApi<Lineup>(`/api/lineup${query({ formation, captain: captain ?? undefined, vice: vice ?? undefined })}`);
+  const resetArmband = () => {
+    setCaptain(null);
+    setVice(null);
+  };
   return (
     <>
       <h1>Best XI</h1>
@@ -68,6 +77,7 @@ export default function LineupPage() {
                   aria-pressed={f.formation === l.formation}
                   onClick={() => {
                     setFormation(f.formation === l.best_formation ? "" : f.formation);
+                    resetArmband(); // a player who starts in one formation may not in another
                     setPicked(null);
                   }}
                   title={f.formation === l.best_formation ? "The best formation" : `${signed(f.expected_points_vs_best)} expected points against the best`}
@@ -84,8 +94,30 @@ export default function LineupPage() {
                 </button>
               </p>
             ) : null}
-            {picked ? <PlayerDetail p={picked} onClose={() => setPicked(null)} /> : null}
+            {picked ? (
+              <PlayerDetail
+                p={picked}
+                onClose={() => setPicked(null)}
+                actions={
+                  l.captain_options.some((o) => o.id === picked.id) ? (
+                    <>
+                      <button type="button" disabled={l.captain_id === picked.id} onClick={() => { setCaptain(picked.id); if (vice === picked.id) setVice(null); }}>
+                        {l.captain_id === picked.id ? "Captain" : "Make captain"}
+                      </button>
+                      <button type="button" disabled={l.vice_captain_id === picked.id || l.captain_id === picked.id} onClick={() => { setVice(picked.id); if (captain === picked.id) setCaptain(null); }}>
+                        {l.vice_captain_id === picked.id ? "Vice-captain" : "Make vice-captain"}
+                      </button>
+                    </>
+                  ) : (
+                    <span className="muted small">He is not in this XI, so he cannot wear the armband.</span>
+                  )
+                }
+              />
+            ) : null}
             <Pitch starting={l.starting} bench={l.bench} captain={l.captain} vice={l.vice_captain} onSelect={(p) => setPicked(picked?.id === p.id ? null : p)} selectedId={picked?.id} />
+
+            <CaptainPicker l={l} onCaptain={(id) => { setCaptain(id); if (vice === id) setVice(null); }} onVice={(id) => { setVice(id); if (captain === id) setCaptain(null); }} onReset={resetArmband} />
+            <ChipPlanner captain={l.captain_chosen ? l.captain_id : undefined} />
 
           </>
         )}

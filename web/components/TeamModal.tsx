@@ -121,12 +121,12 @@ export function TeamModal() {
                 </button>
                 <details className="snippet">
                   <summary>Read it first</summary>
-                  <p>It reads the login token from requests the FPL page makes itself and, as a fallback, from values that tab has stored, and shows it in a box. It sends nothing anywhere.</p>
+                  <p>It reads the login token from values your FPL tab has stored and from requests the page makes itself, and prints it in the console. It draws nothing on the page (a box there could be read by browser extensions) and sends nothing anywhere.</p>
                   <pre>{captureSnippet}</pre>
                 </details>
               </li>
               <li>
-                <strong>Do not reload the page</strong>: that removes the script. Instead click <strong>Transfers</strong> (or <strong>Pick Team</strong>) in FPL&apos;s menu. A box appears in the corner holding your token, and it is copied for you if the browser allows it. The script may also offer a token it found in the tab&apos;s storage straight away: try it, and if the app says FPL rejected it, click Transfers as above to catch the real one.
+                The console prints your token on a line of its own (and copies it for you if it can): select that line and copy it. If the app then says FPL rejected it, <strong>do not reload the page</strong>, which removes the script: click <strong>Transfers</strong> or <strong>Pick Team</strong> in FPL&apos;s menu instead, and the token FPL really sends is printed too, last.
               </li>
               <li>Paste it below.</li>
             </ol>

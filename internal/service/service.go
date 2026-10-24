@@ -76,6 +76,7 @@ type FPL interface {
 	FetchTransfers(ctx context.Context, teamID int) ([]fpl.Transfer, error)
 	FetchFixtures(ctx context.Context) (fpl.Fixtures, error)
 	FetchBootstrap(ctx context.Context) (*fpl.Bootstrap, error)
+	FetchLive(ctx context.Context, gameweek int) (*fpl.LiveEvent, error)
 }
 
 // Live reads the logged-in manager's squad as it stands now. It may be nil.
@@ -111,10 +112,11 @@ type Service struct {
 	deps Deps
 	cfg  Config
 
-	mu     sync.Mutex
-	base   *baseSnap
-	baseAt time.Time
-	squads map[squadKey]*squadEntry
+	mu          sync.Mutex
+	base        *baseSnap
+	baseAt      time.Time
+	squads      map[squadKey]*squadEntry
+	pointsCache // live points, kept briefly
 
 	btMu   sync.Mutex // the backtest takes seconds, so it has its own lock and cache
 	btKey  string
@@ -369,10 +371,28 @@ func (s *Service) MyTeam(ctx context.Context) (MyTeamView, error) {
 		Captain: nameOf(sq.team.Squad.Players, sq.team.Squad.Captain), ViceCaptain: nameOf(sq.team.Squad.Players, sq.team.Squad.ViceCaptain),
 		Bank: formatMoney(sq.fin.Bank), FreeTransfers: sq.fin.Free.Next, TransfersMade: sq.fin.PendingTransfers,
 		HitSoFar: sq.fin.PendingHit, ChipsAvailable: sq.fin.AvailableChips, Notes: joinNotes(base.notes, sq.notes),
+		XPBasis: fmt.Sprintf("each player's expected points in GW%d only", base.next),
+	}
+	team, _, werr := s.who(ctx)
+	if werr == nil {
+		pts, note := s.pointsFor(ctx, base, team)
+		v.Points = pts
+		if note != "" {
+			v.Notes = append(v.Notes, note)
+		}
+	}
+	gwPoints := map[int]int{}
+	if v.Points != nil {
+		for _, pp := range v.Points.Players {
+			gwPoints[pp.ID] = pp.Points
+		}
 	}
 	for _, p := range sq.team.Squad.Players {
 		pv := base.view(p, xp(p))
 		pv.SellPrice = formatMoney(sq.fin.Sell[p.ID])
+		if n, ok := gwPoints[p.ID]; ok {
+			pv.GWPoints = &n
+		}
 		if started[p.ID] {
 			v.Starting = append(v.Starting, pv)
 		} else {
@@ -383,22 +403,49 @@ func (s *Service) MyTeam(ctx context.Context) (MyTeamView, error) {
 }
 
 // Lineup recommends the best XI for the upcoming gameweek.
-func (s *Service) Lineup(ctx context.Context) (LineupView, error) { return s.LineupFormation(ctx, "") }
+func (s *Service) Lineup(ctx context.Context) (LineupView, error) {
+	return s.LineupWith(ctx, LineupRequest{})
+}
+
+// LineupRequest chooses how the lineup is built. The zero value is the best XI with the best captain.
+type LineupRequest struct {
+	Formation string // such as "3-4-3"; empty means the best
+	Captain   int    // a player id to captain instead of the recommendation; 0 means the best
+	Vice      int    // a player id for vice-captain; 0 means the best remaining
+}
 
 // LineupFormation is Lineup for a chosen formation such as "3-4-3"; empty means the best.
 // The captain, bench and close calls are worked out within the chosen formation, and the
 // list of formations still compares every one with the best.
 func (s *Service) LineupFormation(ctx context.Context, formation string) (LineupView, error) {
+	return s.LineupWith(ctx, LineupRequest{Formation: formation})
+}
+
+// LineupWith is Lineup for a chosen formation and, optionally, a chosen captain and vice-captain.
+// A captain must start, so choosing a player who does not in this formation is an input error.
+func (s *Service) LineupWith(ctx context.Context, req LineupRequest) (LineupView, error) {
 	base, sq, err := s.squadSnapshot(ctx)
 	if err != nil {
 		return LineupView{}, err
 	}
-	xp := base.model.ScoreFrom(base.next, 1)
-	advice, err := lineup.Advise(sq.team.Squad.Players, lineup.Options{XP: xp, Formation: formation})
-	if errors.Is(err, lineup.ErrUnknownFormation) {
-		return LineupView{}, badInput("%q is not a formation FPL allows (such as 4-4-2 or 3-5-2)", formation)
+	squad := sq.team.Squad.Players
+	for _, id := range []int{req.Captain, req.Vice} {
+		if id != 0 && nameOf(squad, id) == "" {
+			return LineupView{}, badInput("player %d is not in your squad", id)
+		}
 	}
-	if err != nil {
+	formation := req.Formation
+	xp := base.model.ScoreFrom(base.next, 1)
+	advice, err := lineup.Advise(squad, lineup.Options{XP: xp, Formation: formation, Captain: req.Captain, ViceCaptain: req.Vice})
+	var ns *lineup.NotStartingError
+	switch {
+	case errors.Is(err, lineup.ErrUnknownFormation):
+		return LineupView{}, badInput("%q is not a formation FPL allows (such as 4-4-2 or 3-5-2)", formation)
+	case errors.As(err, &ns):
+		return LineupView{}, badInput("%s is not in the starting XI, so he cannot be %s: choose one of the eleven who start", nameOf(squad, ns.ID), ns.Role)
+	case errors.Is(err, lineup.ErrSameCaptain):
+		return LineupView{}, badInput("the captain and the vice-captain must be different players")
+	case err != nil:
 		return LineupView{}, err
 	}
 
@@ -407,6 +454,15 @@ func (s *Service) LineupFormation(ctx context.Context, formation string) (Lineup
 		Gameweek: base.next, Source: s.source(sq), AsOf: s.asOf(sq), Formation: advice.Formation, ExpectedPoints: round1(advice.Total),
 		Captain: advice.Captain.Player.WebName, ViceCaptain: advice.ViceCaptain.Player.WebName,
 		CaptainLead: round2(advice.Captain.XP - advice.ViceCaptain.XP), Notes: joinNotes(base.notes, sq.notes),
+		XPBasis:   fmt.Sprintf("each player's expected points in GW%d only", base.next),
+		CaptainID: advice.Captain.Player.ID, ViceCaptainID: advice.ViceCaptain.Player.ID,
+		CaptainChosen:      req.Captain != 0 || req.Vice != 0,
+		RecommendedCaptain: advice.BestCaptain.Player.WebName,
+		CaptainOptions:     captainOptions(base, advice),
+	}
+	// Both figures are rounded first, so what is shown subtracts exactly.
+	if cost := round1(advice.BestTotal) - round1(advice.Total); cost > 0 {
+		v.CaptainCost = round1(cost)
 	}
 	var ids []int
 	for _, e := range advice.Starting {
@@ -494,7 +550,7 @@ func (s *Service) Transfers(ctx context.Context, req TransfersRequest) (Transfer
 	v := TransfersView{
 		Gameweek: base.next, Source: s.source(sq), AsOf: s.asOf(sq), Wildcard: req.Wildcard, FreeTransfers: free, Bank: formatMoney(sq.fin.Bank),
 		Horizon: horizon, PendingTransfers: sq.fin.PendingTransfers, PendingHit: sq.fin.PendingHit,
-		Notes: joinNotes(base.notes, sq.notes), Suggestions: []SuggestionView{},
+		Notes: joinNotes(base.notes, sq.notes), Suggestions: []SuggestionView{}, XPBasis: averageBasis(horizon),
 	}
 	if !sq.live {
 		v.Notes = append(v.Notes, "Selling prices are computed from FPL's rule (half of any price rise is kept, rounded down); the FPL transfers page shows the exact figures.")
@@ -814,4 +870,24 @@ func (s *Service) SearchNews(ctx context.Context, q NewsQuery) ([]NewsView, erro
 		out = append(out, nv)
 	}
 	return out, nil
+}
+
+// captainOptions lists the starters as captains, best first, with what choosing each gives up.
+func captainOptions(base *baseSnap, a lineup.Advice) []CaptainOptionView {
+	out := make([]CaptainOptionView, 0, len(a.Starting))
+	best := round1(a.BestCaptain.XP)
+	for _, e := range a.Starting {
+		x := round1(e.XP)
+		out = append(out, CaptainOptionView{
+			ID: e.Player.ID, Name: e.Player.WebName, Team: base.short[e.Player.TeamID], XP: x, AsCaptain: round1(2 * x),
+			Cost: round1(best - x), Captain: e.Player.ID == a.Captain.Player.ID, Vice: e.Player.ID == a.ViceCaptain.Player.ID,
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].XP != out[j].XP {
+			return out[i].XP > out[j].XP
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
 }
