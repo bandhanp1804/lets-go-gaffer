@@ -258,6 +258,28 @@ func TestTransfers_FindsTheObviousUpgradeAndCountsFreeTransfers(t *testing.T) {
 	}
 }
 
+// A swap has two prices and two fixtures; the summary pairs each with the right
+// player so the model quotes the sentence instead of crossing the fields.
+func TestTransfers_MoveSummaryPairsEachPriceAndFixtureWithItsPlayer(t *testing.T) {
+	r := newRig(t, rigOpts{})
+
+	got, err := r.svc.Transfers(context.Background(), service.TransfersRequest{})
+
+	if err != nil || len(got.Suggestions) == 0 {
+		t.Fatalf("err %v suggestions %d", err, len(got.Suggestions))
+	}
+	for _, m := range got.Suggestions[0].Moves {
+		want := m.Out.Name + " (" + m.Out.Team + ", " + m.Out.Position + "), sells for " + m.Out.SellPrice + " out, " +
+			m.In.Name + " (" + m.In.Team + ", " + m.In.Position + "), costs " + m.In.Price + " in"
+		if !strings.HasPrefix(m.Summary, want) {
+			t.Errorf("summary = %q, want prefix %q", m.Summary, want)
+		}
+		if m.Out.Fixture != "" && !strings.Contains(m.Summary, m.Out.Name+" plays "+m.Out.Fixture) {
+			t.Errorf("summary %q lacks %s's fixture %q", m.Summary, m.Out.Name, m.Out.Fixture)
+		}
+	}
+}
+
 func TestTransfers_WithNoFreeTransferEveryMoveCostsAHit(t *testing.T) {
 	r := newRig(t, rigOpts{})
 	zero := 0
