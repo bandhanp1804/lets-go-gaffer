@@ -81,7 +81,7 @@ func runServe(ctx context.Context, w io.Writer, args []string) error {
 		if err != nil {
 			return err
 		}
-		a := assistant.New(model, svc, assistant.Config{Model: llm.ModelFromEnv()})
+		a := assistant.New(model, svc, assistant.Config{Model: llm.ModelFromEnv(), Clubs: clubLegend(ctx, svc)})
 		cfg.NewConversation = func() api.Conversation { return a.NewSession() }
 	} else {
 		fmt.Fprintln(w, "ANTHROPIC_API_KEY is not set: /api/ask is off, the other endpoints work.")

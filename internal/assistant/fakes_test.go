@@ -95,16 +95,19 @@ type backend struct {
 	players  []service.PlayerView
 	news     []service.NewsView
 
-	teamErr  error
-	newsErr  error
-	panicOn  string
-	delay    time.Duration
-	calls    []string
-	lastNews service.NewsQuery
-	lastTr   service.TransfersRequest
-	lastPl   service.PlayerQuery
-	running  int
-	maxPar   int
+	teamErr    error
+	newsErr    error
+	panicOn    string
+	delay      time.Duration
+	calls      []string
+	whatIf     service.WhatIfView
+	whatIfErr  error
+	lastWhatIf service.WhatIfNamedRequest
+	lastNews   service.NewsQuery
+	lastTr     service.TransfersRequest
+	lastPl     service.PlayerQuery
+	running    int
+	maxPar     int
 }
 
 func (b *backend) enter(name string) func() {
@@ -137,6 +140,11 @@ func (b *backend) FindPlayers(_ context.Context, q service.PlayerQuery) ([]servi
 	defer b.enter("find_players")()
 	b.lastPl = q
 	return b.players, nil
+}
+func (b *backend) WhatIfNamed(_ context.Context, r service.WhatIfNamedRequest) (service.WhatIfView, error) {
+	defer b.enter("evaluate_transfers")()
+	b.lastWhatIf = r
+	return b.whatIf, b.whatIfErr
 }
 func (b *backend) SearchNews(_ context.Context, q service.NewsQuery) ([]service.NewsView, error) {
 	defer b.enter("search_news")()

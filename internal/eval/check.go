@@ -101,7 +101,8 @@ func ToolInputHas(tool, text string) Check {
 }
 
 // Grounded passes when none of the assistant's own checks fired on any answer:
-// no invented numbers, no citation that does not exist, no uncited news.
+// no invented numbers, no citation that does not exist, no uncited news, no club
+// named that the data never mentioned.
 func Grounded() Check {
 	return Check{"grounded", func(r Result) error {
 		for _, a := range r.Answers {
@@ -206,17 +207,4 @@ func listTools(r Result) string {
 		return "none"
 	}
 	return strings.Join(names, ", ")
-}
-
-// clubNames are full names of clubs the fixtures use or a model might confuse with them.
-var clubNames = []string{"Manchester City", "Man City", "Brighton", "Sunderland", "Newcastle", "Chelsea", "Arsenal", "Liverpool",
-	"Crystal Palace", "Fulham", "Aston Villa", "Bournemouth", "Nottingham", "Wolverhampton", "Hull", "Ipswich", "Brentford", "Tottenham", "West Ham"}
-
-// ShortClubCodes passes when the answer uses the tools' club codes (MCI) and not full
-// club names, which a model writes from memory and can get wrong. Use it only where the
-// answer has no news in it, since a story's own text may name clubs in full.
-func ShortClubCodes() Check {
-	c := Omits(clubNames...)
-	c.Name = "uses club codes, not remembered club names"
-	return c
 }

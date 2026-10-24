@@ -88,7 +88,7 @@ func TestAsk_TellsTheModelTheRulesItMustFollow(t *testing.T) {
 			t.Errorf("tool %q has an invalid input schema: %s", tool.Name, tool.InputSchema)
 		}
 	}
-	for _, want := range []string{"get_my_team", "best_lineup", "suggest_transfers", "find_players", "search_news"} {
+	for _, want := range []string{"get_my_team", "best_lineup", "suggest_transfers", "find_players", "search_news", "evaluate_transfers"} {
 		if !names[want] {
 			t.Errorf("missing tool %q", want)
 		}
@@ -522,5 +522,231 @@ func TestAsk_ToolCallsSeeTheViewerOfTheRequest(t *testing.T) {
 
 	if len(b.seen) != 1 || b.seen[0] != want {
 		t.Errorf("the tool saw %+v, want %+v", b.seen, want)
+	}
+}
+
+func whatIfView() service.WhatIfView {
+	pv := func(name string) service.PlayerView {
+		return service.PlayerView{ID: 1, Name: name, Team: "BHA", Position: "MID", Price: "£5.0m"}
+	}
+	return service.WhatIfView{
+		Gameweek: 9, Horizon: 4, Valid: true, Problems: []string{}, Transfers: 1, FreeTransfers: 1, FreeNextWeek: 1,
+		BankBefore: "£0.9m", BankAfter: "£0.2m", GainPerGameweek: 1.1, NetPoints: 4.4, Verdict: "worth_it",
+		Insights: []string{"Worth doing: it adds +4.4 points over 4 gameweeks after the cost of the transfers."},
+		Moves:    []service.WhatIfMoveView{{Out: pv("Hughes"), In: pv("Gomez")}},
+		Weeks:    []service.WhatIfWeekView{{Gameweek: 9, Before: 60, After: 61.1, Delta: 1.1}},
+		Before:   service.WhatIfLineupView{Formation: "4-3-3", ExpectedPoints: 60, Captain: "Haaland", Starting: []service.PlayerView{pv("LONGLIST-A")}, Bench: []service.PlayerView{pv("LONGLIST-B")}},
+		After:    service.WhatIfLineupView{Formation: "4-3-3", ExpectedPoints: 61.1, Captain: "Haaland", Starting: []service.PlayerView{pv("LONGLIST-C")}, Bench: []service.PlayerView{pv("LONGLIST-D")}},
+		Notes:    []string{},
+	}
+}
+
+func TestAsk_EvaluateTransfersPassesTheNamesAsTheManagerSaidThemAndReturnsTheVerdict(t *testing.T) {
+	s, m, b := setup(
+		turn{calls: []call{{name: "evaluate_transfers", input: `{"moves":[{"sell":"Hughes","buy":"Gomez","buy_club":"BHA"}],"horizon_gameweeks":6,"free_transfers":2}`}}},
+		turn{text: []string{"Worth doing."}},
+	)
+	b.whatIf = whatIfView()
+
+	ask(t, s, "What if I swap Hughes for Gomez?")
+
+	zero2 := 2
+	got := b.lastWhatIf
+	if len(got.Moves) != 1 || got.Moves[0] != (service.NamedMove{Out: "Hughes", In: "Gomez", InTeam: "BHA"}) || got.Horizon != 6 || got.Free == nil || *got.Free != zero2 {
+		t.Errorf("the backend was asked %+v", got)
+	}
+	res := m.lastToolResults()[0]
+	if res.IsError || !strings.Contains(res.Content, `"verdict":"worth_it"`) || !strings.Contains(res.Content, "Worth doing") || !strings.Contains(res.Content, `"net_points_over_horizon":4.4`) {
+		t.Errorf("the model must get the verdict and figures: %s", res.Content)
+	}
+	if strings.Contains(res.Content, "LONGLIST") {
+		t.Errorf("the full lineups are long and the insights already say who starts: they must be left out: %s", res.Content)
+	}
+	if !strings.Contains(res.Content, `"captain":"Haaland"`) {
+		t.Errorf("the lineup summary must stay: %s", res.Content)
+	}
+}
+
+func TestAsk_EvaluateTransfersIsStrictAboutItsArguments(t *testing.T) {
+	for name, in := range map[string]string{
+		"no moves":      `{"moves":[]}`,
+		"missing moves": `{}`,
+		"unknown field": `{"moves":[{"sell":"A","buy":"B","force":true}]}`,
+		"wrong type":    `{"moves":[{"sell":1,"buy":"B"}]}`,
+		"ids not names": `{"moves":[{"out":101,"in":201}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, m, b := setup(turn{calls: []call{{name: "evaluate_transfers", input: in}}}, turn{text: []string{"ok"}})
+
+			ask(t, s, "q")
+
+			res := m.lastToolResults()[0]
+			if !res.IsError {
+				t.Errorf("want an error the model can read and correct, got %s", res.Content)
+			}
+			if len(b.lastWhatIf.Moves) != 0 {
+				t.Errorf("a malformed call must not reach the backend: %+v", b.lastWhatIf)
+			}
+		})
+	}
+}
+
+func TestAsk_EvaluateTransfersShowsTheModelWhyANameFailed(t *testing.T) {
+	s, m, b := setup(
+		turn{calls: []call{{name: "evaluate_transfers", input: `{"moves":[{"sell":"Messi","buy":"Gomez"}]}`}}},
+		turn{text: []string{"He is not in your squad."}},
+	)
+	b.whatIfErr = &service.InputError{Msg: `none of your players is called "Messi". Your squad: Raya, Haaland`}
+
+	ans := ask(t, s, "What if I sell Messi?")
+
+	res := m.lastToolResults()[0]
+	if !res.IsError || !strings.Contains(res.Content, "Your squad: Raya, Haaland") {
+		t.Errorf("the model needs the helpful message to answer: %+v", res)
+	}
+	if len(ans.ToolCalls) != 1 || ans.ToolCalls[0].Error == "" {
+		t.Errorf("tool calls = %+v", ans.ToolCalls)
+	}
+}
+
+func TestAsk_EvaluateTransfersReportsAnIllegalPlanAsDataNotAsAnError(t *testing.T) {
+	s, m, b := setup(
+		turn{calls: []call{{name: "evaluate_transfers", input: `{"moves":[{"sell":"Raya","buy":"Haaland"}]}`}}},
+		turn{text: []string{"That breaks a rule."}},
+	)
+	b.whatIf = service.WhatIfView{Valid: false, Problems: []string{"Raya (GKP) cannot be replaced by Haaland (FWD): a transfer must be like for like."}, Insights: []string{}}
+
+	ask(t, s, "What if I swap Raya for Haaland?")
+
+	res := m.lastToolResults()[0]
+	if res.IsError || !strings.Contains(res.Content, `"valid":false`) || !strings.Contains(res.Content, "like for like") {
+		t.Errorf("a rule break is a normal answer: %+v", res)
+	}
+}
+
+var testClubs = map[string]string{"MCI": "Man City", "BHA": "Brighton", "BOU": "Bournemouth", "NEW": "Newcastle", "TOT": "Spurs", "WOL": "Wolves"}
+
+func setupClubs(turns ...turn) (*assistant.Session, *scripted, *backend) {
+	m := &scripted{turns: turns}
+	b := newBackend()
+	a := assistant.New(m, b, assistant.Config{Model: "claude-test", Clubs: testClubs})
+	return a.NewSession(), m, b
+}
+
+func TestClubs_TheModelIsToldThisSeasonsClubsAndNotToUseMemory(t *testing.T) {
+	s, m, _ := setupClubs(turn{text: []string{"hi"}})
+
+	ask(t, s, "hello")
+
+	sys := m.reqs[0].System
+	for _, want := range []string{"Clubs", "BHA = Brighton", "BOU = Bournemouth", "MCI = Man City", "never from memory"} {
+		if !strings.Contains(sys, want) {
+			t.Errorf("the system prompt lacks %q", want)
+		}
+	}
+	if strings.Index(sys, "BHA = Brighton") < strings.Index(sys, "Style") {
+		t.Errorf("the club list belongs at the end, after the standing rules")
+	}
+}
+
+func TestClubs_ANameFromMemoryThatTheDataNeverMentionedIsFlagged(t *testing.T) {
+	// The squad view (a Haaland fixture against BHA) is what the tool returned; the answer says Bournemouth.
+	b := newBackend()
+	b.team.Starting[0].Fixture = "BHA (H)"
+	m := &scripted{turns: []turn{{calls: []call{{name: "get_my_team"}}}, {text: []string{"Haaland plays Bournemouth at home."}}}}
+	s := assistant.New(m, b, assistant.Config{Model: "claude-test", Clubs: testClubs}).NewSession()
+
+	ans := ask(t, s, "Who does Haaland play?")
+
+	if !slices.Equal(ans.UnknownClubs, []string{"Bournemouth"}) {
+		t.Errorf("unknown clubs = %v", ans.UnknownClubs)
+	}
+	if w := strings.Join(ans.Warnings(), " "); !strings.Contains(w, "Bournemouth") {
+		t.Errorf("the warning must name it: %q", w)
+	}
+}
+
+func TestClubs_ARightNameIsNotFlagged(t *testing.T) {
+	cases := map[string]string{
+		"by name, from the data":      "Haaland plays Brighton at home.",
+		"by code":                     "Haaland plays BHA at home.",
+		"an alias of a known club":    "Haaland is at Brighton and Hove Albion.",
+		"the manager's own club word": "Your Man City striker plays Brighton.",
+	}
+	for name, answer := range cases {
+		t.Run(name, func(t *testing.T) {
+			b := newBackend()
+			b.team.Starting[0].Fixture = "BHA (H)"
+			b.team.Starting[0].Team = "MCI"
+			m := &scripted{turns: []turn{{calls: []call{{name: "get_my_team"}}}, {text: []string{answer}}}}
+			s := assistant.New(m, b, assistant.Config{Model: "claude-test", Clubs: testClubs}).NewSession()
+
+			ans := ask(t, s, "Who does Haaland play?")
+
+			if len(ans.UnknownClubs) != 0 {
+				t.Errorf("%q flagged %v", answer, ans.UnknownClubs)
+			}
+		})
+	}
+}
+
+func TestClubs_AClubTheManagerNamedIsKnownEvenIfNoToolReturnedIt(t *testing.T) {
+	s, _, _ := setupClubs(turn{text: []string{"I do not have Spurs fixtures to hand."}})
+
+	ans := ask(t, s, "How are Spurs doing?")
+
+	if len(ans.UnknownClubs) != 0 {
+		t.Errorf("the manager said Spurs: %v", ans.UnknownClubs)
+	}
+}
+
+func TestClubs_AClubNamedInNewsTextIsKnown(t *testing.T) {
+	m := &scripted{turns: []turn{{calls: []call{{name: "search_news", input: `{"query":"x"}`}}}, {text: []string{"Wolves are mentioned."}}}}
+	b := newBackend()
+	b.news[0].Content = "Wolves host a depleted side."
+	s := assistant.New(m, b, assistant.Config{Model: "claude-test", Clubs: testClubs}).NewSession()
+
+	ans := ask(t, s, "news?")
+
+	if len(ans.UnknownClubs) != 0 {
+		t.Errorf("%v", ans.UnknownClubs)
+	}
+}
+
+func TestClubs_NoLegendMeansNoCheck(t *testing.T) {
+	s, m, _ := setup(turn{text: []string{"Bournemouth, Brighton, anything."}})
+
+	ans := ask(t, s, "q")
+
+	if len(ans.UnknownClubs) != 0 || strings.Contains(m.reqs[0].System, "Clubs\n") {
+		t.Errorf("without a legend: %v", ans.UnknownClubs)
+	}
+}
+
+func TestClubs_WhatIsKnownCarriesOverToTheNextQuestion(t *testing.T) {
+	b := newBackend()
+	b.team.Starting[0].Fixture = "BHA (H)"
+	m := &scripted{turns: []turn{{calls: []call{{name: "get_my_team"}}}, {text: []string{"BHA at home."}}, {text: []string{"Brighton again."}}}}
+	s := assistant.New(m, b, assistant.Config{Model: "claude-test", Clubs: testClubs}).NewSession()
+
+	ask(t, s, "q1")
+	ans := ask(t, s, "and who is that?")
+
+	if len(ans.UnknownClubs) != 0 {
+		t.Errorf("Brighton was in an earlier result of this conversation: %v", ans.UnknownClubs)
+	}
+}
+
+func TestAsk_NumbersInAToolsErrorMessageCountAsGrounded(t *testing.T) {
+	s, _, b := setup(
+		turn{calls: []call{{name: "evaluate_transfers", input: `{"moves":[{"sell":"Messi","buy":"Gomez"}]}`}}},
+		turn{text: []string{"Messi is not one of your 15 players."}},
+	)
+	b.whatIfErr = &service.InputError{Msg: `none of your players is called "Messi". Your squad (15 players): Raya, Haaland`}
+
+	ans := ask(t, s, "What if I sell Messi?")
+
+	if len(ans.Ungrounded) != 0 {
+		t.Errorf("the 15 came from the tool's own message: %v", ans.Ungrounded)
 	}
 }

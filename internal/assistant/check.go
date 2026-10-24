@@ -92,8 +92,73 @@ func (a Answer) Warnings() []string {
 	if len(a.Ungrounded) > 0 {
 		w = append(w, fmt.Sprintf("These numbers appear in no tool result and may have been calculated or invented: %s.", strings.Join(a.Ungrounded, ", ")))
 	}
+	if len(a.UnknownClubs) > 0 {
+		w = append(w, fmt.Sprintf("Names %s, a club that appears nowhere in the data the tools returned, so it may be a mistake.", strings.Join(a.UnknownClubs, ", ")))
+	}
 	if a.Truncated {
 		w = append(w, "The answer was cut off at the token limit.")
 	}
 	return w
+}
+
+// clubSet knows this season's clubs, to catch an answer that names one the data never did.
+type clubSet struct {
+	codes  []string
+	names  map[string][]string // code -> lower-case names to look for
+	codeRE map[string]*regexp.Regexp
+	nameRE map[string]*regexp.Regexp
+}
+
+// aliases are other ways of writing a club's name. FPL says "Man City"; people say Manchester City.
+var aliases = map[string][]string{
+	"man city":      {"manchester city"},
+	"man utd":       {"manchester united", "man united"},
+	"spurs":         {"tottenham", "tottenham hotspur"},
+	"nott'm forest": {"nottingham forest", "notts forest"},
+	"wolves":        {"wolverhampton", "wolverhampton wanderers"},
+	"newcastle":     {"newcastle united"},
+	"west ham":      {"west ham united"},
+	"leeds":         {"leeds united"},
+	"brighton":      {"brighton and hove albion", "brighton & hove albion"},
+}
+
+func newClubSet(clubs map[string]string) clubSet {
+	cs := clubSet{names: map[string][]string{}, codeRE: map[string]*regexp.Regexp{}, nameRE: map[string]*regexp.Regexp{}}
+	for code, name := range clubs {
+		cs.codes = append(cs.codes, code)
+		variants := append([]string{strings.ToLower(name)}, aliases[strings.ToLower(name)]...)
+		cs.names[code] = variants
+		cs.codeRE[code] = regexp.MustCompile(`\b` + regexp.QuoteMeta(code) + `\b`) // codes are written in capitals
+		quoted := make([]string, len(variants))
+		for i, v := range variants {
+			quoted[i] = regexp.QuoteMeta(v)
+		}
+		cs.nameRE[code] = regexp.MustCompile(`(?i)\b(?:` + strings.Join(quoted, "|") + `)\b`)
+	}
+	sort.Strings(cs.codes)
+	return cs
+}
+
+// markMentioned records the clubs a piece of text mentions, by code or by name.
+func (cs clubSet) markMentioned(text string, seen map[string]bool) {
+	for _, code := range cs.codes {
+		if !seen[code] && (cs.codeRE[code].MatchString(text) || cs.nameRE[code].MatchString(text)) {
+			seen[code] = true
+		}
+	}
+}
+
+// unknownIn lists the clubs an answer names (by full name) that nothing before it
+// mentioned, so they came from the model's memory, which can be wrong.
+func (cs clubSet) unknownIn(answer string, seen map[string]bool) []string {
+	var out []string
+	for _, code := range cs.codes {
+		if seen[code] {
+			continue
+		}
+		if m := cs.nameRE[code].FindString(answer); m != "" {
+			out = append(out, m)
+		}
+	}
+	return out
 }

@@ -108,12 +108,14 @@ The tests truncate every table and refuse to run against a database whose name d
 
 ## Asking questions (`ask`, `chat`)
 
-`gaffer ask "…"` answers in plain English by letting Claude (Haiku by default; set `ANTHROPIC_MODEL=claude-sonnet-5-5` for richer prose) call five read-only tools: `get_my_team`, `best_lineup`, `suggest_transfers`, `find_players` (structured filters: position, club, price, availability) and `search_news`. `-v` shows which tools it called and the tokens used. `chat` keeps the conversation, so follow-ups see earlier answers and keep their citations.
+`gaffer ask "…"` answers in plain English by letting Claude (Haiku by default; set `ANTHROPIC_MODEL=claude-sonnet-5-5` for richer prose) call six read-only tools: `get_my_team`, `best_lineup`, `suggest_transfers`, `evaluate_transfers` ("what if I swap Hughes for Gomez?": the same rule-checked what-if as the web page, with players given by name), `find_players` (structured filters: position, club, price, availability) and `search_news`. `-v` shows which tools it called and the tokens used. `chat` keeps the conversation, so follow-ups see earlier answers and keep their citations.
 
 The model narrates; Go computes and checks. It is told never to calculate, and is not given the chance to:
 
 - **Numbers arrive precomputed and formatted** (`"£6.1m"`, `"xp": 5.1`). After each answer, every number in it must appear in a tool result or in your question; anything else (a sum or a gap the model worked out itself) is flagged under "Checks".
 - **Citations are forced by construction.** News reaches the model as reference numbers with no URL; Go builds the Sources list from its own record, and a cited number that does not exist, or news used without citing it, is flagged. FPL's own injury notes are shown as "official FPL player note", not as a link.
+- **Names are matched in Go, not by the model.** `evaluate_transfers` takes the names as the manager said them; Go matches them (ignoring case, accents and punctuation), narrows a name two players share by the sold player's position and an optional club, and says plainly when it is still ambiguous, so the model asks instead of guessing.
+- **Clubs come from a list, not from memory.** The model is given this season's club codes and names, and an answer that names a club the data and your question never mentioned is flagged, because it once called BHA "Bournemouth".
 - **News text is untrusted.** It is delivered with a warning, and every tool is read-only, so a poisoned headline cannot change anything: the assistant cannot make transfers or alter your FPL team.
 - **Freshness is stated by the tools.** Every squad answer carries `squad_as_of` ("now (live from FPL)" or "the GW8 deadline") and notes about an expired session or stored history that lags a finished gameweek.
 - **The upcoming gameweek comes from FPL's schedule**, not from how far the stored data goes: once a deadline passes, that gameweek is locked and you are deciding for the next.

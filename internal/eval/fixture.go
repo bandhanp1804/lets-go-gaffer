@@ -2,6 +2,8 @@ package eval
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -92,7 +94,7 @@ func NewFixture() *Fixture {
 	}
 	f.news = []service.NewsView{
 		{Title: "Saka a doubt for Chelsea after hamstring knock", Source: "bbc", URL: "https://example.test/saka", Published: "2026-10-22T07:00:00Z", Age: "3h", Players: []string{"Saka"}, Similarity: 0.80,
-			Content: "Arteta confirmed Saka picked up a hamstring knock in training and will be assessed before the weekend."},
+			Content: "Arsenal manager Mikel Arteta confirmed Saka picked up a hamstring knock in training and will be assessed before the weekend."},
 		{Title: "Haaland back in full training", Source: "sky", URL: "https://example.test/haaland", Published: "2026-10-21T20:00:00Z", Age: "14h", Players: []string{"Haaland"}, Similarity: 0.78,
 			Content: "Guardiola says Haaland trained fully and is available for the visit of Brighton."},
 		{Title: "Slot: Salah fully fit", Source: "bbc", URL: "https://example.test/salah", Published: "2026-10-21T15:00:00Z", Age: "19h", Players: []string{"Salah"}, Similarity: 0.74,
@@ -226,4 +228,90 @@ func contains(xs []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// WhatIfNamed is a deterministic stand-in for the real evaluator: it applies the same
+// kinds of rule (the sale must be one of the squad, like for like, the money) with simple
+// arithmetic on the fixture's own numbers, so a run measures how the model uses the tool.
+func (f *Fixture) WhatIfNamed(_ context.Context, req service.WhatIfNamedRequest) (service.WhatIfView, error) {
+	horizon := req.Horizon
+	if horizon < 1 {
+		horizon = 4
+	}
+	squad := append(append([]service.PlayerView{}, f.team.Starting...), f.team.Bench...)
+	find := func(pool []service.PlayerView, name string) (service.PlayerView, bool) {
+		for _, p := range pool {
+			if strings.EqualFold(p.Name, strings.TrimSpace(name)) {
+				return p, true
+			}
+		}
+		return service.PlayerView{}, false
+	}
+	v := service.WhatIfView{
+		Gameweek: f.team.Gameweek, Horizon: horizon, Problems: []string{}, Moves: []service.WhatIfMoveView{}, Insights: []string{},
+		Weeks: []service.WhatIfWeekView{}, Notes: []string{}, BankBefore: f.team.Bank, BankAfter: f.team.Bank,
+		FreeTransfers: f.team.FreeTransfers,
+	}
+	bank := priceTenths(f.team.Bank)
+	var gain float64
+	for _, m := range req.Moves {
+		out, ok := find(squad, m.Out)
+		if !ok {
+			return service.WhatIfView{}, &service.InputError{Msg: fmt.Sprintf("none of your players is called %q. Your squad (15 players): Raya, Gabriel, Saliba, Van Dijk, Porro, Salah, Saka, Rice, Belloumi, Haaland, Joao Pedro, Flekken, Hall, Hughes, Strand Larsen", m.Out)}
+		}
+		in, ok := find(append(append([]service.PlayerView{}, f.market...), squad...), m.In)
+		if !ok {
+			return service.WhatIfView{}, &service.InputError{Msg: fmt.Sprintf("no player is called %q: use the name as it appears on FPL", m.In)}
+		}
+		if out.Position != in.Position {
+			v.Problems = append(v.Problems, fmt.Sprintf("%s (%s) cannot be replaced by %s (%s): a transfer must be like for like.", out.Name, out.Position, in.Name, in.Position))
+			continue
+		}
+		sell := priceTenths(out.Price)
+		bank += sell - priceTenths(in.Price)
+		gain += in.XP - out.XP
+		out.SellPrice = out.Price
+		v.Moves = append(v.Moves, service.WhatIfMoveView{Out: out, In: in, OutRun: []string{}, InRun: []string{}})
+	}
+	if len(v.Problems) > 0 {
+		v.Moves = []service.WhatIfMoveView{}
+		return v, nil
+	}
+	if bank < 0 {
+		v.Problems = append(v.Problems, "You would be over budget: the buys cost more than the sales and your bank cover.")
+		v.Moves = []service.WhatIfMoveView{}
+		return v, nil
+	}
+	n := len(v.Moves)
+	v.Valid, v.Transfers = true, n
+	v.Hit = 4 * max(0, n-v.FreeTransfers)
+	v.FreeNextWeek = 1
+	v.BankAfter = fmt.Sprintf("£%d.%dm", bank/10, bank%10)
+	v.GainPerGameweek = math.Round(gain*10) / 10
+	v.NetPoints = math.Round((float64(horizon)*gain-float64(v.Hit))*10) / 10
+	switch {
+	case v.NetPoints > 0.3:
+		v.Verdict = "worth_it"
+		v.Insights = append(v.Insights, fmt.Sprintf("Worth doing: it adds +%.1f points over %d gameweeks after the cost of the transfers.", v.NetPoints, horizon))
+	case v.NetPoints < -0.3:
+		v.Verdict = "not_worth_it"
+		v.Insights = append(v.Insights, fmt.Sprintf("Not worth it: over %d gameweeks it loses %.1f points once the transfers' cost is counted.", horizon, -v.NetPoints))
+	default:
+		v.Verdict = "toss_up"
+		v.Insights = append(v.Insights, fmt.Sprintf("A toss-up: over %d gameweeks the gain and the cost roughly cancel (net %.1f).", horizon, v.NetPoints))
+	}
+	v.Insights = append(v.Insights, fmt.Sprintf("Your bank goes from %s to %s.", v.BankBefore, v.BankAfter))
+	v.Before = service.WhatIfLineupView{Formation: f.lineup.Formation, ExpectedPoints: f.lineup.ExpectedPoints, Captain: f.lineup.Captain, ViceCaptain: f.lineup.ViceCaptain, Starting: []service.PlayerView{}, Bench: []service.PlayerView{}}
+	v.After = v.Before
+	return v, nil
+}
+
+// Clubs is the club legend for the fixture's season, as the real service supplies it.
+func (f *Fixture) Clubs() map[string]string {
+	return map[string]string{
+		"ARS": "Arsenal", "AVL": "Aston Villa", "BHA": "Brighton", "BOU": "Bournemouth", "BRE": "Brentford", "BUR": "Burnley",
+		"CHE": "Chelsea", "CRY": "Crystal Palace", "EVE": "Everton", "FUL": "Fulham", "LEE": "Leeds", "LIV": "Liverpool",
+		"MCI": "Man City", "MUN": "Man Utd", "NEW": "Newcastle", "NFO": "Nott'm Forest", "SUN": "Sunderland", "TOT": "Spurs",
+		"WHU": "West Ham", "WOL": "Wolves",
+	}
 }
