@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Markdown } from "../../components/Markdown.tsx";
 import { ApiError, ask } from "../../lib/api.ts";
 import { webURL } from "../../lib/format.ts";
-import type { AskDone } from "../../lib/types.ts";
+import type { AskDone } from "../../lib/types.gen.ts";
 
 interface Turn {
   question: string;
@@ -113,7 +113,7 @@ export default function Ask() {
               {t.done ? (
                 <details className="meta">
                   <summary>
-                    {t.done.tools.length} tool call{t.done.tools.length === 1 ? "" : "s"} · {t.done.usage.InputTokens + t.done.usage.OutputTokens} tokens
+                    {t.done.tools.length} tool call{t.done.tools.length === 1 ? "" : "s"} · {t.done.usage.input_tokens + t.done.usage.output_tokens} tokens
                   </summary>
                   <ul>
                     {t.done.tools.map((c, j) => (

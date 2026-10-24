@@ -59,11 +59,11 @@ func (s *svc) Transfers(_ context.Context, r service.TransfersRequest) (service.
 	s.mu.Unlock()
 	return service.TransfersView{Gameweek: 9}, s.err
 }
-func (s *svc) FindPlayers(_ context.Context, q service.PlayerQuery) ([]service.PlayerView, error) {
+func (s *svc) Players(_ context.Context, q service.PlayerQuery) (service.PlayersView, error) {
 	s.mu.Lock()
 	s.players = q
 	s.mu.Unlock()
-	return []service.PlayerView{{Name: "Rice"}}, s.err
+	return service.PlayersView{Players: []service.PlayerView{{Name: "Rice"}}, Total: 668, Offset: q.Offset, Limit: 25}, s.err
 }
 func (s *svc) SearchNews(_ context.Context, q service.NewsQuery) ([]service.NewsView, error) {
 	s.mu.Lock()
@@ -184,7 +184,7 @@ func TestReadEndpointsReturnJSON(t *testing.T) {
 		{"/api/team", `"team_name":"Test FC"`},
 		{"/api/lineup", `"captain":"Haaland"`},
 		{"/api/transfers", `"gameweek":9`},
-		{"/api/players", `"players":[{`},
+		{"/api/players", `"total":668`},
 		{"/api/news?q=saka", `"stories":[{`},
 	}
 	for _, tt := range tests {
@@ -205,14 +205,14 @@ func TestQueryParametersReachTheService(t *testing.T) {
 	r := newRig(t, nil)
 
 	r.do("GET", "/api/transfers?wildcard=true&free_transfers=2&horizon=6&max_transfers=3", "", nil)
-	r.do("GET", "/api/players?position=MID&team=ARS&name=Rice&status=any&sort_by=price&max_price=8.5&min_price=5&limit=7", "", nil)
+	r.do("GET", "/api/players?position=MID&team=ARS&name=Rice&status=any&sort_by=price&sort_dir=desc&max_price=8.5&min_price=5&limit=7&offset=14", "", nil)
 	r.do("GET", "/api/news?q=injury&player=Saka&days=3&limit=4", "", nil)
 
 	two := 2
 	if got := r.svc.transfr; !got.Wildcard || *got.Free != two || got.Horizon != 6 || got.Max != 3 {
 		t.Errorf("transfers request = %+v", got)
 	}
-	if got := r.svc.players; got != (service.PlayerQuery{Position: "MID", Team: "ARS", Name: "Rice", Status: "any", SortBy: "price", MaxPrice: 8.5, MinPrice: 5, Limit: 7}) {
+	if got := r.svc.players; got != (service.PlayerQuery{Position: "MID", Team: "ARS", Name: "Rice", Status: "any", SortBy: "price", SortDir: "desc", MaxPrice: 8.5, MinPrice: 5, Limit: 7, Offset: 14}) {
 		t.Errorf("player query = %+v", got)
 	}
 	if got := r.svc.news; got != (service.NewsQuery{Query: "injury", Player: "Saka", Days: 3, Limit: 4}) {
@@ -251,6 +251,7 @@ func TestBadParametersAre400WithAMessage(t *testing.T) {
 		{"/api/transfers?horizon=soon", "horizon"},
 		{"/api/players?max_price=cheap", "max_price"},
 		{"/api/players?limit=1.5", "limit"},
+		{"/api/players?offset=next", "offset"},
 		{"/api/news?days=x", "days"},
 	}
 	for _, tt := range tests {

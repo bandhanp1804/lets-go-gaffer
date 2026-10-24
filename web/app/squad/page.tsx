@@ -6,7 +6,7 @@ import { Notes } from "../../components/Notes.tsx";
 import { Pitch } from "../../components/Pitch.tsx";
 import { one } from "../../lib/format.ts";
 import { query } from "../../lib/api.ts";
-import type { Squad } from "../../lib/types.ts";
+import type { Squad } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
 
 export default function SquadPage() {

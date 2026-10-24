@@ -87,17 +87,21 @@ func TestWithLiveSquad_BuildsTheSquadAndTheExactFinances(t *testing.T) {
 	}
 }
 
+// FPL's transfers.cost is the price of each transfer beyond the free ones (always 4), not the
+// points lost so far: with nothing made it still reads 4. The hit is (made - limit) * cost.
 func TestWithLiveSquad_FreeTransfersLeftAreTheAllowanceMinusThoseMade(t *testing.T) {
 	tests := []struct {
 		name                           string
 		limit, made, cost              int
 		wantFree, wantPending, wantHit int
 	}{
+		{"as FPL really sends it with nothing made: 4 is the price, not a hit", 1, 0, 4, 1, 0, 0},
 		{"two made against one free: nothing left, one hit", 1, 2, 4, 0, 2, 4},
-		{"one made against two free: one left, no hit", 2, 1, 0, 1, 1, 0},
-		{"none made", 3, 0, 0, 3, 0, 0},
-		{"exactly the allowance", 2, 2, 0, 0, 2, 0},
-		{"far over the allowance", 1, 4, 12, 0, 4, 12},
+		{"one made against two free: one left, no hit", 2, 1, 4, 1, 1, 0},
+		{"none made", 3, 0, 4, 3, 0, 0},
+		{"exactly the allowance", 2, 2, 4, 0, 2, 0},
+		{"far over the allowance", 1, 4, 4, 0, 4, 12},
+		{"no fixed allowance (a Wildcard or Free Hit is active): never a hit", 0, 5, 4, 0, 5, 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -4,7 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/config"
 )
@@ -108,4 +110,89 @@ func TestLoadDotEnv_MalformedLineReportsItsNumberNotItsContent(t *testing.T) {
 	if strings.Contains(err.Error(), "SUPER_SECRET") {
 		t.Errorf("err = %q leaks file content", err)
 	}
+}
+
+func TestLiveVar_PicksUpAChangedFileWithoutARestart(t *testing.T) {
+	unsetForTest(t, "LIVE_TOKEN")
+	path := filepath.Join(t.TempDir(), ".env")
+	write := func(content string, mod time.Time) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mod, mod); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t0 := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	write("OTHER=1\nLIVE_TOKEN=old\n", t0)
+	v := config.NewLiveVar(path, "LIVE_TOKEN")
+
+	if got := v.Get(); got != "old" {
+		t.Fatalf("first read = %q", got)
+	}
+	write("OTHER=1\nLIVE_TOKEN=\"new value\"\n", t0.Add(time.Minute))
+	if got := v.Get(); got != "new value" {
+		t.Errorf("after the file changed = %q, want the new value (and quotes removed)", got)
+	}
+}
+
+func TestLiveVar_FallsBackToTheEnvironment(t *testing.T) {
+	t.Setenv("LIVE_TOKEN", "from-env")
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+
+	v := config.NewLiveVar(path, "LIVE_TOKEN")
+	if got := v.Get(); got != "from-env" {
+		t.Errorf("no file: %q", got)
+	}
+
+	if err := os.WriteFile(path, []byte("OTHER=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := v.Get(); got != "from-env" {
+		t.Errorf("file without the key: %q", got)
+	}
+
+	if err := os.WriteFile(path, []byte("LIVE_TOKEN=from-file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := v.Get(); got != "from-file" {
+		t.Errorf("the file must win while it has the key: %q", got)
+	}
+}
+
+func TestLiveVar_AFileThatCannotBeParsedKeepsTheLastGoodValue(t *testing.T) {
+	unsetForTest(t, "LIVE_TOKEN")
+	path := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(path, []byte("LIVE_TOKEN=good\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	v := config.NewLiveVar(path, "LIVE_TOKEN")
+	if v.Get() != "good" {
+		t.Fatal("setup")
+	}
+
+	if err := os.WriteFile(path, []byte("this line has no equals sign\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := v.Get(); got != "good" {
+		t.Errorf("a bad edit must not wipe the token: %q", got)
+	}
+}
+
+func TestLiveVar_IsSafeForConcurrentUse(t *testing.T) {
+	t.Setenv("LIVE_TOKEN", "x")
+	v := config.NewLiveVar(filepath.Join(t.TempDir(), ".env"), "LIVE_TOKEN")
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 100 {
+				_ = v.Get()
+			}
+		}()
+	}
+	wg.Wait()
 }

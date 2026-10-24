@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { availability, pitchLines, roleOf } from "./pitch.ts";
-import type { Player } from "./types.ts";
+import type { Player } from "./types.gen.ts";
 
 const p = (name: string, position: string): Player => ({
   id: 0, name, team: "ARS", position, price: "£5.0m", xp: 1, form: "1", total_points: 1, status: "available",

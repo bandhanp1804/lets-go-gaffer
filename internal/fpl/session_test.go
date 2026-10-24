@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -241,5 +242,42 @@ func TestSessionTransport_NeverSendsTheTokenOverPlainHTTPToARealHost(t *testing.
 				t.Error("the caller's request was modified")
 			}
 		})
+	}
+}
+
+// A server runs for days and the token lasts an hour, so the transport must use the
+// token as it is now, not as it was when the client was built.
+func TestSessionTransportFunc_UsesTheCurrentTokenOnEveryRequest(t *testing.T) {
+	var seen []http.Header
+	srv := sessionServer(t, &seen)
+	var mu sync.Mutex
+	current := "wrong-old-token"
+	get := func() string { mu.Lock(); defer mu.Unlock(); return current }
+	hc := &http.Client{Transport: fpl.NewSessionTransportFunc(nil, get, hostOf(srv))}
+	client := fpl.NewHTTPClientWithBaseURL(hc, srv.URL)
+
+	if _, err := client.FetchMyTeam(context.Background(), 4321); !errors.Is(err, fpl.ErrSessionRejected) {
+		t.Fatalf("the old token should be rejected, err = %v", err)
+	}
+	mu.Lock()
+	current = secret // the manager pasted a fresh token; nothing was restarted
+	mu.Unlock()
+
+	if _, err := client.FetchMyTeam(context.Background(), 4321); err != nil {
+		t.Errorf("the fresh token must be used on the next request: %v", err)
+	}
+}
+
+func TestSessionTransportFunc_AnEmptyTokenSendsNothing(t *testing.T) {
+	var seen []http.Header
+	srv := sessionServer(t, &seen)
+	hc := &http.Client{Transport: fpl.NewSessionTransportFunc(nil, func() string { return "" }, hostOf(srv))}
+
+	_, _ = fpl.NewHTTPClientWithBaseURL(hc, srv.URL).FetchMyTeam(context.Background(), 4321)
+
+	for _, h := range seen {
+		if h.Get("X-Api-Authorization") != "" {
+			t.Errorf("a header was sent with an empty token")
+		}
 	}
 }

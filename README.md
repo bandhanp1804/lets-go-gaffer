@@ -127,13 +127,13 @@ Known limits: the number check can be satisfied by coincidence (a small number t
 
 | Endpoint | Query parameters |
 |---|---|
-| `GET /api/status` | dashboard: upcoming gameweek and deadline countdown, how far the stored history goes, player/club/news counts, FPL session state (never the token) |
+| `GET /api/status` | dashboard: upcoming gameweek, the gameweek in play, deadline countdown, how far the stored history goes, player/club/news counts, FPL session state (never the token) |
 | `GET /api/squad` | `horizon` (default 4): the best legal squad from scratch under £100.0m, with XI, bench, captain |
 | `GET /api/backtest` | how the scoring model did on played gameweeks, including the out-of-sample check (cached until new history arrives) |
 | `GET /api/team` | your squad, bank, free transfers, with `squad_as_of` and freshness notes |
 | `GET /api/lineup` | the best XI, captain, bench order and close calls for the upcoming gameweek |
 | `GET /api/transfers` | `wildcard`, `free_transfers`, `horizon`, `max_transfers` |
-| `GET /api/players` | `position`, `team`, `name`, `status`, `sort_by`, `min_price`, `max_price`, `limit` |
+| `GET /api/players` | `position`, `team`, `name`, `status`, `min_price`, `max_price`, `sort_by` (`xp`, `form`, `price`, `points`, `name`, `team`, `position`), `sort_dir`, `limit` (up to 100), `offset`; returns `players`, `total`, `offset`, `limit` |
 | `GET /api/news` | `q` (required), `player`, `days`, `limit` |
 | `POST /api/ask` | JSON `{"question": "...", "session_id": "..."}`, answered as a server-sent-event stream |
 | `GET /api/healthz` | liveness |
@@ -145,6 +145,10 @@ curl -s 'localhost:8080/api/players?position=MID&max_price=8&limit=3'
 curl -sN -H 'Content-Type: application/json' -d '{"question":"Who should I captain?"}' localhost:8080/api/ask
 ```
 
+**Lists are never `null`.** A Go `nil` slice would be sent as `null`, so the JSON writer turns every nil list into `[]` (`internal/api/nonnil.go`), and the web client can rely on it. The same guarantee is what the generated TypeScript types assume.
+
+**A new FPL token needs no restart.** The session token lasts an hour and the server may run for days, so `gaffer serve` re-reads `FPL_AUTH_HEADER` from `.env` whenever the file changes, and drops its cached squad when the token changes. Paste a fresh token and the next request is live.
+
 **Why it refuses some requests.** The server has no login, because it is for your own machine, and it will not listen on anything but loopback. But a browser will call `localhost` on behalf of any page you have open, so a hostile site could read your squad or spend your API credits. Three rules stop that: a request whose `Origin` is not on the `-origins` list gets 403; a request whose `Host` is not `localhost`/`127.0.0.1` gets 403 (this defeats DNS rebinding, where a hostile name is re-pointed at 127.0.0.1 and the browser sends no `Origin`); and a `POST` must be `application/json`, which a page cannot send cross-origin without a CORS preflight that this server never answers. No CORS headers are sent at all: the planned UI reaches the API through a Next.js rewrite, so it is same-origin.
 
 ## Web UI (`web/`)
@@ -155,7 +159,9 @@ Screens: **Dashboard** (next deadline countdown, how far the stored data goes, F
 
 - **No CORS and no keys in the browser.** `next.config.mjs` rewrites `/api/*` to the Go server (`GAFFER_API`, default `http://127.0.0.1:8080`), so the browser only talks to its own origin, and the Go server's Origin and Host guard still applies through the proxy.
 - **Answers are rendered from text, never HTML.** `lib/markdown.ts` turns the assistant's markdown into data and React builds elements from it, so nothing the model (or a news story it read) writes can inject markup or a script link. Only `http(s)` addresses become links.
-- **Few dependencies.** Next, React and TypeScript, pinned exactly; no UI kit, chart library or CSS framework (plain CSS, light and dark). The types in `lib/types.ts` mirror the Go views by hand, so a field renamed in Go must be renamed there.
+- **Few dependencies.** Next, React and TypeScript, pinned exactly; no UI kit, chart library or CSS framework (plain CSS, light and dark).
+- **Types come from Go.** `web/lib/types.gen.ts` is generated from the Go response structs by `go run ./cmd/gentypes` (a small stdlib reflection generator in `internal/tsgen`), and a Go test fails when the committed file is stale, so a renamed or added field cannot silently drift from the client.
+- **The players table pages on the server** (up to 100 a page, with the total), sorts by clicking any column header, and the ordering is stable so a page never repeats or skips a player.
 - **Tests:** `npm test` runs Node's built-in test runner over the pure logic (the SSE parser, pitch grouping, the markdown reader); `npm run typecheck` checks types. I also drove the Ask page in headless Chrome against the real API to check that the stream arrives incrementally.
 
 ## Evaluating the assistant (`eval`)

@@ -1,5 +1,5 @@
 import { pitchLines, roleOf } from "../lib/pitch.ts";
-import type { Player } from "../lib/types.ts";
+import type { Player } from "../lib/types.gen.ts";
 import { PlayerCard } from "./PlayerCard.tsx";
 
 /** A starting XI on a pitch, goalkeeper at the top, with the bench underneath. */

@@ -592,3 +592,38 @@ tr.total td {
     grid-column: 1 / -1;
   }
 }
+
+/* sortable table headers, pager */
+th button.sort {
+  all: unset;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  white-space: nowrap;
+}
+th button.sort:hover,
+th button.sort:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+}
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 8px 0;
+}
+.pager .muted {
+  margin-right: auto;
+}
+.pager label.inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.dim {
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}

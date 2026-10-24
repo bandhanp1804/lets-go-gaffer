@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/assistant"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/config"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/db"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/embed"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
@@ -69,14 +70,14 @@ func buildService(ctx context.Context) (*service.Service, func(), error) {
 		return nil, nil, fmt.Errorf("open database: %w", err)
 	}
 
-	session := os.Getenv(sessionEnv)
+	// The token lasts an hour and this process may run for days (gaffer serve), so it is
+	// read again whenever .env changes instead of once at startup.
+	token := config.NewLiveVar(".env", sessionEnv)
 	deps := service.Deps{
-		Store:   db.NewStore(pool),
-		FPL:     fpl.NewHTTPClient(politeClient(100 * time.Millisecond)),
-		Session: session,
-	}
-	if session != "" {
-		deps.Live = fpl.NewHTTPClient(sessionClient(session))
+		Store:     db.NewStore(pool),
+		FPL:       fpl.NewHTTPClient(politeClient(100 * time.Millisecond)),
+		SessionFn: token.Get,
+		Live:      fpl.NewHTTPClient(sessionClientFunc(token.Get)), // sends nothing while the token is empty
 	}
 	// News search needs Voyage. Without a key the assistant still works; that tool reports it is unavailable.
 	if vkey := os.Getenv("VOYAGE_API_KEY"); vkey != "" {
