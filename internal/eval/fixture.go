@@ -76,7 +76,7 @@ func NewFixture() *Fixture {
 		Gameweek: 9, Source: "live", AsOf: "now (live from FPL)", FreeTransfers: 1, Bank: "£0.9m", Horizon: 4, Notes: []string{},
 		Suggestions: []service.SuggestionView{
 			{Moves: []service.MoveView{m1}, Transfers: 1, Hit: 0, GainPerGameweek: 1.1, NetPoints: 4.4, BankAfter: "£1.6m"},
-			{Moves: []service.MoveView{m1, m2}, Transfers: 2, Hit: 4, GainPerGameweek: 2.2, NetPoints: 4.8, BankAfter: "£1.0m"},
+			{Moves: []service.MoveView{m1, m2}, Transfers: 2, Hit: 4, GainPerGameweek: 2.2, NetPoints: 4.8, NetVsFirst: 0.4, BankAfter: "£1.0m"},
 		},
 	}
 	f.wildcard = service.TransfersView{

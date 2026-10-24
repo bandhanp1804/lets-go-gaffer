@@ -73,6 +73,7 @@ go run ./cmd/gaffer squad
 go run ./cmd/gaffer ask "Who should I captain this week?"   # needs ANTHROPIC_API_KEY
 go run ./cmd/gaffer chat                                     # a conversation with follow-ups
 go run ./cmd/gaffer eval                                     # measure the assistant (spends API tokens)
+go run ./cmd/gaffer serve                                    # the HTTP API on http://127.0.0.1:8080
 go run ./cmd/gaffer backtest        # how well does the scoring model predict past gameweeks?
 ```
 
@@ -119,6 +120,29 @@ The model narrates; Go computes and checks. It is told never to calculate, and i
 
 Known limits: the number check can be satisfied by coincidence (a small number that happens to appear elsewhere in a tool result), and it cannot judge whether a sentence is true. Your question and the tool results, including your squad, are sent to Anthropic's API. News search needs `VOYAGE_API_KEY`; without it that one tool reports itself unavailable.
 
+## HTTP API (`serve`)
+
+`gaffer serve [-addr 127.0.0.1:8080] [-origins http://localhost:3001]` serves the same service layer the CLI uses, as JSON. It needs `GAFFER_DSN`; `/api/ask` also needs `ANTHROPIC_API_KEY` (and news search `VOYAGE_API_KEY`).
+
+| Endpoint | Query parameters |
+|---|---|
+| `GET /api/team` | your squad, bank, free transfers, with `squad_as_of` and freshness notes |
+| `GET /api/lineup` | the best XI, captain, bench order and close calls for the upcoming gameweek |
+| `GET /api/transfers` | `wildcard`, `free_transfers`, `horizon`, `max_transfers` |
+| `GET /api/players` | `position`, `team`, `name`, `status`, `sort_by`, `min_price`, `max_price`, `limit` |
+| `GET /api/news` | `q` (required), `player`, `days`, `limit` |
+| `POST /api/ask` | JSON `{"question": "...", "session_id": "..."}`, answered as a server-sent-event stream |
+| `GET /api/healthz` | liveness |
+
+`/api/ask` streams `session` (the conversation id, sent first), then `text` deltas, then one `done` event carrying the full text, `sources`, `warnings` (the grounding checks), the `tools` used and token `usage`. Send the `session_id` back to continue the conversation; one question runs at a time per conversation (a second gets 409), and a conversation is forgotten after 30 idle minutes. A failure after streaming starts arrives as an `error` event with a generic message; the detail is in the server log, not the response. Problems with the request itself (bad parameter, unknown club) are `400` with a message written for the caller.
+
+```
+curl -s 'localhost:8080/api/players?position=MID&max_price=8&limit=3'
+curl -sN -H 'Content-Type: application/json' -d '{"question":"Who should I captain?"}' localhost:8080/api/ask
+```
+
+**Why it refuses some requests.** The server has no login, because it is for your own machine, and it will not listen on anything but loopback. But a browser will call `localhost` on behalf of any page you have open, so a hostile site could read your squad or spend your API credits. Three rules stop that: a request whose `Origin` is not on the `-origins` list gets 403; a request whose `Host` is not `localhost`/`127.0.0.1` gets 403 (this defeats DNS rebinding, where a hostile name is re-pointed at 127.0.0.1 and the browser sends no `Origin`); and a `POST` must be `application/json`, which a page cannot send cross-origin without a CORS preflight that this server never answers. No CORS headers are sent at all: the planned UI reaches the API through a Next.js rewrite, so it is same-origin.
+
 ## Evaluating the assistant (`eval`)
 
 `gaffer eval [-run NAME] [-n 3] [-workers 2] [-min 0.9]` runs 14 fixed scenarios against the real model and exits non-zero when the pass rate falls below `-min`. Each scenario is run `-n` times because model output varies.
@@ -149,14 +173,14 @@ It beats form in every one of the five gameweeks. Settings were tuned and then r
 Done:
 - **Core data:** hardened FPL client, Postgres + pgvector, worker-pool ingestion, news ingestion and semantic search, your real squad, free-transfer and selling-price modelling.
 - **Decisions:** backtested expected-points model, exact squad optimizer, transfer and Wildcard suggestions, and the **lineup advisor** (best XI, captain, bench order, close calls).
-- **Ask:** a Claude assistant over read-only tools, with Go-enforced citation and number checks.
+- **Ask:** a Claude assistant over read-only tools, with Go-enforced citation and number checks, and an eval harness that measures it.
+- **HTTP API:** JSON endpoints and a streaming `/api/ask`, with browser-attack protections for a localhost server.
 
 Planned, in order:
-1. **HTTP API and web UI:**
-   - A JSON API in Go on the standard library (`net/http`), bound to localhost, with graceful shutdown, request logging, and short caches for expensive endpoints. The CLI commands and the API share one service layer instead of duplicating logic.
-   - A **Next.js (React, TypeScript) UI** in `web/` that calls it through a Next.js rewrite, so there is no CORS and no keys in the browser. One frontend only: Next.js is React, so a second Angular app would mean building every screen twice.
-   - Screens: dashboard (gameweek, data freshness); **my team** on a pitch with availability flags; **best XI for the next gameweek**; **transfers and Wildcard** with the hit and selling prices shown; squad builder; players table with xP; news search with filters; model page with the backtest.
-   - Docker image, structured logging, metrics.
+1. **Web UI:**
+   - A **Next.js (React, TypeScript) UI** in `web/` that calls the API through a Next.js rewrite, so there is no CORS and no keys in the browser. One frontend only: Next.js is React, so a second Angular app would mean building every screen twice.
+   - Screens: dashboard (gameweek, data freshness); **my team** on a pitch with availability flags; **best XI for the next gameweek**; **transfers and Wildcard** with the hit and selling prices shown; players table with xP; news search with filters; an ask box that streams answers; squad builder and model/backtest pages (these need service methods and endpoints first).
+   - Docker image, metrics.
 2. **Deploy:** Helm, Terraform on Azure AKS (student credit), CI, dashboards.
 3. **Stretch:** Temporal to run the daily ingest as durable workflows.
 

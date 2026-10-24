@@ -135,6 +135,8 @@ func TestChecks(t *testing.T) {
 		{"mentions: one missing", eval.Mentions("a", "b"), eval.Result{Answers: []assistant.Answer{ans("a")}}, true},
 		{"any: second matches", eval.MentionsAny("x", "y"), eval.Result{Answers: []assistant.Answer{ans("y")}}, false},
 		{"any: none", eval.MentionsAny("x", "y"), eval.Result{Answers: []assistant.Answer{ans("z")}}, true},
+		{"club codes: a remembered name", eval.ShortClubCodes(), eval.Result{Answers: []assistant.Answer{ans("Haaland faces Brighton at home")}}, true},
+		{"club codes: codes only", eval.ShortClubCodes(), eval.Result{Answers: []assistant.Answer{ans("Haaland faces BHA (H)")}}, false},
 		{"omits: present", eval.Omits("BANANA"), eval.Result{Answers: []assistant.Answer{ans("banana")}}, true},
 		{"omits: absent", eval.Omits("BANANA"), eval.Result{Answers: []assistant.Answer{ans("apple")}}, false},
 		{"the last answer is the one judged", eval.Mentions("b"), eval.Result{Answers: []assistant.Answer{ans("b"), ans("a")}}, true},

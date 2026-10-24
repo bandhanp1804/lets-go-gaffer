@@ -56,25 +56,17 @@ func newAnthropic(key string) (*llm.Anthropic, error) {
 	})}, llm.Config{APIKey: key})
 }
 
-// buildAssistant wires the database, FPL, the optional live session, the embedder,
-// and Claude into an assistant. The caller closes the returned function when done.
-func buildAssistant(ctx context.Context) (*assistant.Assistant, func(), error) {
-	dsn, key := os.Getenv("GAFFER_DSN"), os.Getenv("ANTHROPIC_API_KEY")
+// buildService wires the database, FPL, the optional live session, and the embedder into
+// the service the CLI, the assistant and the API share. The caller calls the returned
+// function when done.
+func buildService(ctx context.Context) (*service.Service, func(), error) {
+	dsn := os.Getenv("GAFFER_DSN")
 	if dsn == "" {
 		return nil, nil, errors.New("GAFFER_DSN is not set")
-	}
-	if key == "" {
-		return nil, nil, errors.New("ANTHROPIC_API_KEY is not set (add it to .env)")
 	}
 	pool, err := db.Open(ctx, dsn)
 	if err != nil {
 		return nil, nil, fmt.Errorf("open database: %w", err)
-	}
-
-	model, err := newAnthropic(key)
-	if err != nil {
-		pool.Close()
-		return nil, nil, err
 	}
 
 	session := os.Getenv(sessionEnv)
@@ -105,8 +97,25 @@ func buildAssistant(ctx context.Context) (*assistant.Assistant, func(), error) {
 
 	teamID := 0
 	fmt.Sscanf(strings.TrimSpace(os.Getenv("GAFFER_TEAM_ID")), "%d", &teamID)
-	svc := service.New(deps, service.Config{TeamID: teamID})
-	return assistant.New(model, svc, assistant.Config{Model: llm.ModelFromEnv()}), pool.Close, nil
+	return service.New(deps, service.Config{TeamID: teamID}), pool.Close, nil
+}
+
+// buildAssistant is buildService plus Claude. The caller calls the returned function when done.
+func buildAssistant(ctx context.Context) (*assistant.Assistant, func(), error) {
+	key := os.Getenv("ANTHROPIC_API_KEY")
+	if key == "" {
+		return nil, nil, errors.New("ANTHROPIC_API_KEY is not set (add it to .env)")
+	}
+	svc, closeFn, err := buildService(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	model, err := newAnthropic(key)
+	if err != nil {
+		closeFn()
+		return nil, nil, err
+	}
+	return assistant.New(model, svc, assistant.Config{Model: llm.ModelFromEnv()}), closeFn, nil
 }
 
 // runAsk answers one question, streaming the answer as it is written.
