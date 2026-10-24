@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Async } from "../../components/Async.tsx";
 import { query } from "../../lib/api.ts";
-import { webURL } from "../../lib/format.ts";
+import { sourceLabel, webURL } from "../../lib/format.ts";
 import { relevance } from "../../lib/relevance.ts";
 import type { NewsSearch } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
@@ -19,7 +19,7 @@ export default function News() {
   return (
     <>
       <h1>News</h1>
-      <p className="muted">Searches BBC Sport, Sky Sports and FPL’s own injury notes by meaning, not just keywords. Name a player and it looks at stories about him.</p>
+      <p className="muted">Searches BBC Sport, Sky Sports, TalkSport, the Guardian and FPL’s own injury notes by meaning, not just keywords. Name a player and it looks at stories about him.</p>
       <form
         className="form"
         onSubmit={(e) => {
@@ -83,11 +83,12 @@ export default function News() {
                     <article className="panel story" key={s.url + s.title}>
                       <h3>{href ? <a href={href} target="_blank" rel="noopener noreferrer">{s.title}</a> : s.title}</h3>
                       <p className="muted">
-                        {s.source === "fpl" ? "Official FPL note" : s.source} · {s.age} ago
+                        {sourceLabel(s.source)} · {s.age} ago
                         {s.players && s.players.length > 0 ? <> · {s.players.join(", ")}</> : null}{" "}
                         <span className={`pill rel-${rel.level}`} title={`similarity ${s.similarity.toFixed(2)}`}>{rel.label}</span>
                       </p>
                       <p>{s.content}</p>
+                      {href ? <p className="small"><a href={href} target="_blank" rel="noopener noreferrer">Read on {sourceLabel(s.source)} ↗</a></p> : null}
                     </article>
                   );
                 })

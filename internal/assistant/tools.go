@@ -195,7 +195,7 @@ func tools() []tool {
 		{
 			spec: llm.Tool{
 				Name: "search_news",
-				Description: "Searches stored news (BBC Sport, Sky Sports, and FPL's official injury and availability notes) by meaning. " +
+				Description: "Searches stored news (BBC Sport, Sky Sports, TalkSport, the Guardian, and FPL's official injury and availability notes) by meaning. " +
 					"Use for 'what is the latest on X', 'why is X ...', injuries, press conferences and rumours. " +
 					"Each story has a reference number: cite it in square brackets when you use it. " +
 					"It does not answer structured questions such as price or position filters: use find_players for those.",

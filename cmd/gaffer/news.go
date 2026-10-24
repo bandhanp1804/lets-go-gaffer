@@ -24,10 +24,13 @@ const embeddingDims = 1024
 
 // feeds are the RSS sources. Premier League's own site publishes no RSS, so its
 // news comes from FPL's official per-player notes instead (see news.PlayerNewsItems).
+// The Athletic is left out: its feed answers 403 and its stories are paywalled.
 var feeds = []struct{ name, url string }{
 	{"bbc-premier-league", "https://feeds.bbci.co.uk/sport/football/premier-league/rss.xml"},
 	{"sky-football-news", "https://www.skysports.com/rss/12040"},
 	{"sky-football", "https://www.skysports.com/rss/11095"},
+	{"talksport-football", "https://talksport.com/football/feed/"},
+	{"guardian-premier-league", "https://www.theguardian.com/football/premierleague/rss"},
 }
 
 // politeClient returns an HTTP client that spaces requests by interval and
