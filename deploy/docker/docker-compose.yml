@@ -20,5 +20,23 @@ services:
       timeout: 3s
       retries: 10
 
+  # Temporal's single-binary dev server, for the background workflows (`gaffer worker`).
+  # gRPC on 7233, Web UI on http://localhost:8233. Its state lives in a SQLite file on a volume,
+  # mounted on the image user's home so that user (uid 1000, not root) can write it.
+  temporal:
+    image: temporalio/temporal:1.9.1
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--db-filename", "/home/temporal/temporal.db"]
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    volumes:
+      - temporaldata:/home/temporal
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "localhost:7233"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
 volumes:
   pgdata:
+  temporaldata:

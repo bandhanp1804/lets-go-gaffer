@@ -197,6 +197,7 @@ export interface News {
 }
 
 export interface NewsPlayer {
+  id: number;
   name: string;
   team: string;
   position: string;
@@ -423,6 +424,59 @@ export interface OutlookWeek {
   lead_over_squad: number;
 }
 
+export interface Alerts {
+  alerts: Alert[];
+  unread: number;
+  live: boolean;
+  temporal_ui: string;
+}
+
+export interface Alert {
+  id: number;
+  kind: string;
+  title: string;
+  body: string;
+  url: string;
+  player_id: number;
+  age: string;
+  read: boolean;
+}
+
+export interface Watchlist {
+  players: Watched[];
+  live: boolean;
+}
+
+export interface Watched {
+  id: number;
+  name: string;
+  team: string;
+  status: string;
+}
+
+export interface Health {
+  evals: EvalRun[];
+  backtests: BacktestRun[];
+  backtest_model: string;
+  live: boolean;
+  temporal_ui: string;
+}
+
+export interface EvalRun {
+  age: string;
+  model: string;
+  pass_rate: number;
+  failing: string[];
+}
+
+export interface BacktestRun {
+  age: string;
+  through_gameweek: number;
+  spearman: number;
+  mae: number;
+  top20: number;
+}
+
 export interface AskDone {
   session_id: string;
   text: string;
@@ -466,5 +520,6 @@ export interface RefreshStatus {
   last_finished?: string;
   last_fetched: number;
   last_new: number;
+  last_failed_feeds: string[];
   last_error?: string;
 }

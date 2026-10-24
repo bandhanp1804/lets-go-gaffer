@@ -17,6 +17,8 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/assistant"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/llm"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/news"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/service"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/workflows"
 )
 
 const serveUsage = "usage: gaffer serve [-addr 127.0.0.1:8080] [-origins http://localhost:3001,...]"
@@ -78,14 +80,32 @@ func runServe(ctx context.Context, w io.Writer, args []string) error {
 	svc := st.svc
 
 	cfg := api.Config{Service: svc, AllowedOrigins: o.origins, Logger: slog.Default()}
-	// The refresher may be using the database pool, so it is stopped (and waited for) before the
-	// pool is closed: this defer was registered after closeSvc's, so it runs first.
-	newsCtx, stopNews := context.WithCancel(ctx)
-	refresher := startNewsRefresh(newsCtx, w, st)
-	defer stopNews()
-	if refresher != nil {
-		cfg.News = refresher
-		defer refresher.Wait()
+	inbox := &service.Inbox{Store: st.store}
+	cfg.Inbox = inbox
+	if addr := temporalAddress(false); addr != "" {
+		// With Temporal the worker pulls the news on its schedule; the button starts a workflow.
+		c, err := dialTemporal(ctx, addr)
+		if err != nil {
+			return err
+		}
+		defer c.Close()
+		every, err := parseNewsRefresh(os.Getenv("GAFFER_NEWS_REFRESH"))
+		if err != nil {
+			return err
+		}
+		cfg.News = workflows.Refresher{Client: c, Feeds: feedNames(), Every: every}
+		inbox.Watches, inbox.TemporalUI = workflows.Watcher{Client: c}, temporalUI()
+		fmt.Fprintf(w, "Workflows: Temporal at %s (web UI %s). Run `gaffer worker` to process them.\n", addr, temporalUI())
+	} else {
+		// The refresher may be using the database pool, so it is stopped (and waited for) before the
+		// pool is closed: this defer was registered after closeSvc's, so it runs first.
+		newsCtx, stopNews := context.WithCancel(ctx)
+		refresher := startNewsRefresh(newsCtx, w, st)
+		defer stopNews()
+		if refresher != nil {
+			cfg.News = localRefresher{refresher}
+			defer refresher.Wait()
+		}
 	}
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 		model, err := newAnthropic(key)

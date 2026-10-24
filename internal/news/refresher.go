@@ -18,6 +18,8 @@ type RefreshStatus struct {
 	LastFinished string `json:"last_finished,omitempty"`
 	LastFetched  int    `json:"last_fetched"`
 	LastNew      int    `json:"last_new"`
+	// LastFailedFeeds names the feeds the last refresh could not read; the rest were still pulled.
+	LastFailedFeeds []string `json:"last_failed_feeds"`
 	// LastError is why the last refresh failed; empty if it worked.
 	LastError string `json:"last_error,omitempty"`
 }
@@ -59,6 +61,7 @@ func (r *Refresher) Start() bool {
 		r.st.Running = false
 		r.st.LastFinished = r.now().UTC().Format(time.RFC3339)
 		r.st.LastFetched, r.st.LastNew, r.st.LastError = sum.Fetched, sum.New, ""
+		r.st.LastFailedFeeds = sum.FailedSources()
 		if err != nil {
 			r.st.LastError = err.Error()
 		}

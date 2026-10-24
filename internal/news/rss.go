@@ -147,6 +147,12 @@ func (s *RSSSource) Items(ctx context.Context) ([]Item, error) {
 		return nil, fmt.Errorf("feed %s: %w", s.name, &httpx.StatusError{StatusCode: resp.StatusCode})
 	}
 
+	// A site that is blocking automated requests often answers 200 with a web page. Parsed as a
+	// feed that is zero stories and no error, which would hide the outage; call it what it is.
+	if ct := strings.ToLower(resp.Header.Get("Content-Type")); strings.HasPrefix(ct, "text/html") {
+		httpx.DrainAndClose(resp.Body)
+		return nil, fmt.Errorf("feed %s: got a web page instead of a feed (the site may be blocking automated requests)", s.name)
+	}
 	items, skipped, err := ParseRSS(resp.Body, s.name)
 	if err != nil {
 		return nil, fmt.Errorf("feed %s: %w", s.name, err)

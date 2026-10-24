@@ -34,10 +34,19 @@ type Service interface {
 	ChipsFor(ctx context.Context, req service.ChipsRequest) (service.ChipsView, error)
 }
 
-// NewsRefresher pulls the news again on demand. *news.Refresher satisfies it.
+// NewsRefresher pulls the news again on demand: in this process, or through Temporal.
 type NewsRefresher interface {
-	Start() bool // begins a refresh; false if one is already running
-	Status() news.RefreshStatus
+	Start(ctx context.Context) (bool, error) // begins a refresh; false if one is already running
+	Status(ctx context.Context) (news.RefreshStatus, error)
+}
+
+// Inbox is the alerts, watchlist and model-health history. *service.Inbox satisfies it.
+type Inbox interface {
+	Alerts(ctx context.Context) (service.AlertsView, error)
+	MarkRead(ctx context.Context, upTo int64) error
+	Watchlist(ctx context.Context) (service.WatchlistView, error)
+	SetWatch(ctx context.Context, playerID int, on bool) (service.WatchlistView, error)
+	Health(ctx context.Context) (service.HealthView, error)
 }
 
 // Conversation is one assistant conversation. *assistant.Session satisfies it.
@@ -50,6 +59,7 @@ type Config struct {
 	Service         Service
 	NewConversation func() Conversation // nil turns /api/ask off
 	News            NewsRefresher       // nil turns the news refresh endpoints off
+	Inbox           Inbox               // nil turns the alerts, watchlist and health endpoints off
 	AllowedOrigins  []string            // origins of the UI, e.g. "http://localhost:3001"
 	Logger          *slog.Logger        // default slog.Default()
 
@@ -107,6 +117,11 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	mux.HandleFunc("GET /api/news", s.read(s.news))
 	mux.HandleFunc("GET /api/news/refresh", s.newsRefreshStatus)
 	mux.HandleFunc("POST /api/news/refresh", s.newsRefresh)
+	mux.HandleFunc("GET /api/alerts", s.read(s.alerts))
+	mux.HandleFunc("POST /api/alerts/read", s.markRead)
+	mux.HandleFunc("GET /api/watchlist", s.read(s.watchlist))
+	mux.HandleFunc("POST /api/watchlist", s.setWatch)
+	mux.HandleFunc("GET /api/health/runs", s.read(s.health))
 	mux.HandleFunc("POST /api/whatif", s.whatIf)
 	mux.HandleFunc("POST /api/ask", s.ask)
 

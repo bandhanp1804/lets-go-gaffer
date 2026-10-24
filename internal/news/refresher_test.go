@@ -14,7 +14,7 @@ func TestRefresher_StartRunsOneRefreshAtATime(t *testing.T) {
 	r := NewRefresher(context.Background(), func(context.Context) (Summary, error) {
 		calls.Add(1)
 		<-release
-		return Summary{Fetched: 10, New: 3}, nil
+		return Summary{Fetched: 10, New: 3, SourceErrors: map[string]error{"talksport": errors.New("web page")}}, nil
 	})
 
 	first, second := r.Start(), r.Start()
@@ -29,7 +29,7 @@ func TestRefresher_StartRunsOneRefreshAtATime(t *testing.T) {
 	r.Wait()
 
 	st := r.Status()
-	if st.Running || st.LastNew != 3 || st.LastFetched != 10 || st.LastError != "" || st.LastFinished == "" {
+	if st.Running || st.LastNew != 3 || st.LastFetched != 10 || st.LastError != "" || st.LastFinished == "" || len(st.LastFailedFeeds) != 1 || st.LastFailedFeeds[0] != "talksport" {
 		t.Errorf("status after = %+v", st)
 	}
 	if calls.Load() != 1 {

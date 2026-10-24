@@ -213,3 +213,17 @@ func TestParseRSS_DropsLinkTextThatIsNotAStory(t *testing.T) {
 		t.Errorf("items %+v skipped %d err %v", items, skipped, err)
 	}
 }
+
+func TestRSSSource_AWebPageInsteadOfAFeedIsAnError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=UTF-8")
+		_, _ = w.Write([]byte("<!DOCTYPE html><html><body>Checking your browser</body></html>"))
+	}))
+	t.Cleanup(srv.Close)
+
+	items, err := news.NewRSSSource("talksport", srv.URL, srv.Client()).Items(context.Background())
+
+	if err == nil || !strings.Contains(err.Error(), "web page") || !strings.Contains(err.Error(), "talksport") || items != nil {
+		t.Errorf("items=%v err=%v: a blocked feed must show up as failed, not as zero stories", items, err)
+	}
+}
