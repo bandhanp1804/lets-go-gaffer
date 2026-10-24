@@ -72,18 +72,22 @@ func fold(s string) string {
 	return strings.Join(strings.Fields(words), " ")
 }
 
-// match returns the players whose name is the query, or failing that, contains it.
+// match returns the players whose name is the query, or failing that, contains it. A name is how
+// FPL shows him ("Palmer") or his full name ("Cole Palmer"): people type either. A part of a full
+// name only counts once the query is more than one word, so "cole" is not every Cole.
 func match(query string, pool []fpl.Player) []fpl.Player {
 	q := fold(query)
 	if q == "" {
 		return nil
 	}
+	multiWord := strings.Contains(q, " ")
 	var exact, partial []fpl.Player
 	for _, p := range pool {
-		switch name := fold(p.WebName); {
-		case name == q:
+		web, full := fold(p.WebName), fold(p.FirstName+" "+p.LastName)
+		switch {
+		case web == q || full == q:
 			exact = append(exact, p)
-		case strings.Contains(name, q):
+		case strings.Contains(web, q) || multiWord && strings.Contains(full, q):
 			partial = append(partial, p)
 		}
 	}
