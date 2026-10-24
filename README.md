@@ -72,6 +72,7 @@ go run ./cmd/gaffer transfers -wildcard
 go run ./cmd/gaffer squad
 go run ./cmd/gaffer ask "Who should I captain this week?"   # needs ANTHROPIC_API_KEY
 go run ./cmd/gaffer chat                                     # a conversation with follow-ups
+go run ./cmd/gaffer eval                                     # measure the assistant (spends API tokens)
 go run ./cmd/gaffer backtest        # how well does the scoring model predict past gameweeks?
 ```
 
@@ -118,6 +119,17 @@ The model narrates; Go computes and checks. It is told never to calculate, and i
 
 Known limits: the number check can be satisfied by coincidence (a small number that happens to appear elsewhere in a tool result), and it cannot judge whether a sentence is true. Your question and the tool results, including your squad, are sent to Anthropic's API. News search needs `VOYAGE_API_KEY`; without it that one tool reports itself unavailable.
 
+## Evaluating the assistant (`eval`)
+
+`gaffer eval [-run NAME] [-n 3] [-workers 2] [-min 0.9]` runs 14 fixed scenarios against the real model and exits non-zero when the pass rate falls below `-min`. Each scenario is run `-n` times because model output varies.
+
+- **Fixed data, not live data.** The backend is a stub with known squad, lineup, transfers, market and news (`internal/eval/fixture.go`), so a change in score means the model or prompt changed, not the FPL season. It needs only `ANTHROPIC_API_KEY`.
+- **Plain Go checks, no model as judge.** A scenario passes when the right tools were called (`captain` must use `best_lineup`; "which goalkeepers are injured" must use `find_players` and not `search_news`), the assistant's own grounding checks stayed quiet, and the answer says (or omits) what it should. A model grading a model would add cost and its own mistakes.
+- **Safety scenarios.** One planted news story orders the model to call a tool and repeat a phrase; obeying either fails the scenario. Another asks it to make a transfer, which it must decline.
+- **A failing run prints the answer**, so the cause can be read rather than guessed. That is how the first run found the model writing "£1.8m less" (a subtraction the grounding check flagged); the prompt now forbids stating gaps no tool supplied.
+
+The harness itself is tested offline with a scripted model, so `go test` costs nothing. Latest baseline on Haiku: 14 scenarios x 4 runs, 100%. Known limit: the content checks look for words, so they catch a wrong or missing name, not a subtly misleading sentence.
+
 ## How players are scored
 
 Raw form is a poor forecast, so players are ranked by a projection model (`internal/projection`) built from the gameweek-by-gameweek record: points per 90 minutes with long memory and shrinkage toward the position norm, minutes with short memory (who is starting, who was just dropped), FPL's fixture difficulty for each match (blank gameweeks are worth nothing, doubles both matches), and the chance of playing.
@@ -140,14 +152,13 @@ Done:
 - **Ask:** a Claude assistant over read-only tools, with Go-enforced citation and number checks.
 
 Planned, in order:
-1. **Eval harness for the assistant:** a fixed set of questions with expected tool choices and checks (cites real stories, no ungrounded numbers, refuses to act), run against the real model, so changes to prompts and tools are measured.
-2. **HTTP API and web UI:**
+1. **HTTP API and web UI:**
    - A JSON API in Go on the standard library (`net/http`), bound to localhost, with graceful shutdown, request logging, and short caches for expensive endpoints. The CLI commands and the API share one service layer instead of duplicating logic.
    - A **Next.js (React, TypeScript) UI** in `web/` that calls it through a Next.js rewrite, so there is no CORS and no keys in the browser. One frontend only: Next.js is React, so a second Angular app would mean building every screen twice.
    - Screens: dashboard (gameweek, data freshness); **my team** on a pitch with availability flags; **best XI for the next gameweek**; **transfers and Wildcard** with the hit and selling prices shown; squad builder; players table with xP; news search with filters; model page with the backtest.
    - Docker image, structured logging, metrics.
-3. **Deploy:** Helm, Terraform on Azure AKS (student credit), CI, dashboards.
-4. **Stretch:** Temporal to run the daily ingest as durable workflows.
+2. **Deploy:** Helm, Terraform on Azure AKS (student credit), CI, dashboards.
+3. **Stretch:** Temporal to run the daily ingest as durable workflows.
 
 ## License
 

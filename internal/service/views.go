@@ -85,8 +85,30 @@ type LineupView struct {
 
 // MoveView is one swap.
 type MoveView struct {
-	Out PlayerView `json:"out"`
-	In  PlayerView `json:"in"`
+	Summary string     `json:"summary"` // the whole move in one sentence, to be quoted rather than reassembled
+	Out     PlayerView `json:"out"`
+	In      PlayerView `json:"in"`
+}
+
+// MoveSummary states a swap in one sentence. A swap involves two prices (what the
+// outgoing player sells for, what the incoming one costs) and two fixtures, and a
+// model handed the raw fields tends to cross them, so Go writes the sentence.
+func MoveSummary(out, in PlayerView) string {
+	side := func(p PlayerView, price string) string {
+		s := fmt.Sprintf("%s (%s, %s)", p.Name, p.Team, p.Position)
+		if price != "" {
+			s += ", " + price
+		}
+		return s
+	}
+	fixture := func(p PlayerView) string {
+		if p.Fixture == "" {
+			return ""
+		}
+		return fmt.Sprintf(", %s plays %s", p.Name, p.Fixture)
+	}
+	return fmt.Sprintf("%s out, %s in%s%s",
+		side(out, "sells for "+out.SellPrice), side(in, "costs "+in.Price), fixture(out), fixture(in))
 }
 
 // SuggestionView is a set of moves and what they are worth.

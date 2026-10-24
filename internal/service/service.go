@@ -444,7 +444,8 @@ func (s *Service) Transfers(ctx context.Context, req TransfersRequest) (Transfer
 		for _, m := range sg.Moves {
 			out := base.view(m.Out, m.OutScore)
 			out.SellPrice = formatMoney(m.SellPrice)
-			sv.Moves = append(sv.Moves, MoveView{Out: out, In: base.view(m.In, m.InScore)})
+			in := base.view(m.In, m.InScore)
+			sv.Moves = append(sv.Moves, MoveView{Summary: MoveSummary(out, in), Out: out, In: in})
 		}
 		v.Suggestions = append(v.Suggestions, sv)
 	}

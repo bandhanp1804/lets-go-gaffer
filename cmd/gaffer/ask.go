@@ -49,6 +49,13 @@ func parseAskArgs(args []string) (question string, verbose bool, err error) {
 	return question, verbose, nil
 }
 
+// newAnthropic is the Claude client, with retries for rate limits and server errors.
+func newAnthropic(key string) (*llm.Anthropic, error) {
+	return llm.NewAnthropic(&http.Client{Transport: httpx.NewRetryTransport(nil, httpx.RetryConfig{
+		MaxAttempts: 4, BaseDelay: time.Second, MaxDelay: 15 * time.Second,
+	})}, llm.Config{APIKey: key})
+}
+
 // buildAssistant wires the database, FPL, the optional live session, the embedder,
 // and Claude into an assistant. The caller closes the returned function when done.
 func buildAssistant(ctx context.Context) (*assistant.Assistant, func(), error) {
@@ -64,9 +71,7 @@ func buildAssistant(ctx context.Context) (*assistant.Assistant, func(), error) {
 		return nil, nil, fmt.Errorf("open database: %w", err)
 	}
 
-	model, err := llm.NewAnthropic(&http.Client{Transport: httpx.NewRetryTransport(nil, httpx.RetryConfig{
-		MaxAttempts: 4, BaseDelay: time.Second, MaxDelay: 15 * time.Second,
-	})}, llm.Config{APIKey: key})
+	model, err := newAnthropic(key)
 	if err != nil {
 		pool.Close()
 		return nil, nil, err
