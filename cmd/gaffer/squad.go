@@ -45,19 +45,20 @@ func runSquad(ctx context.Context) error {
 	if len(players) == 0 || len(history) == 0 {
 		return fmt.Errorf("no players or history stored; run `gaffer sync` first")
 	}
-	fixtures, err := fpl.NewHTTPClient(politeClient(100 * time.Millisecond)).FetchFixtures(ctx)
+	client := fpl.NewHTTPClient(politeClient(100 * time.Millisecond))
+	fixtures, err := client.FetchFixtures(ctx)
 	if err != nil {
 		return err
 	}
-	next := 1
-	for _, h := range history {
-		next = max(next, h.GameweekID+1)
-	}
-	model, err := projection.New(players, history, fixtures, projection.Default, next)
+	next, asOf, err := planGameweek(ctx, os.Stdout, client, history)
 	if err != nil {
 		return err
 	}
-	score := model.Score(squadHorizon)
+	model, err := projection.New(players, history, fixtures, projection.Default, asOf)
+	if err != nil {
+		return err
+	}
+	score := model.ScoreFrom(next, squadHorizon)
 
 	var cands []optimizer.Candidate
 	for _, p := range players {

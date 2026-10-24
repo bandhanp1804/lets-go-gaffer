@@ -31,6 +31,7 @@ const transfersUsage = `usage: gaffer transfers [-team ID] [-free N] [-wildcard]
 
 // transfersView is everything printTransfers needs.
 type transfersView struct {
+	Next        int // the gameweek being decided for
 	Team        myteam.Team
 	Teams       []fpl.Team
 	Fin         myteam.Finances
@@ -131,12 +132,16 @@ func runTransfers(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	model, err := projection.New(players, history, fixtures, projection.Default, team.Event+1)
+	next, asOf, err := planGameweek(ctx, os.Stdout, client, history)
+	if err != nil {
+		return err
+	}
+	model, err := projection.New(players, history, fixtures, projection.Default, asOf)
 	if err != nil {
 		return err
 	}
 
-	view := transfersView{Team: team, Teams: teams, Fin: fin, Horizon: *horizon, Wildcard: *wildcard, ShowPrices: *prices, Live: liveFin != nil}
+	view := transfersView{Next: next, Team: team, Teams: teams, Fin: fin, Horizon: *horizon, Wildcard: *wildcard, ShowPrices: *prices, Live: liveFin != nil}
 	view.Pending = myteam.DescribeChanges(changes)
 	view.Free, view.FreeSource = fin.Free.Next, "replayed from your history"
 	switch {
@@ -151,7 +156,7 @@ func runTransfers(ctx context.Context, args []string) error {
 
 	in := transfers.Input{Squad: team.Squad.Players, Sell: fin.Sell, Bank: fin.Bank, Pool: players}
 	opts := transfers.Options{
-		Score: model.Score(*horizon), FreeTransfers: view.Free, MaxTransfers: *maxMoves,
+		Score: model.ScoreFrom(next, *horizon), FreeTransfers: view.Free, MaxTransfers: *maxMoves,
 		Horizon: *horizon, TopN: *topN,
 	}
 	if *wildcard {
@@ -175,7 +180,7 @@ func printTransfers(w io.Writer, v transfersView) {
 		short[t.ID] = t.ShortName
 	}
 
-	fmt.Fprintf(w, "%s: transfers for GW%d\n", v.Team.Entry.Name, v.Team.Event+1)
+	fmt.Fprintf(w, "%s: transfers for GW%d\n", v.Team.Entry.Name, v.Next)
 	if v.Wildcard {
 		fmt.Fprintf(w, "Wildcard: unlimited transfers, no hit · bank %s\n", formatPrice(v.Fin.Bank))
 	} else {

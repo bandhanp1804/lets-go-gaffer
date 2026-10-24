@@ -12,6 +12,7 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/httpx"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/myteam"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/projection"
 )
 
 // FPL publishes a squad only as of the last deadline; transfers made since are
@@ -124,4 +125,29 @@ func liveSummary(fin myteam.Finances) string {
 		parts = append(parts, "chips available: "+strings.Join(fin.AvailableChips, ", "))
 	}
 	return strings.Join(parts, " · ")
+}
+
+// scheduleSource is the part of fpl.HTTPClient that planGameweek needs.
+type scheduleSource interface {
+	FetchBootstrap(ctx context.Context) (*fpl.Bootstrap, error)
+}
+
+// planGameweek returns the gameweek being decided for, taken from FPL's schedule, and
+// where the stored history ends. They differ while a gameweek is under way: its
+// deadline has passed, so it is locked, but its history is not in yet. It prints a note
+// when the stored history is behind a finished gameweek.
+func planGameweek(ctx context.Context, w io.Writer, src scheduleSource, history []fpl.PlayerHistory) (upcoming, asOf int, err error) {
+	boot, err := src.FetchBootstrap(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	upcoming = fpl.UpcomingGameweek(boot.Gameweeks)
+	if upcoming == 0 {
+		return 0, 0, errors.New("there is no upcoming gameweek (the season may be over)")
+	}
+	asOf = projection.AsOf(history)
+	if note := projection.HistoryNote(asOf, fpl.LastFinishedGameweek(boot.Gameweeks)); note != "" {
+		fmt.Fprintf(w, "%s\n\n", note)
+	}
+	return upcoming, asOf, nil
 }

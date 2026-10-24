@@ -177,11 +177,14 @@ type streamEvent struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
 		Text string `json:"text"`
+		Data string `json:"data"`
 	} `json:"content_block"`
 	Delta *struct {
 		Type        string `json:"type"`
 		Text        string `json:"text"`
 		PartialJSON string `json:"partial_json"`
+		Thinking    string `json:"thinking"`
+		Signature   string `json:"signature"`
 		StopReason  string `json:"stop_reason"`
 	} `json:"delta"`
 	Usage *usageJSON `json:"usage"`
@@ -196,6 +199,7 @@ type pending struct {
 	block Block
 	args  strings.Builder // the tool arguments, arriving as JSON fragments
 	done  bool
+	skip  bool // a block type this client cannot send back, so it is left out
 }
 
 func readStream(body io.Reader, onText func(string)) (Response, error) {
@@ -212,8 +216,8 @@ func readStream(body io.Reader, onText func(string)) (Response, error) {
 		out.Content = out.Content[:0]
 		for _, i := range idx {
 			p := blocks[i]
-			if p.block.Type == TypeToolUse && !p.done {
-				continue // arguments incomplete: not usable
+			if p.skip || (p.block.Type == TypeToolUse && !p.done) {
+				continue // not replayable, or arguments incomplete
 			}
 			out.Content = append(out.Content, p.block)
 		}
@@ -254,8 +258,12 @@ func readStream(body io.Reader, onText func(string)) (Response, error) {
 				p.block = Block{Type: TypeText, Text: ev.ContentBlock.Text}
 			case TypeToolUse:
 				p.block = Block{Type: TypeToolUse, ID: ev.ContentBlock.ID, Name: ev.ContentBlock.Name}
+			case TypeThinking:
+				p.block = Block{Type: TypeThinking}
+			case TypeRedactedThinking:
+				p.block = Block{Type: TypeRedactedThinking, Data: ev.ContentBlock.Data}
 			default:
-				p.block, p.done = Block{Type: ev.ContentBlock.Type}, true
+				p.skip = true // a block type added later that this client cannot replay
 			}
 			blocks[ev.Index] = p
 		case "content_block_delta":
@@ -273,7 +281,11 @@ func readStream(body io.Reader, onText func(string)) (Response, error) {
 				}
 			case "input_json_delta":
 				p.args.WriteString(ev.Delta.PartialJSON)
-			} // thinking, signature, and citation deltas are not used here
+			case "thinking_delta":
+				p.block.Thinking += ev.Delta.Thinking // kept to send back, never passed to onText
+			case "signature_delta":
+				p.block.Signature += ev.Delta.Signature
+			} // citation and other deltas are not used here
 		case "content_block_stop":
 			p := blocks[ev.Index]
 			if p == nil {

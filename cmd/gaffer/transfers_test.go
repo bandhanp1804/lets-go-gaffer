@@ -23,7 +23,7 @@ func transferFixture() transfersView {
 	buy[103], sell[103] = 75, 70
 	in := fpl.Player{ID: 900, WebName: "Foden", TeamID: 2, Position: team.Squad.Players[2].Position, NowCost: 72, Form: "6.0"}
 	return transfersView{
-		Team: team, Teams: teams, Horizon: 4,
+		Next: 8, Team: team, Teams: teams, Horizon: 4,
 		Fin:  myteam.Finances{Bank: 2, Free: myteam.FreeTransferState{Next: 1}, Buy: buy, Sell: sell},
 		Free: 1, FreeSource: "replayed from your history",
 		Suggestions: []transfers.Suggestion{{

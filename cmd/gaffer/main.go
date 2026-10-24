@@ -16,7 +16,7 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/ingest"
 )
 
-const usage = "usage: gaffer sync | gaffer news | gaffer squad | gaffer search [flags] QUERY | gaffer team [ID] | gaffer lineup [ID] | gaffer transfers [flags] | gaffer backtest    (env: GAFFER_DSN required, GAFFER_MIGRATIONS default ./migrations)"
+const usage = "usage: gaffer sync | gaffer news | gaffer squad | gaffer search [flags] QUERY | gaffer team [ID] | gaffer lineup [ID] | gaffer transfers [flags] | gaffer ask [-v] QUESTION | gaffer chat | gaffer backtest    (env: GAFFER_DSN required, GAFFER_MIGRATIONS default ./migrations)"
 
 func main() {
 	// Ctrl-C / SIGTERM cancels ctx; workers and the pool unwind before we exit.
@@ -48,6 +48,10 @@ func run(ctx context.Context, args []string) error {
 		return runTransfers(ctx, rest)
 	case "lineup":
 		return runLineup(ctx, rest)
+	case "ask":
+		return runAsk(ctx, rest)
+	case "chat":
+		return runChat(ctx, rest)
 	}
 	if len(rest) != 0 {
 		return errors.New(usage)

@@ -465,3 +465,106 @@ func TestResponse_Helpers(t *testing.T) {
 		t.Errorf("ToolUses() = %+v", uses)
 	}
 }
+
+func thinkStart(i int) string {
+	return ev("content_block_start", fmt.Sprintf(`{"type":"content_block_start","index":%d,"content_block":{"type":"thinking","thinking":"","signature":""}}`, i))
+}
+func thinkDelta(i int, s string) string {
+	b, _ := json.Marshal(s)
+	return ev("content_block_delta", fmt.Sprintf(`{"type":"content_block_delta","index":%d,"delta":{"type":"thinking_delta","thinking":%s}}`, i, b))
+}
+func sigDelta(i int, s string) string {
+	b, _ := json.Marshal(s)
+	return ev("content_block_delta", fmt.Sprintf(`{"type":"content_block_delta","index":%d,"delta":{"type":"signature_delta","signature":%s}}`, i, b))
+}
+
+func TestStream_KeepsThinkingBlocksSoTheyCanBeSentBack(t *testing.T) {
+	// With tool use the API requires the model's thinking blocks, with their signatures, to be
+	// returned unchanged on the next request. Dropping them, or their content, breaks the turn.
+	s := &server{stream: msgStart(1, 0, 0) +
+		thinkStart(0) + thinkDelta(0, "Let me ") + thinkDelta(0, "think.") + sigDelta(0, "sig-") + sigDelta(0, "123") + blockStop(0) +
+		textStart(1) + textDelta(1, "Answer") + blockStop(1) +
+		toolStart(2, "toolu_1", "get_my_team") + blockStop(2) +
+		msgDelta("tool_use", 9) + msgStop}
+	c := client(t, s.start(t))
+	on, got := collect()
+
+	resp, err := c.Stream(context.Background(), basicReq(), on)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Content) != 3 || resp.Content[0].Type != llm.TypeThinking {
+		t.Fatalf("blocks = %+v, want thinking, text, tool_use", resp.Content)
+	}
+	if th := resp.Content[0]; th.Thinking != "Let me think." || th.Signature != "sig-123" {
+		t.Errorf("thinking block = %+v", th)
+	}
+	if strings.Join(*got, "") != "Answer" {
+		t.Errorf("onText received %v: the model's thinking is not for display", *got)
+	}
+	if resp.Text() != "Answer" || len(resp.ToolUses()) != 1 {
+		t.Errorf("text %q tool uses %d", resp.Text(), len(resp.ToolUses()))
+	}
+
+	// And it goes back out in the shape the API expects.
+	raw, err := json.Marshal(resp.Content[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire map[string]any
+	_ = json.Unmarshal(raw, &wire)
+	if wire["type"] != "thinking" || wire["thinking"] != "Let me think." || wire["signature"] != "sig-123" {
+		t.Errorf("encoded = %s", raw)
+	}
+}
+
+func TestStream_RedactedThinkingRoundTrips(t *testing.T) {
+	s := &server{stream: msgStart(1, 0, 0) +
+		ev("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"redacted_thinking","data":"ENCRYPTED=="}}`) +
+		blockStop(0) + textStart(1) + textDelta(1, "ok") + blockStop(1) + msgDelta("end_turn", 2) + msgStop}
+	c := client(t, s.start(t))
+
+	resp, err := c.Stream(context.Background(), basicReq(), nil)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(resp.Content[0])
+	if resp.Content[0].Type != llm.TypeRedactedThinking || resp.Content[0].Data != "ENCRYPTED==" ||
+		!strings.Contains(string(raw), `"redacted_thinking"`) || !strings.Contains(string(raw), `"data":"ENCRYPTED=="`) {
+		t.Errorf("block %+v encoded %s", resp.Content[0], raw)
+	}
+}
+
+func TestStream_BlockTypesItCannotReplayAreDroppedNotFatal(t *testing.T) {
+	s := &server{stream: msgStart(1, 0, 0) +
+		ev("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"x","name":"web_search"}}`) +
+		blockStop(0) + textStart(1) + textDelta(1, "fine") + blockStop(1) + msgDelta("end_turn", 2) + msgStop}
+	c := client(t, s.start(t))
+
+	resp, err := c.Stream(context.Background(), basicReq(), nil)
+
+	if err != nil || len(resp.Content) != 1 || resp.Text() != "fine" {
+		t.Errorf("err %v content %+v: an unknown block must not poison the conversation", err, resp.Content)
+	}
+}
+
+func TestStream_SendsThinkingBlocksBackInTheRequest(t *testing.T) {
+	s := &server{stream: msgStart(1, 0, 0) + textStart(0) + textDelta(0, "ok") + blockStop(0) + msgDelta("end_turn", 1) + msgStop}
+	c := client(t, s.start(t))
+	req := basicReq()
+	req.Messages = append(req.Messages, llm.Message{Role: llm.Assistant, Content: []llm.Block{
+		llm.Thinking("hmm", "sig-1"),
+		llm.ToolUse("tu_1", "f", json.RawMessage(`{}`)),
+	}}, llm.Message{Role: llm.User, Content: []llm.Block{llm.ToolResult("tu_1", "r", false)}})
+
+	if _, err := c.Stream(context.Background(), req, nil); err != nil {
+		t.Fatalf("a conversation containing a thinking block must be encodable: %v", err)
+	}
+
+	first := s.bodies[0]["messages"].([]any)[1].(map[string]any)["content"].([]any)[0].(map[string]any)
+	if first["type"] != "thinking" || first["thinking"] != "hmm" || first["signature"] != "sig-1" {
+		t.Errorf("thinking block on the wire = %v", first)
+	}
+}

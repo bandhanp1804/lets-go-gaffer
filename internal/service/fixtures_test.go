@@ -36,6 +36,7 @@ type world struct {
 	teams    []fpl.Team
 	history  []fpl.PlayerHistory
 	fixtures fpl.Fixtures
+	events   []fpl.Gameweek
 }
 
 func newWorld() *world {
@@ -74,6 +75,11 @@ func newWorld() *world {
 			w.history = append(w.history, fpl.PlayerHistory{PlayerID: p.ID, GameweekID: gw, Fixture: p.ID*10 + gw, TotalPoints: pts, Minutes: 90})
 		}
 	}
+	// Seven finished gameweeks, and GW8 is the one whose deadline is coming.
+	for gw := 1; gw <= 7; gw++ {
+		w.events = append(w.events, fpl.Gameweek{ID: gw, Finished: true})
+	}
+	w.events = append(w.events, fpl.Gameweek{ID: 8, IsNext: true}, fpl.Gameweek{ID: 9})
 	// GW8: club 2k-1 hosts club 2k. Difficulty 3 everywhere, so fixtures do not decide anything.
 	for i := 1; i < 12; i += 2 {
 		w.fixtures = append(w.fixtures, fpl.Fixture{ID: i, Event: 8, HomeTeam: i, AwayTeam: i + 1, HomeDifficulty: 3, AwayDifficulty: 3})
@@ -207,6 +213,10 @@ func (f *fakeFPL) FetchHistory(context.Context, int) (*fpl.History, error) {
 
 func (f *fakeFPL) FetchTransfers(context.Context, int) ([]fpl.Transfer, error) {
 	return f.extraTransfers, nil
+}
+
+func (f *fakeFPL) FetchBootstrap(context.Context) (*fpl.Bootstrap, error) {
+	return &fpl.Bootstrap{Players: f.w.players, Teams: f.w.teams, Gameweeks: f.w.events}, nil
 }
 
 func (f *fakeFPL) FetchFixtures(context.Context) (fpl.Fixtures, error) {
