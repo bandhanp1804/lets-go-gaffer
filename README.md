@@ -74,6 +74,7 @@ go run ./cmd/gaffer ask "Who should I captain this week?"   # needs ANTHROPIC_AP
 go run ./cmd/gaffer chat                                     # a conversation with follow-ups
 go run ./cmd/gaffer eval                                     # measure the assistant (spends API tokens)
 go run ./cmd/gaffer serve                                    # the HTTP API on http://127.0.0.1:8080
+(cd web && npm install && npm run dev)                       # the web UI on http://127.0.0.1:3001
 go run ./cmd/gaffer backtest        # how well does the scoring model predict past gameweeks?
 ```
 
@@ -146,6 +147,17 @@ curl -sN -H 'Content-Type: application/json' -d '{"question":"Who should I capta
 
 **Why it refuses some requests.** The server has no login, because it is for your own machine, and it will not listen on anything but loopback. But a browser will call `localhost` on behalf of any page you have open, so a hostile site could read your squad or spend your API credits. Three rules stop that: a request whose `Origin` is not on the `-origins` list gets 403; a request whose `Host` is not `localhost`/`127.0.0.1` gets 403 (this defeats DNS rebinding, where a hostile name is re-pointed at 127.0.0.1 and the browser sends no `Origin`); and a `POST` must be `application/json`, which a page cannot send cross-origin without a CORS preflight that this server never answers. No CORS headers are sent at all: the planned UI reaches the API through a Next.js rewrite, so it is same-origin.
 
+## Web UI (`web/`)
+
+A Next.js (React, TypeScript) app on port 3001 that talks to the Go API. Start the API (`gaffer serve`) and then `cd web && npm install && npm run dev`, and open http://127.0.0.1:3001.
+
+Screens: **Dashboard** (next deadline countdown, how far the stored data goes, FPL session state), **My team** on a pitch with availability flags and the captain and vice-captain, **Best XI** (close calls first, then the pitch and the changes from your current lineup), **Transfers** (Wildcard, what-if free transfers, horizon; each option shows its hit, net gain and bank, and says when two options are a toss-up), **Squad builder**, **Players** (filters and sorting), **News** (semantic search), **Ask** (the assistant, streamed as it is written, with sources, the grounding checks' warnings and the tools it used) and **Model** (the backtest, including the out-of-sample check).
+
+- **No CORS and no keys in the browser.** `next.config.mjs` rewrites `/api/*` to the Go server (`GAFFER_API`, default `http://127.0.0.1:8080`), so the browser only talks to its own origin, and the Go server's Origin and Host guard still applies through the proxy.
+- **Answers are rendered from text, never HTML.** `lib/markdown.ts` turns the assistant's markdown into data and React builds elements from it, so nothing the model (or a news story it read) writes can inject markup or a script link. Only `http(s)` addresses become links.
+- **Few dependencies.** Next, React and TypeScript, pinned exactly; no UI kit, chart library or CSS framework (plain CSS, light and dark). The types in `lib/types.ts` mirror the Go views by hand, so a field renamed in Go must be renamed there.
+- **Tests:** `npm test` runs Node's built-in test runner over the pure logic (the SSE parser, pitch grouping, the markdown reader); `npm run typecheck` checks types. I also drove the Ask page in headless Chrome against the real API to check that the stream arrives incrementally.
+
 ## Evaluating the assistant (`eval`)
 
 `gaffer eval [-run NAME] [-n 3] [-workers 2] [-min 0.9]` runs 14 fixed scenarios against the real model and exits non-zero when the pass rate falls below `-min`. Each scenario is run `-n` times because model output varies.
@@ -178,12 +190,10 @@ Done:
 - **Decisions:** backtested expected-points model, exact squad optimizer, transfer and Wildcard suggestions, and the **lineup advisor** (best XI, captain, bench order, close calls).
 - **Ask:** a Claude assistant over read-only tools, with Go-enforced citation and number checks, and an eval harness that measures it.
 - **HTTP API:** JSON endpoints and a streaming `/api/ask`, with browser-attack protections for a localhost server.
+- **Web UI:** nine screens in Next.js over that API.
 
 Planned, in order:
-1. **Web UI:**
-   - A **Next.js (React, TypeScript) UI** in `web/` that calls the API through a Next.js rewrite, so there is no CORS and no keys in the browser. One frontend only: Next.js is React, so a second Angular app would mean building every screen twice.
-   - Screens: dashboard (gameweek, data freshness); **my team** on a pitch with availability flags; **best XI for the next gameweek**; **transfers and Wildcard** with the hit and selling prices shown; players table with xP; news search with filters; an ask box that streams answers; squad builder and model/backtest pages (their endpoints exist).
-   - Docker image, metrics.
+1. **Containers and metrics:** Docker images for the API and the web app, and Prometheus metrics from the API.
 2. **Deploy:** Helm, Terraform on Azure AKS (student credit), CI, dashboards.
 3. **Stretch:** Temporal to run the daily ingest as durable workflows.
 

@@ -468,7 +468,9 @@ func (s *Service) Transfers(ctx context.Context, req TransfersRequest) (Transfer
 		v.Suggestions = append(v.Suggestions, sv)
 	}
 	for i := range v.Suggestions { // computed here so the model never has to subtract two nets
-		v.Suggestions[i].NetVsFirst = round1(found[i].Net - found[0].Net)
+		// From the rounded figures a reader sees, so that 4.7 and 4.4 give 0.3 and never
+		// 0.4 because of digits that are not shown.
+		v.Suggestions[i].NetVsFirst = round1(v.Suggestions[i].NetPoints - v.Suggestions[0].NetPoints)
 	}
 	return v, nil
 }
