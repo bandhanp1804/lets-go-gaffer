@@ -126,6 +126,9 @@ Known limits: the number check can be satisfied by coincidence (a small number t
 
 | Endpoint | Query parameters |
 |---|---|
+| `GET /api/status` | dashboard: upcoming gameweek and deadline countdown, how far the stored history goes, player/club/news counts, FPL session state (never the token) |
+| `GET /api/squad` | `horizon` (default 4): the best legal squad from scratch under £100.0m, with XI, bench, captain |
+| `GET /api/backtest` | how the scoring model did on played gameweeks, including the out-of-sample check (cached until new history arrives) |
 | `GET /api/team` | your squad, bank, free transfers, with `squad_as_of` and freshness notes |
 | `GET /api/lineup` | the best XI, captain, bench order and close calls for the upcoming gameweek |
 | `GET /api/transfers` | `wildcard`, `free_transfers`, `horizon`, `max_transfers` |
@@ -179,7 +182,7 @@ Done:
 Planned, in order:
 1. **Web UI:**
    - A **Next.js (React, TypeScript) UI** in `web/` that calls the API through a Next.js rewrite, so there is no CORS and no keys in the browser. One frontend only: Next.js is React, so a second Angular app would mean building every screen twice.
-   - Screens: dashboard (gameweek, data freshness); **my team** on a pitch with availability flags; **best XI for the next gameweek**; **transfers and Wildcard** with the hit and selling prices shown; players table with xP; news search with filters; an ask box that streams answers; squad builder and model/backtest pages (these need service methods and endpoints first).
+   - Screens: dashboard (gameweek, data freshness); **my team** on a pitch with availability flags; **best XI for the next gameweek**; **transfers and Wildcard** with the hit and selling prices shown; players table with xP; news search with filters; an ask box that streams answers; squad builder and model/backtest pages (their endpoints exist).
    - Docker image, metrics.
 2. **Deploy:** Helm, Terraform on Azure AKS (student credit), CI, dashboards.
 3. **Stretch:** Temporal to run the daily ingest as durable workflows.

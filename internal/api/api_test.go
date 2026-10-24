@@ -23,14 +23,27 @@ const ui = "http://localhost:3001"
 
 // svc is a Service returning canned views and remembering the requests it saw.
 type svc struct {
-	mu      sync.Mutex
-	err     error
-	panics  bool
-	transfr service.TransfersRequest
-	players service.PlayerQuery
-	news    service.NewsQuery
+	squadReq service.SquadRequest
+	mu       sync.Mutex
+	err      error
+	panics   bool
+	transfr  service.TransfersRequest
+	players  service.PlayerQuery
+	news     service.NewsQuery
 }
 
+func (s *svc) Status(context.Context) (service.StatusView, error) {
+	return service.StatusView{Gameweek: 9, DeadlineIn: "2d 3h", Clubs: []service.ClubView{{Short: "ARS", Name: "Arsenal"}}}, s.err
+}
+func (s *svc) BuildSquad(_ context.Context, r service.SquadRequest) (service.SquadView, error) {
+	s.mu.Lock()
+	s.squadReq = r
+	s.mu.Unlock()
+	return service.SquadView{Formation: "3-4-3", Budget: "£100.0m"}, s.err
+}
+func (s *svc) Backtest(context.Context) (service.BacktestView, error) {
+	return service.BacktestView{FirstGameweek: 3, LastGameweek: 8}, s.err
+}
 func (s *svc) MyTeam(context.Context) (service.MyTeamView, error) {
 	if s.panics {
 		panic("boom")
@@ -165,6 +178,9 @@ func TestReadEndpointsReturnJSON(t *testing.T) {
 	r := newRig(t, nil)
 	tests := []struct{ path, want string }{
 		{"/api/healthz", `"status":"ok"`},
+		{"/api/status", `"deadline_in":"2d 3h"`},
+		{"/api/squad", `"formation":"3-4-3"`},
+		{"/api/backtest", `"last_gameweek":8`},
 		{"/api/team", `"team_name":"Test FC"`},
 		{"/api/lineup", `"captain":"Haaland"`},
 		{"/api/transfers", `"gameweek":9`},
@@ -201,6 +217,19 @@ func TestQueryParametersReachTheService(t *testing.T) {
 	}
 	if got := r.svc.news; got != (service.NewsQuery{Query: "injury", Player: "Saka", Days: 3, Limit: 4}) {
 		t.Errorf("news query = %+v", got)
+	}
+}
+
+func TestSquadHorizonReachesTheService(t *testing.T) {
+	r := newRig(t, nil)
+
+	r.do("GET", "/api/squad?horizon=6", "", nil)
+
+	if r.svc.squadReq.Horizon != 6 {
+		t.Errorf("squad request = %+v", r.svc.squadReq)
+	}
+	if w := r.do("GET", "/api/squad?horizon=far", "", nil); w.Code != 400 || !strings.Contains(errorOf(t, w), "horizon") {
+		t.Errorf("%d %s", w.Code, w.Body)
 	}
 }
 

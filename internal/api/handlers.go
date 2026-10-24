@@ -49,6 +49,14 @@ func (s *Server) transfers(ctx context.Context, r *http.Request) (any, error) {
 	return s.cfg.Service.Transfers(ctx, req)
 }
 
+func (s *Server) squad(ctx context.Context, r *http.Request) (any, error) {
+	horizon, err := intParam(r.URL.Query().Get("horizon"))
+	if err != nil {
+		return nil, badParam("horizon", err)
+	}
+	return s.cfg.Service.BuildSquad(ctx, service.SquadRequest{Horizon: horizon})
+}
+
 func (s *Server) players(ctx context.Context, r *http.Request) (any, error) {
 	q := r.URL.Query()
 	pq := service.PlayerQuery{Position: q.Get("position"), Team: q.Get("team"), Name: q.Get("name"), Status: q.Get("status"), SortBy: q.Get("sort_by")}
