@@ -22,3 +22,14 @@ export function sourceLabel(source: string): string {
   const id = source.toLowerCase();
   return sourceNames.find(([prefix]) => id === prefix || id.startsWith(prefix + "-"))?.[1] ?? source;
 }
+
+/** "just now", "4m ago", "3h ago", "2d ago" for a time `now` (default: the present) has passed. */
+export function ago(iso: string, now: number = Date.now()): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "";
+  const mins = Math.floor((now - t) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (mins < 24 * 60) return `${Math.floor(mins / 60)}h ago`;
+  return `${Math.floor(mins / (24 * 60))}d ago`;
+}

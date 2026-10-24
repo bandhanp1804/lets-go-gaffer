@@ -2,7 +2,9 @@ package main
 
 import (
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseServeArgs(t *testing.T) {
@@ -31,5 +33,33 @@ func TestParseServeArgs(t *testing.T) {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseNewsRefresh(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    time.Duration
+		wantErr string
+	}{
+		{"", 30 * time.Minute, ""},
+		{"  ", 30 * time.Minute, ""},
+		{"off", 0, ""},
+		{"0", 0, ""},
+		{"10m", 10 * time.Minute, ""},
+		{"2h", 2 * time.Hour, ""},
+		{"5m", 5 * time.Minute, ""},
+		{"1m", 0, "at least 5m"},
+		{"soon", 0, "want a duration"},
+		{"30", 0, "want a duration"}, // no unit
+	}
+	for _, tt := range tests {
+		got, err := parseNewsRefresh(tt.in)
+		if tt.wantErr == "" && (err != nil || got != tt.want) {
+			t.Errorf("%q = %v, %v; want %v", tt.in, got, err, tt.want)
+		}
+		if tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)) {
+			t.Errorf("%q: err = %v, want it to mention %q", tt.in, err, tt.wantErr)
+		}
 	}
 }

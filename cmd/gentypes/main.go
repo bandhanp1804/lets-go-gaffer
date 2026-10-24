@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/api"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/news"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/service"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/tsgen"
 )
@@ -39,7 +40,7 @@ func generate() (string, error) {
 	for _, v := range []any{
 		service.MyTeamView{}, service.LineupView{}, service.TransfersView{}, service.PlayersView{},
 		service.NewsSearchView{}, service.StatusView{}, service.SquadView{}, service.BacktestView{}, service.WhatIfView{}, service.WhatIfRequest{}, service.ChipsView{}, service.OutlookView{},
-		api.AskDone{}, api.ErrorBody{},
+		api.AskDone{}, api.ErrorBody{}, news.RefreshStatus{},
 	} {
 		if err := g.Add(v); err != nil {
 			return "", err

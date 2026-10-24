@@ -62,44 +62,55 @@ func newAnthropic(key string) (*llm.Anthropic, error) {
 // the service the CLI, the assistant and the API share. The caller calls the returned
 // function when done.
 func buildService(ctx context.Context) (*service.Service, func(), error) {
+	st, closeFn, err := buildStack(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	return st.svc, closeFn, nil
+}
+
+// stack is the service plus the pieces `gaffer serve` shares with its news refresh, so a refresh
+// and a search use one database pool and one embedding rate limit.
+type stack struct {
+	svc      *service.Service
+	store    *db.Store
+	embedder *embed.Voyage // nil without VOYAGE_API_KEY
+}
+
+func buildStack(ctx context.Context) (stack, func(), error) {
 	dsn := os.Getenv("GAFFER_DSN")
 	if dsn == "" {
-		return nil, nil, errors.New("GAFFER_DSN is not set")
+		return stack{}, nil, errors.New("GAFFER_DSN is not set")
 	}
 	pool, err := db.Open(ctx, dsn)
 	if err != nil {
-		return nil, nil, fmt.Errorf("open database: %w", err)
+		return stack{}, nil, fmt.Errorf("open database: %w", err)
 	}
 
 	// The token lasts an hour and this process may run for days (gaffer serve), so it is
 	// read again whenever .env changes instead of once at startup.
 	token := config.NewLiveVar(".env", sessionEnv)
+	store := db.NewStore(pool)
 	deps := service.Deps{
-		Store:     db.NewStore(pool),
+		Store:     store,
 		FPL:       fpl.NewHTTPClient(politeClient(100 * time.Millisecond)),
 		SessionFn: token.Get,
 		Live:      fpl.NewHTTPClient(sessionClientFunc(token.Get)), // sends nothing while the token is empty
 	}
 	// News search needs Voyage. Without a key the assistant still works; that tool reports it is unavailable.
-	if vkey := os.Getenv("VOYAGE_API_KEY"); vkey != "" {
-		vc, err := voyageClient()
-		if err != nil {
+	var embedder *embed.Voyage
+	if os.Getenv("VOYAGE_API_KEY") != "" {
+		var err error
+		if embedder, err = newEmbedder(); err != nil {
 			pool.Close()
-			return nil, nil, err
+			return stack{}, nil, err
 		}
-		vmodel := os.Getenv("VOYAGE_MODEL")
-		if vmodel == "" {
-			vmodel = "voyage-4"
-		}
-		if deps.Embedder, err = embed.NewVoyage(vc, embed.VoyageConfig{APIKey: vkey, Model: vmodel, Dimensions: embeddingDims, BatchSize: 32}); err != nil {
-			pool.Close()
-			return nil, nil, err
-		}
+		deps.Embedder = embedder
 	}
 
 	teamID := 0
 	fmt.Sscanf(strings.TrimSpace(os.Getenv("GAFFER_TEAM_ID")), "%d", &teamID)
-	return service.New(deps, service.Config{TeamID: teamID}), pool.Close, nil
+	return stack{svc: service.New(deps, service.Config{TeamID: teamID}), store: store, embedder: embedder}, pool.Close, nil
 }
 
 // buildAssistant is buildService plus Claude. The caller calls the returned function when done.

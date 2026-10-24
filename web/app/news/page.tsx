@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Async } from "../../components/Async.tsx";
+import { NewsRefresh } from "../../components/NewsRefresh.tsx";
 import { query } from "../../lib/api.ts";
 import { sourceLabel, webURL } from "../../lib/format.ts";
 import { relevance } from "../../lib/relevance.ts";
@@ -20,6 +21,7 @@ export default function News() {
     <>
       <h1>News</h1>
       <p className="muted">Searches BBC Sport, Sky Sports, TalkSport, the Guardian and FPL’s own injury notes by meaning, not just keywords. Name a player and it looks at stories about him.</p>
+      <NewsRefresh onFinished={data.reload} />
       <form
         className="form"
         onSubmit={(e) => {
