@@ -255,7 +255,8 @@ func TestTransfers_FindsTheObviousUpgradeAndCountsFreeTransfers(t *testing.T) {
 		t.Errorf("the first option compares with itself: %v", top.NetVsFirst)
 	}
 	for i, sg := range got.Suggestions[1:] {
-		if want := math.Round((sg.NetPoints-top.NetPoints)*10) / 10; math.Abs(sg.NetVsFirst-want) > 0.11 {
+		// Exactly the difference of the two displayed figures, so a reader's subtraction agrees.
+		if want := math.Round((sg.NetPoints-top.NetPoints)*10) / 10; sg.NetVsFirst != want {
 			t.Errorf("option %d: net_points_vs_first_option = %v, want about %v", i+2, sg.NetVsFirst, want)
 		}
 	}

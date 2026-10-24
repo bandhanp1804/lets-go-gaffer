@@ -16,7 +16,7 @@ func Cases() []Case {
 		c("best-xi", q("What's my best XI for this gameweek?"),
 			CalledTool("best_lineup"), Mentions("4-4-2"), ShortClubCodes()),
 		c("transfers", q("Should I make any transfers this week?"),
-			CalledTool("suggest_transfers"), Mentions("Gomez"), ShortClubCodes()),
+			CalledTool("suggest_transfers"), Mentions("Gomez"), Omits("the summary"), ShortClubCodes()),
 		// The move pairs a £5.0m sale with a £4.3m purchase; the model once fused them
 		// into "costs £4.3m for £5.0m" and attached one player's fixture to the other.
 		c("transfer-prices", q("Who would I sell and who would I buy in the one-transfer plan, and for how much?"),
