@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -235,5 +236,52 @@ func TestStore_PlayersUpdatedAtIsWhenAnyPlayerWasLastWritten(t *testing.T) {
 
 	if err != nil || time.Since(got) > time.Minute || time.Since(got) < -time.Minute {
 		t.Errorf("updated at %v (err %v): the upsert just wrote it", got, err)
+	}
+}
+
+func TestStore_RelinkNewsUpdatesChangedLinksAndLeavesFPLNotesAlone(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+	withPlayers(t, s, 1, 2)
+	fplNote := story("fpl://player/1/x", "Note", 0.3, 1)
+	fplNote.Source = news.SourceFPL
+	if err := s.SaveNews(ctx, []news.Embedded{
+		story("https://x.test/unlinked", "Joao Pedro blow", 0.1), // the old linker missed it
+		story("https://x.test/wrong", "Something else", 0.2, 2),  // linked wrongly
+		story("https://x.test/same", "Already right", 0.4, 1),    // unchanged
+		fplNote,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	link := func(text string) []int {
+		if strings.Contains(text, "Joao Pedro") || strings.Contains(text, "Already right") {
+			return []int{1}
+		}
+		return nil
+	}
+
+	changed, err := s.RelinkNews(ctx, link)
+
+	if err != nil || changed != 2 {
+		t.Fatalf("changed %d (err %v), want 2: the missed link and the wrong one", changed, err)
+	}
+	about := func(player int) int {
+		hits, err := s.SearchNews(ctx, vec1024(0.1), db.SearchFilter{Limit: 10, PlayerIDs: []int{player}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(hits)
+	}
+	if got := about(1); got != 2 { // the missed one and the unchanged one (an FPL note is only searchable while it is the player's current note)
+		t.Errorf("stories about player 1 = %d, want 2", got)
+	}
+	if got := counts(t, s).PlayerLinks; got != 3 { // those two and the FPL note's own link, which was not touched
+		t.Errorf("links = %d, want 3", got)
+	}
+	if got := about(2); got != 0 {
+		t.Errorf("stories about player 2 = %d, want 0: the wrong link was removed", got)
+	}
+	if again, _ := s.RelinkNews(ctx, link); again != 0 {
+		t.Errorf("a second run changed %d, want 0", again)
 	}
 }

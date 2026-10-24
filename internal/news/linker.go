@@ -27,8 +27,7 @@ type candidate struct{ playerID, teamID int }
 //   - names shorter than three letters are ignored;
 //   - a surname shared by several players only links when the text also names
 //     one of their clubs;
-//   - accents are not folded yet ("Joao" does not match "João"); a proper alias
-//     table is planned.
+//   - accents are ignored, so "Joao Pedro" is João Pedro.
 type Linker struct {
 	names    map[string][]candidate // lower-case name phrase -> players with it
 	maxWords int
@@ -110,13 +109,25 @@ func words(s string) []string {
 	return strings.FieldsFunc(s, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 }
 
+// lowerAll lower-cases words and drops their accents, so a name matches however the text spells it.
 func lowerAll(ws []string) []string {
 	out := make([]string, len(ws))
 	for i, w := range ws {
-		out[i] = strings.ToLower(w)
+		out[i] = StripAccents(strings.ToLower(w))
 	}
 	return out
 }
+
+var accents = strings.NewReplacer(
+	"á", "a", "à", "a", "â", "a", "ä", "a", "ã", "a", "å", "a", "æ", "ae", "ç", "c", "ć", "c", "č", "c", "đ", "d",
+	"é", "e", "è", "e", "ê", "e", "ë", "e", "ğ", "g", "í", "i", "ì", "i", "î", "i", "ï", "i", "ı", "i", "ł", "l",
+	"ñ", "n", "ó", "o", "ò", "o", "ô", "o", "ö", "o", "õ", "o", "ø", "o", "ő", "o", "œ", "oe", "š", "s", "ś", "s",
+	"ß", "ss", "ú", "u", "ù", "u", "û", "u", "ü", "u", "ű", "u", "ý", "y", "ÿ", "y", "ž", "z", "ź", "z",
+)
+
+// StripAccents replaces accented lower-case letters with plain ones ("joão" is "joao"). Call it on
+// lower-cased text.
+func StripAccents(s string) string { return accents.Replace(s) }
 
 func startsUpper(w string) bool {
 	for _, r := range w {

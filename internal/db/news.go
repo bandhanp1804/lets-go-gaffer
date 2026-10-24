@@ -114,3 +114,59 @@ func (s *Store) CountNews(ctx context.Context) (NewsCounts, error) {
 	}
 	return c, nil
 }
+
+// RelinkNews works out again which players each stored story mentions, using link on the story's
+// stored text (its title and summary), and updates the links that changed. It is for after the linker improves: stories
+// already stored were linked by the old rules. Stories from FPL's own notes are left alone, since
+// each is about exactly the player it was written for. It returns how many stories' links changed.
+func (s *Store) RelinkNews(ctx context.Context, link func(text string) []int) (int, error) {
+	rows, err := s.pool.Query(ctx, `SELECT c.id, c.content,
+			COALESCE((SELECT array_agg(cp.player_id ORDER BY cp.player_id) FROM chunk_players cp WHERE cp.chunk_id = c.id), '{}')
+		FROM news_chunks c JOIN news_articles a ON a.id = c.article_id
+		WHERE a.source <> $1`, news.SourceFPL)
+	if err != nil {
+		return 0, fmt.Errorf("read stories to relink: %w", err)
+	}
+	type change struct {
+		chunk int64
+		ids   []int
+	}
+	var changes []change
+	for rows.Next() {
+		var chunk int64
+		var content string
+		var old []int32
+		if err := rows.Scan(&chunk, &content, &old); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("scan story: %w", err)
+		}
+		want := link(content) // the chunk holds the title and the summary
+		if !slices.EqualFunc(want, old, func(a int, b int32) bool { return a == int(b) }) {
+			changes = append(changes, change{chunk, want})
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("read stories to relink: %w", err)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after Commit
+	for _, c := range changes {
+		if _, err := tx.Exec(ctx, `DELETE FROM chunk_players WHERE chunk_id = $1`, c.chunk); err != nil {
+			return 0, fmt.Errorf("clear links of chunk %d: %w", c.chunk, err)
+		}
+		for _, pid := range c.ids {
+			if _, err := tx.Exec(ctx, `INSERT INTO chunk_players (chunk_id, player_id) VALUES ($1, $2)`, c.chunk, pid); err != nil {
+				return 0, fmt.Errorf("link chunk %d to player %d: %w", c.chunk, pid, err)
+			}
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit: %w", err)
+	}
+	return len(changes), nil
+}
