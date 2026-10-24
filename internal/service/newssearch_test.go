@@ -264,3 +264,38 @@ func TestPlayerData_NoPlayersYetMeansNoNoteAndNoAge(t *testing.T) {
 		t.Errorf("err %v age %q notes %q", err, got.PlayersAge, got.Notes)
 	}
 }
+
+// FPL shows "Palmer", but people type "Cole Palmer" in the Player box.
+func TestPlayerBox_AcceptsTheFullNameAsWellAsTheWebName(t *testing.T) {
+	r := newRig(t, rigOpts{mutate: func(w *world) {
+		for i := range w.players {
+			if w.players[i].ID == 105 {
+				w.players[i].WebName, w.players[i].FirstName, w.players[i].LastName = "Palmer", "Cole", "Palmer"
+			}
+		}
+	}})
+	tests := []struct {
+		player  string
+		wantErr bool
+	}{
+		{"Palmer", false},
+		{"cole palmer", false},
+		{"Cole  PALMER", false},
+		{"pal", false}, // part of a web name, as before
+		{"cole", true}, // part of a first name alone is not enough
+		{"palmer cole", true},
+		{"cole smith", true},
+	}
+	for _, tt := range tests {
+		v, err := r.svc.Search(context.Background(), service.NewsQuery{Query: "is he suspended?", Player: tt.player})
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("Player %q: want an error, got %+v", tt.player, v.Player)
+			}
+			continue
+		}
+		if err != nil || v.Player == nil || v.Player.Name != "Palmer" {
+			t.Errorf("Player %q: %+v, %v", tt.player, v.Player, err)
+		}
+	}
+}
