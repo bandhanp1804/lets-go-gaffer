@@ -400,3 +400,120 @@ func TestAdvise_UnknownFormationsAreRejected(t *testing.T) {
 		}
 	}
 }
+
+func randomTable(r *rand.Rand) map[int]float64 {
+	table := map[int]float64{}
+	for id := 1; id <= 15; id++ {
+		table[id] = math.Round(r.Float64()*100) / 10
+	}
+	return table
+}
+
+func TestAdvise_AChosenCaptainChangesOnlyTheCaptainsDoubleNotTheXI(t *testing.T) {
+	r := rand.New(rand.NewSource(11))
+	for trial := 0; trial < 30; trial++ {
+		table := randomTable(r)
+		free := advise(t, squad15(), xpOf(table))
+		sum := 0.0
+		for _, e := range free.Starting {
+			sum += e.XP
+		}
+
+		for _, start := range free.Starting {
+			o := xpOf(table)
+			o.Captain = start.Player.ID
+			got := advise(t, squad15(), o)
+
+			if got.Captain.Player.ID != start.Player.ID {
+				t.Fatalf("asked for captain %d, got %d", start.Player.ID, got.Captain.Player.ID)
+			}
+			if want := sum + start.XP; math.Abs(got.Total-want) > 1e-9 {
+				t.Errorf("captain %d: total %v, want XI %v plus his %v = %v", start.Player.ID, got.Total, sum, start.XP, want)
+			}
+			if got.Total > got.BestTotal+1e-9 || math.Abs(got.BestTotal-free.Total) > 1e-9 || got.BestCaptain.Player.ID != free.Captain.Player.ID {
+				t.Errorf("the best captain must be the recommended one and no choice can beat it: total %v best %v (free %v)", got.Total, got.BestTotal, free.Total)
+			}
+			for i, e := range got.Starting {
+				if e.Player.ID != free.Starting[i].Player.ID {
+					t.Fatalf("a captain choice must not change who starts")
+				}
+			}
+			if got.ViceCaptain.Player.ID == got.Captain.Player.ID {
+				t.Errorf("vice-captain %d is the captain", got.ViceCaptain.Player.ID)
+			}
+		}
+	}
+}
+
+func TestAdvise_TheBestCaptainChoiceCostsNothing(t *testing.T) {
+	table := map[int]float64{1: 4, 8: 9, 9: 8, 13: 7}
+	free := advise(t, squad15(), xpOf(table))
+	o := xpOf(table)
+	o.Captain, o.ViceCaptain = free.Captain.Player.ID, free.ViceCaptain.Player.ID
+
+	got := advise(t, squad15(), o)
+
+	if got.Total != free.Total || got.Total != got.BestTotal {
+		t.Errorf("choosing the recommended pair must change nothing: %v vs %v", got.Total, free.Total)
+	}
+}
+
+func TestAdvise_AViceChosenAloneLeavesTheCaptainAsTheBestOfTheRest(t *testing.T) {
+	table := map[int]float64{1: 4, 8: 9, 9: 8, 13: 7}
+	free := advise(t, squad15(), xpOf(table))
+
+	// Make the best player the vice: the next best must captain.
+	o := xpOf(table)
+	o.ViceCaptain = free.Captain.Player.ID
+	got := advise(t, squad15(), o)
+	if got.Captain.Player.ID != free.ViceCaptain.Player.ID || got.ViceCaptain.Player.ID != free.Captain.Player.ID {
+		t.Errorf("captain %d vice %d, want them swapped (%d, %d)", got.Captain.Player.ID, got.ViceCaptain.Player.ID, free.ViceCaptain.Player.ID, free.Captain.Player.ID)
+	}
+
+	// Make the third best the captain: the best must be the vice.
+	o = xpOf(table)
+	third := free.Starting[len(free.Starting)-1].Player.ID
+	o.Captain = third
+	got = advise(t, squad15(), o)
+	if got.Captain.Player.ID != third || got.ViceCaptain.Player.ID != free.Captain.Player.ID {
+		t.Errorf("captain %d vice %d", got.Captain.Player.ID, got.ViceCaptain.Player.ID)
+	}
+}
+
+func TestAdvise_ABenchPlayerCannotWearTheArmband(t *testing.T) {
+	table := map[int]float64{1: 4, 8: 9, 9: 8, 13: 7}
+	free := advise(t, squad15(), xpOf(table))
+	bench := free.Bench[0].Player.ID
+	for name, o := range map[string]lineup.Options{
+		"captain": {XP: xpOf(table).XP, Captain: bench},
+		"vice":    {XP: xpOf(table).XP, ViceCaptain: bench},
+		"unknown": {XP: xpOf(table).XP, Captain: 999},
+	} {
+		if _, err := lineup.Advise(squad15(), o); !errors.Is(err, lineup.ErrNotStarting) {
+			t.Errorf("%s: err = %v, want ErrNotStarting", name, err)
+		}
+	}
+}
+
+func TestAdvise_CaptainAndViceMustBeDifferentPlayers(t *testing.T) {
+	table := map[int]float64{8: 9}
+	o := xpOf(table)
+	o.Captain, o.ViceCaptain = 8, 8
+	if _, err := lineup.Advise(squad15(), o); !errors.Is(err, lineup.ErrSameCaptain) {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestAdvise_ACaptainChoiceWorksWithAForcedFormation(t *testing.T) {
+	table := map[int]float64{1: 4, 8: 9, 9: 8, 13: 7, 14: 6, 15: 5}
+	o := xpOf(table)
+	o.Formation = "3-4-3"
+	first := advise(t, squad15(), o)
+	o.Captain = first.Starting[len(first.Starting)-1].Player.ID
+
+	got := advise(t, squad15(), o)
+
+	if got.Formation != "3-4-3" || got.Captain.Player.ID != o.Captain || got.Total > got.BestTotal {
+		t.Errorf("formation %s captain %d total %v best %v", got.Formation, got.Captain.Player.ID, got.Total, got.BestTotal)
+	}
+}

@@ -55,6 +55,14 @@ func Cases() []Case {
 			CalledTool("evaluate_transfers"), MentionsAny("like for like", "like-for-like", "same position", "goalkeeper"), Omits("worth doing", "worth it")),
 		expectsAToolError("what-if-unknown-player", q("What if I sell Messi for Gomez?"),
 			CalledTool("evaluate_transfers"), Mentions("Messi"), Omits("worth doing", "worth it")),
+		// Chip timing needs the fixtures ahead, week by week; the model must read them off the tool
+		// rather than say it cannot look ahead, and must notice the double gameweek.
+		c("chip-timing", q("When should I triple captain Haaland in the next 4 gameweeks?"),
+			CalledTool("fixture_outlook"), ToolInputHas("fixture_outlook", "Haaland"),
+			MentionsAny("GW11", "gameweek 11", "Gameweek 11"), MentionsAny("double", "two fixtures", "two home fixtures", "two away fixtures", "two matches", "two games", "twice", "two fixture")),
+		// "Should I play my wildcard now?" is the chip planner's question: its verdicts are computed in Go.
+		c("chip-planner", q("Should I play my wildcard now, and what about my free hit?"),
+			CalledTool("chip_planner"), Mentions("9.2"), MentionsAny("no Free Hit", "no longer", "already", "used", "don't have", "do not have", "unavailable", "not available")),
 		c("small-talk", q("Thanks, that's all for now."),
 			NoToolCalls()),
 	}

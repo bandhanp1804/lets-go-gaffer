@@ -315,3 +315,68 @@ func (f *Fixture) Clubs() map[string]string {
 		"WHU": "West Ham", "WOL": "Wolves",
 	}
 }
+
+// Outlook is a deterministic stand-in for the real look ahead. Haaland has a double gameweek in GW11,
+// the week that makes a Triple Captain worth it; the others have an ordinary run.
+func (f *Fixture) Outlook(_ context.Context, req service.OutlookRequest) (service.OutlookView, error) {
+	weeks := req.Gameweeks
+	if weeks < 1 {
+		weeks = 4
+	}
+	type row struct {
+		fixtures []string
+		xp       float64
+		other    float64 // the best other player in the squad that week
+	}
+	runs := map[string][]row{
+		"haaland": {{[]string{"BHA (H)"}, 6.7, 5.5}, {[]string{"BOU (A)"}, 5.9, 5.7}, {[]string{"WHU (H)", "AVL (H)"}, 12.1, 5.6}, {[]string{"BRE (A)"}, 6.0, 5.8}},
+		"salah":   {{[]string{"BRE (A)"}, 6.1, 6.7}, {[]string{"EVE (H)"}, 6.4, 5.9}, {[]string{"TOT (A)"}, 5.8, 12.1}, {[]string{"BUR (H)"}, 6.2, 6.0}},
+	}
+	names := req.Players
+	if len(names) == 0 {
+		names = []string{"Haaland"}
+	}
+	v := service.OutlookView{FirstGameweek: 9, Gameweeks: min(weeks, 4), Players: []service.OutlookPlayerView{}, Notes: []string{}}
+	for _, n := range names {
+		rows, ok := runs[strings.ToLower(strings.TrimSpace(n))]
+		if !ok {
+			return service.OutlookView{}, &service.InputError{Msg: fmt.Sprintf("no player is called %q: use the name as it appears on FPL", n)}
+		}
+		p := service.OutlookPlayerView{Name: strings.Title(strings.ToLower(n)), Team: "MCI", Position: "FWD", Price: "£15.0m", Status: "available", Owned: true, Weeks: []service.OutlookWeekView{}, BestTied: []int{}}
+		best := 0
+		for i, r := range rows[:min(weeks, len(rows))] {
+			w := service.OutlookWeekView{Gameweek: 9 + i, Fixtures: r.fixtures, Difficulty: make([]int, len(r.fixtures)), XP: r.xp,
+				AsCaptain: math.Round(2*r.xp*10) / 10, AsTripleCaptain: math.Round(3*r.xp*10) / 10, TripleCaptainExtra: r.xp,
+				BestOther: "Salah", BestOtherXP: r.other, LeadOverSquad: math.Round((r.xp-r.other)*10) / 10}
+			p.Weeks = append(p.Weeks, w)
+			p.TotalXP = math.Round((p.TotalXP+r.xp)*10) / 10
+			if r.xp > p.Weeks[best].XP {
+				best = i
+			}
+		}
+		p.BestGameweek, p.BestXP = p.Weeks[best].Gameweek, p.Weeks[best].XP
+		v.Players = append(v.Players, p)
+	}
+	return v, nil
+}
+
+// Chips is a fixed chip planner: Triple Captain should wait for Haaland's double in GW11, a Wildcard is
+// worth playing now, and the Free Hit has been used.
+func (f *Fixture) Chips(context.Context) (service.ChipsView, error) {
+	week := func(gw int, v float64, d string, dbl bool) service.ChipWeekView {
+		return service.ChipWeekView{Gameweek: gw, Value: v, Detail: d, Double: dbl}
+	}
+	return service.ChipsView{FirstGameweek: 9, Gameweeks: 4, Notes: []string{}, Chips: []service.ChipAdviceView{
+		{Chip: "3xc", Name: "Triple Captain", Available: true, Verdict: "wait", BestGameweek: 11, BestValue: 12.1, ThisWeek: 6.7,
+			Headline: "Wait for GW11: Haaland (MCI) WHU (H), AVL (H), where Triple Captain adds 12.1, against 6.7 this week.",
+			Insights: []string{"GW11: Haaland (MCI) WHU (H), AVL (H), adds 12.1 (double gameweek)."},
+			Weeks:    []service.ChipWeekView{week(9, 6.7, "Haaland (MCI) BHA (H)", false), week(10, 5.9, "Haaland (MCI) BOU (A)", false), week(11, 12.1, "Haaland (MCI) WHU (H), AVL (H)", true), week(12, 6.0, "Haaland (MCI) BRE (A)", false)}},
+		{Chip: "bboost", Name: "Bench Boost", Available: true, Verdict: "no_clear_week", BestGameweek: 10, BestValue: 9.1, ThisWeek: 8.8,
+			Headline: "Your bench is not expected to score much more in any one week.", Insights: []string{}, Weeks: []service.ChipWeekView{week(9, 8.8, "4 of your 4 bench players have a match", false)}},
+		{Chip: "freehit", Name: "Free Hit", Available: false, Verdict: "unavailable", BestGameweek: 12, BestValue: 7.1, ThisWeek: 4.9,
+			Headline: "Wait for GW12.", Insights: []string{"You have no Free Hit left to play, so this is for reference."}, Weeks: []service.ChipWeekView{week(9, 4.9, "x", false)}},
+		{Chip: "wildcard", Name: "Wildcard", Available: true, Verdict: "good_week_now", BestGameweek: 9, BestValue: 9.2, ThisWeek: 9.2,
+			Headline: "Playing it now would add 9.2 points over the next 4 gameweeks (changes 7 players, counted over GW9-GW12).", Insights: []string{},
+			Weeks: []service.ChipWeekView{week(9, 9.2, "changes 7 players, counted over GW9-GW12", false)}},
+	}}, nil
+}

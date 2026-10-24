@@ -88,7 +88,7 @@ func TestAsk_TellsTheModelTheRulesItMustFollow(t *testing.T) {
 			t.Errorf("tool %q has an invalid input schema: %s", tool.Name, tool.InputSchema)
 		}
 	}
-	for _, want := range []string{"get_my_team", "best_lineup", "suggest_transfers", "find_players", "search_news", "evaluate_transfers"} {
+	for _, want := range []string{"get_my_team", "best_lineup", "suggest_transfers", "find_players", "search_news", "evaluate_transfers", "fixture_outlook", "chip_planner"} {
 		if !names[want] {
 			t.Errorf("missing tool %q", want)
 		}
@@ -748,5 +748,42 @@ func TestAsk_NumbersInAToolsErrorMessageCountAsGrounded(t *testing.T) {
 
 	if len(ans.Ungrounded) != 0 {
 		t.Errorf("the 15 came from the tool's own message: %v", ans.Ungrounded)
+	}
+}
+
+func TestAsk_FixtureOutlookPassesTheNamesAndTheHorizonAndReturnsTheWeeks(t *testing.T) {
+	s, m, b := setup(
+		turn{calls: []call{{name: "fixture_outlook", input: `{"players":["Haaland","Salah"],"gameweeks":6}`}}},
+		turn{text: []string{"GW11."}},
+	)
+	b.outlook = service.OutlookView{FirstGameweek: 9, Gameweeks: 6, Players: []service.OutlookPlayerView{{Name: "Haaland", BestGameweek: 11, BestXP: 12.1,
+		Weeks: []service.OutlookWeekView{{Gameweek: 11, Fixtures: []string{"WHU (H)", "AVL (H)"}, XP: 12.1, AsTripleCaptain: 36.3, TripleCaptainExtra: 12.1}}}}, Notes: []string{}}
+
+	ask(t, s, "When should I triple captain Haaland?")
+
+	if got := b.lastOutlook; len(got.Players) != 2 || got.Players[0] != "Haaland" || got.Players[1] != "Salah" || got.Gameweeks != 6 {
+		t.Errorf("the backend was asked %+v", got)
+	}
+	res := m.lastToolResults()[0]
+	if res.IsError || !strings.Contains(res.Content, `"best_gameweek":11`) || !strings.Contains(res.Content, "WHU (H)") || !strings.Contains(res.Content, `"as_triple_captain":36.3`) {
+		t.Errorf("the model must get the weeks and the triple-captain figures: %s", res.Content)
+	}
+}
+
+func TestAsk_FixtureOutlookWithNoArgumentsIsFine_AndBadOnesAreErrorsTheModelCanRead(t *testing.T) {
+	s, m, b := setup(turn{calls: []call{{name: "fixture_outlook", input: `{}`}}}, turn{text: []string{"ok"}})
+	ask(t, s, "q")
+	if res := m.lastToolResults()[0]; res.IsError {
+		t.Errorf("no players means the manager's own captain options: %+v", res)
+	}
+	if len(b.lastOutlook.Players) != 0 {
+		t.Errorf("nothing was named: %+v", b.lastOutlook)
+	}
+	for name, in := range map[string]string{"unknown field": `{"player":"Haaland"}`, "wrong type": `{"players":"Haaland"}`, "weeks as text": `{"gameweeks":"four"}`} {
+		s, m, _ := setup(turn{calls: []call{{name: "fixture_outlook", input: in}}}, turn{text: []string{"ok"}})
+		ask(t, s, "q")
+		if !m.lastToolResults()[0].IsError {
+			t.Errorf("%s: want an error the model can correct", name)
+		}
 	}
 }

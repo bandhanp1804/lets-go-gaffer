@@ -133,6 +133,7 @@ type SquadView struct {
 	Starting       []PlayerView `json:"starting"`
 	Bench          []PlayerView `json:"bench"`
 	Notes          []string     `json:"notes"`
+	XPBasis        string       `json:"xp_basis"` // what each player's "xp" is: an average over the horizon
 }
 
 // BuildSquad picks the best legal 15-player squad under the £100.0m budget, ranked by
@@ -168,7 +169,7 @@ func (s *Service) BuildSquad(ctx context.Context, req SquadRequest) (SquadView, 
 		Gameweek: base.next, Horizon: horizon, Formation: advice.Formation,
 		Cost: formatMoney(best.Cost), Budget: formatMoney(optimizer.Budget), ExpectedPoints: round1(advice.Total),
 		Captain: advice.Captain.Player.WebName, ViceCaptain: advice.ViceCaptain.Player.WebName,
-		Starting: []PlayerView{}, Bench: []PlayerView{}, Notes: joinNotes(base.notes),
+		Starting: []PlayerView{}, Bench: []PlayerView{}, Notes: joinNotes(base.notes), XPBasis: averageBasis(horizon),
 	}
 	for _, e := range advice.Starting {
 		v.Starting = append(v.Starting, base.view(e.Player, e.XP))
@@ -298,3 +299,12 @@ func (s *Service) Backtest(ctx context.Context) (BacktestView, error) {
 	s.btKey, s.btView = key, &v
 	return v, nil
 }
+
+// averageBasis says what an "xp" that averages over a horizon is, so no one has to guess why
+// it differs from a figure for one gameweek.
+func averageBasis(horizon int) string {
+	return fmt.Sprintf("each player's expected points per gameweek, averaged over the next %d %s", horizon, plural(horizon, "gameweek", "gameweeks"))
+}
+
+// PlayersXPBasis is the basis of the "xp" in player lists.
+var PlayersXPBasis = averageBasis(defaultHorizon)

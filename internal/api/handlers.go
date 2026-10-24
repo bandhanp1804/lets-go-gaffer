@@ -49,6 +49,27 @@ func (s *Server) transfers(ctx context.Context, r *http.Request) (any, error) {
 	return s.cfg.Service.Transfers(ctx, req)
 }
 
+func (s *Server) lineup(ctx context.Context, r *http.Request) (any, error) {
+	q := r.URL.Query()
+	req := service.LineupRequest{Formation: q.Get("formation")}
+	var err error
+	if req.Captain, err = intParam(q.Get("captain")); err != nil {
+		return nil, badParam("captain", err)
+	}
+	if req.Vice, err = intParam(q.Get("vice")); err != nil {
+		return nil, badParam("vice", err)
+	}
+	return s.cfg.Service.LineupWith(ctx, req)
+}
+
+func (s *Server) chips(ctx context.Context, r *http.Request) (any, error) {
+	captain, err := intParam(r.URL.Query().Get("captain"))
+	if err != nil {
+		return nil, badParam("captain", err)
+	}
+	return s.cfg.Service.ChipsFor(ctx, service.ChipsRequest{Captain: captain})
+}
+
 func (s *Server) squad(ctx context.Context, r *http.Request) (any, error) {
 	horizon, err := intParam(r.URL.Query().Get("horizon"))
 	if err != nil {

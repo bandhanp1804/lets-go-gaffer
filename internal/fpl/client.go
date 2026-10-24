@@ -80,6 +80,16 @@ func (c *HTTPClient) FetchPicks(ctx context.Context, teamID, gameweek int) (*Pic
 	return &p, nil
 }
 
+// FetchLive retrieves every player's points in a gameweek as they stand now. It is public.
+// Before the matches start every player is on zero.
+func (c *HTTPClient) FetchLive(ctx context.Context, gameweek int) (*LiveEvent, error) {
+	var l LiveEvent
+	if err := c.get(ctx, fmt.Sprintf("/event/%d/live/", gameweek), &l); err != nil {
+		return nil, fmt.Errorf("fetch live points for gameweek %d: %w", gameweek, err)
+	}
+	return &l, nil
+}
+
 // FetchHistory retrieves a manager's finished gameweeks and the chips they played.
 func (c *HTTPClient) FetchHistory(ctx context.Context, teamID int) (*History, error) {
 	var h History

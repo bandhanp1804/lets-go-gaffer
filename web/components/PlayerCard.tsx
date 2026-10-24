@@ -31,6 +31,11 @@ export function PlayerCard({ p, role, onClick, selected, mark }: Props) {
         <span>{p.price}</span>
       </div>
       {p.fixture ? <div className="pfix">{p.fixture}</div> : null}
+      {p.gw_points !== undefined ? (
+        <span className="gwpts" title="points this gameweek (before the captain's double)">
+          {p.gw_points}
+        </span>
+      ) : null}
       {mark === "out" ? <div className="markline">selling</div> : null}
     </>
   );

@@ -153,9 +153,49 @@ type EntryHistory struct {
 // Picks is a manager's squad for one gameweek, as of that gameweek's deadline,
 // from /api/entry/{id}/event/{gw}/picks/.
 type Picks struct {
-	ActiveChip   *string      `json:"active_chip"` // nil when no chip was played
-	EntryHistory EntryHistory `json:"entry_history"`
-	Picks        []Pick       `json:"picks"`
+	ActiveChip    *string      `json:"active_chip"` // nil when no chip was played
+	EntryHistory  EntryHistory `json:"entry_history"`
+	Picks         []Pick       `json:"picks"`
+	AutomaticSubs []AutoSub    `json:"automatic_subs"` // bench players who came on for starters who did not play
+}
+
+// AutoSub is one automatic substitution: In (from the bench) replaced Out (a starter who
+// did not play). FPL fills these in as it confirms them, so the list can be empty while
+// a gameweek is still being played.
+type AutoSub struct {
+	In    int `json:"element_in"`
+	Out   int `json:"element_out"`
+	Event int `json:"event"`
+}
+
+// LiveEvent is every player's points in a gameweek so far, from /event/{n}/live/. It is
+// public and changes as the matches are played.
+type LiveEvent struct {
+	Elements []LivePlayer `json:"elements"`
+}
+
+// LivePlayer is one player's line in a LiveEvent.
+type LivePlayer struct {
+	ID    int `json:"id"`
+	Stats struct {
+		Minutes     int `json:"minutes"`
+		TotalPoints int `json:"total_points"`
+	} `json:"stats"`
+	// Explain says where the points came from, match by match.
+	Explain []LiveMatch `json:"explain"`
+}
+
+// LiveMatch is one match of a player's gameweek: the fixture and the statistics that scored.
+type LiveMatch struct {
+	Fixture int        `json:"fixture"`
+	Stats   []LiveStat `json:"stats"`
+}
+
+// LiveStat is one scoring statistic: what it is, how many, and the points it earned.
+type LiveStat struct {
+	Identifier string `json:"identifier"`
+	Points     int    `json:"points"`
+	Value      int    `json:"value"`
 }
 
 // GameweekHistory is one finished gameweek of a manager's season. Bank and Value
@@ -205,6 +245,13 @@ type Fixture struct {
 	HomeDifficulty int  `json:"team_h_difficulty"`
 	AwayDifficulty int  `json:"team_a_difficulty"`
 	Finished       bool `json:"finished"`
+
+	// The match itself. The scores are null until a match has started.
+	HomeScore   *int   `json:"team_h_score"`
+	AwayScore   *int   `json:"team_a_score"`
+	Started     bool   `json:"started"`
+	Minutes     int    `json:"minutes"`      // played so far
+	KickoffTime string `json:"kickoff_time"` // RFC 3339, UTC
 }
 
 // Fixtures is a season's schedule.

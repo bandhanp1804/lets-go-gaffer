@@ -27,7 +27,8 @@ type PlayerView struct {
 	TotalPoints int     `json:"total_points"`
 	Status      string  `json:"status"` // "available", "doubtful (50%)", "injured", ...
 	News        string  `json:"news,omitempty"`
-	Fixture     string  `json:"fixture,omitempty"` // next gameweek, e.g. "ARS (H)"
+	Fixture     string  `json:"fixture,omitempty"`   // next gameweek, e.g. "ARS (H)"
+	GWPoints    *int    `json:"gw_points,omitempty"` // points in the gameweek being scored, on My team only
 }
 
 // MyTeamView is the manager's squad.
@@ -46,7 +47,11 @@ type MyTeamView struct {
 	TransfersMade  int          `json:"transfers_made_this_week"`
 	HitSoFar       int          `json:"points_hit_so_far"`
 	ChipsAvailable []string     `json:"chips_available,omitempty"`
-	Notes          []string     `json:"notes"` // read these: they say how fresh the data is
+	Notes          []string     `json:"notes"`    // read these: they say how fresh the data is
+	XPBasis        string       `json:"xp_basis"` // what each player's "xp" is: one gameweek's forecast
+	// Points is how the team is scoring in the gameweek being played (or the last one finished),
+	// from public data. Nil when FPL's points could not be read or the season has not started.
+	Points *PointsView `json:"points"`
 }
 
 // CloseCallView says how nearly a benched player started.
@@ -54,6 +59,18 @@ type CloseCallView struct {
 	Bench     string  `json:"bench_player"`
 	Displaces string  `json:"would_replace"`
 	Margin    float64 `json:"expected_points_behind"`
+}
+
+// CaptainOptionView is one starter as a captain: what his double is worth and what choosing him costs.
+type CaptainOptionView struct {
+	ID        int     `json:"id"`
+	Name      string  `json:"name"`
+	Team      string  `json:"team"`
+	XP        float64 `json:"xp"`
+	AsCaptain float64 `json:"as_captain"` // his expected points counted twice
+	Cost      float64 `json:"cost"`       // expected points given up against the best captain; 0 for the best
+	Captain   bool    `json:"is_captain"`
+	Vice      bool    `json:"is_vice_captain"`
 }
 
 // FormationView is the cost of choosing a different formation.
@@ -64,26 +81,33 @@ type FormationView struct {
 
 // LineupView is the recommended XI for the upcoming gameweek.
 type LineupView struct {
-	Gameweek        int             `json:"gameweek"`
-	Source          string          `json:"source"`
-	AsOf            string          `json:"squad_as_of"`
-	Formation       string          `json:"formation"`
-	ExpectedPoints  float64         `json:"expected_points"` // the XI, captain counted twice
-	Starting        []PlayerView    `json:"starting"`
-	Bench           []PlayerView    `json:"bench"` // spare goalkeeper first, then in auto-sub order
-	Captain         string          `json:"captain"`
-	ViceCaptain     string          `json:"vice_captain"`
-	CaptainLead     float64         `json:"captain_lead_over_vice"` // under 0.3 is a toss-up
-	CloseCalls      []CloseCallView `json:"close_calls"`
-	OtherFormations []FormationView `json:"other_formations"`
-	BestFormation   string          `json:"best_formation"`          // the best of all, whichever is shown
-	VsBest          float64         `json:"expected_points_vs_best"` // the shown formation against the best: zero or negative
-	AllFormations   []FormationView `json:"all_formations"`          // every legal formation, best first, with the shown one included
-	CurrentLineupIs string          `json:"compared_with"`           // what the squad's current XI is
-	SameAsCurrent   bool            `json:"same_xi_as_current"`
-	PlayersIn       []string        `json:"players_in,omitempty"`
-	PlayersOut      []string        `json:"players_out,omitempty"`
-	Notes           []string        `json:"notes"`
+	Gameweek           int                 `json:"gameweek"`
+	Source             string              `json:"source"`
+	AsOf               string              `json:"squad_as_of"`
+	Formation          string              `json:"formation"`
+	ExpectedPoints     float64             `json:"expected_points"` // the XI, captain counted twice
+	Starting           []PlayerView        `json:"starting"`
+	Bench              []PlayerView        `json:"bench"` // spare goalkeeper first, then in auto-sub order
+	Captain            string              `json:"captain"`
+	ViceCaptain        string              `json:"vice_captain"`
+	CaptainLead        float64             `json:"captain_lead_over_vice"` // under 0.3 is a toss-up
+	CaptainID          int                 `json:"captain_id"`
+	ViceCaptainID      int                 `json:"vice_captain_id"`
+	CaptainChosen      bool                `json:"captain_chosen"`      // the manager picked the armband instead of taking the recommendation
+	RecommendedCaptain string              `json:"recommended_captain"` // the best captain for this XI
+	CaptainCost        float64             `json:"captain_cost"`        // expected points the chosen captain gives up against the recommended one; 0 when they are the same
+	CaptainOptions     []CaptainOptionView `json:"captain_options"`
+	CloseCalls         []CloseCallView     `json:"close_calls"`
+	OtherFormations    []FormationView     `json:"other_formations"`
+	XPBasis            string              `json:"xp_basis"`                // what each "xp" is
+	BestFormation      string              `json:"best_formation"`          // the best of all, whichever is shown
+	VsBest             float64             `json:"expected_points_vs_best"` // the shown formation against the best: zero or negative
+	AllFormations      []FormationView     `json:"all_formations"`          // every legal formation, best first, with the shown one included
+	CurrentLineupIs    string              `json:"compared_with"`           // what the squad's current XI is
+	SameAsCurrent      bool                `json:"same_xi_as_current"`
+	PlayersIn          []string            `json:"players_in,omitempty"`
+	PlayersOut         []string            `json:"players_out,omitempty"`
+	Notes              []string            `json:"notes"`
 }
 
 // MoveView is one swap.
@@ -136,6 +160,7 @@ type TransfersView struct {
 	Horizon          int              `json:"horizon_gameweeks"`
 	PendingTransfers int              `json:"transfers_already_made"`
 	PendingHit       int              `json:"points_hit_so_far"`
+	XPBasis          string           `json:"xp_basis"`    // what each player's "xp" is: an average over the horizon
 	Suggestions      []SuggestionView `json:"suggestions"` // empty means: keep the squad as it is
 	Notes            []string         `json:"notes"`
 }

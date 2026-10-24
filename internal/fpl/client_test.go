@@ -413,3 +413,43 @@ func TestLastFinishedGameweek(t *testing.T) {
 		t.Errorf("got %d, want 0", got)
 	}
 }
+
+const liveFixture = `{"elements": [
+  {"id": 8, "stats": {"minutes": 90, "goals_scored": 1, "total_points": 9, "bps": 40}, "explain": []},
+  {"id": 82, "stats": {"minutes": 0, "total_points": 0}, "explain": []}
+]}`
+
+func TestHTTPClient_FetchLive(t *testing.T) {
+	c, hit := newServer(t, "/event/8/live/", 200, liveFixture)
+
+	l, err := c.FetchLive(context.Background(), 8)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(*hit) != 1 || (*hit)[0] != "/event/8/live/" {
+		t.Errorf("paths hit = %v", *hit)
+	}
+	if len(l.Elements) != 2 || l.Elements[0].ID != 8 || l.Elements[0].Stats.TotalPoints != 9 || l.Elements[0].Stats.Minutes != 90 || l.Elements[1].Stats.TotalPoints != 0 {
+		t.Errorf("elements = %+v", l.Elements)
+	}
+}
+
+func TestHTTPClient_FetchLiveReportsAFailure(t *testing.T) {
+	c, _ := newServer(t, "/event/99/live/", 404, `{"detail":"Not found."}`)
+	if _, err := c.FetchLive(context.Background(), 99); err == nil {
+		t.Error("a missing gameweek must be an error")
+	}
+}
+
+func TestHTTPClient_FetchPicksReadsAutomaticSubs(t *testing.T) {
+	body := `{"active_chip": null, "entry_history": {"event": 7, "points": 40}, "picks": [],
+	  "automatic_subs": [{"entry": 4321, "element_in": 12, "element_out": 3, "event": 7}]}`
+	c, _ := newServer(t, "/entry/4321/event/7/picks/", 200, body)
+
+	p, err := c.FetchPicks(context.Background(), 4321, 7)
+
+	if err != nil || len(p.AutomaticSubs) != 1 || p.AutomaticSubs[0] != (fpl.AutoSub{In: 12, Out: 3, Event: 7}) {
+		t.Errorf("err %v subs %+v", err, p.AutomaticSubs)
+	}
+}

@@ -24,6 +24,26 @@ var ErrInvalidSquad = errors.New("invalid squad")
 // ErrUnknownFormation means Options.Formation is not one FPL allows.
 var ErrUnknownFormation = errors.New("unknown formation")
 
+// ErrNotStarting means a chosen captain or vice-captain is not in the starting XI. FPL
+// only lets a player who starts wear the armband.
+var ErrNotStarting = errors.New("not in the starting XI")
+
+// NotStartingError says which player was chosen for the armband without starting, and in what role.
+// It satisfies errors.Is(err, ErrNotStarting).
+type NotStartingError struct {
+	ID   int
+	Role string // "captain" or "vice-captain"
+}
+
+func (e *NotStartingError) Error() string {
+	return fmt.Sprintf("%s: player %d cannot be %s", ErrNotStarting, e.ID, e.Role)
+}
+
+func (e *NotStartingError) Is(target error) bool { return target == ErrNotStarting }
+
+// ErrSameCaptain means the captain and the vice-captain are the same player.
+var ErrSameCaptain = errors.New("captain and vice-captain are the same player")
+
 // Options configures Advise.
 type Options struct {
 	// XP is each player's expected points for the gameweek. Required.
@@ -35,6 +55,9 @@ type Options struct {
 	// captain, bench and close calls are then worked out within it; Formations still
 	// lists every legal one, compared with the best overall.
 	Formation string
+	// Captain and ViceCaptain, as player ids, choose who wears the armband instead of the two best
+	// scorers. Each must start. Setting one leaves the other to be the best remaining choice.
+	Captain, ViceCaptain int
 }
 
 // Entry is a player with his expected points.
@@ -67,6 +90,10 @@ type Advice struct {
 	Captain     Entry
 	ViceCaptain Entry
 	Total       float64 // expected points of the XI, with the captain counted twice
+	// BestCaptain and BestTotal are what the two best scorers would give: Total can only be lower
+	// when the manager chose a different captain.
+	BestCaptain Entry
+	BestTotal   float64
 	CloseCalls  []CloseCall
 	Formations  []FormationOption // every legal formation, best first
 }
@@ -137,13 +164,20 @@ func Advise(squad []fpl.Player, o Options) (Advice, error) {
 
 	ranked := append([]Entry(nil), best.xi...)
 	sortEntries(ranked)
+	captain, vice, err := armband(ranked, o.Captain, o.ViceCaptain)
+	if err != nil {
+		return Advice{}, err
+	}
 	advice := Advice{
 		Formation:   best.name,
 		Starting:    best.xi,
 		Bench:       bench,
-		Captain:     ranked[0],
-		ViceCaptain: ranked[1],
-		Total:       best.total,
+		Captain:     captain,
+		ViceCaptain: vice,
+		// The XI is the same whoever captains it: only the captain's extra score changes.
+		Total:       best.total - ranked[0].XP + captain.XP,
+		BestCaptain: ranked[0],
+		BestTotal:   best.total,
 	}
 
 	for _, b := range bench {
@@ -321,4 +355,40 @@ func check(squad []fpl.Player) error {
 		}
 	}
 	return nil
+}
+
+// armband picks the captain and vice-captain from the XI, best first. A chosen player must be in it.
+// With one chosen, the other is the best of the rest.
+func armband(ranked []Entry, captainID, viceID int) (captain, vice Entry, err error) {
+	find := func(id int) (Entry, bool) {
+		for _, e := range ranked {
+			if e.Player.ID == id {
+				return e, true
+			}
+		}
+		return Entry{}, false
+	}
+	var ok bool
+	if captainID != 0 {
+		if captain, ok = find(captainID); !ok {
+			return Entry{}, Entry{}, &NotStartingError{ID: captainID, Role: "captain"}
+		}
+	}
+	if viceID != 0 {
+		if vice, ok = find(viceID); !ok {
+			return Entry{}, Entry{}, &NotStartingError{ID: viceID, Role: "vice-captain"}
+		}
+	}
+	if captainID != 0 && captainID == viceID {
+		return Entry{}, Entry{}, ErrSameCaptain
+	}
+	for _, e := range ranked {
+		switch {
+		case captainID == 0 && e.Player.ID != viceID:
+			captain, captainID = e, e.Player.ID
+		case viceID == 0 && e.Player.ID != captainID:
+			vice, viceID = e, e.Player.ID
+		}
+	}
+	return captain, vice, nil
 }
