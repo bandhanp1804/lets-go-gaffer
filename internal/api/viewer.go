@@ -33,7 +33,7 @@ func viewerFrom(r *http.Request) (service.Viewer, error) {
 	if t := strings.TrimSpace(r.Header.Get(teamHeader)); t != "" {
 		id, err := strconv.Atoi(t)
 		if err != nil || id < 1 || id > maxTeamID {
-			return v, &service.InputError{Msg: "the team id must be a number such as 1253022"}
+			return v, &service.InputError{Msg: "the team id must be a number such as 1234567"}
 		}
 		v.TeamID = id
 	}

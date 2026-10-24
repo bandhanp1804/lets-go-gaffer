@@ -6,12 +6,12 @@ const b64url = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url
 const jwt = (exp: number) => `${b64url({ alg: "none" })}.${b64url({ exp })}.sig_nature-1`;
 
 test("team id: a number, or any FPL address that contains it", () => {
-  assert.equal(parseTeamId("1253022"), 1253022);
-  assert.equal(parseTeamId("  1253022 "), 1253022);
-  assert.equal(parseTeamId("https://fantasy.premierleague.com/entry/1253022/event/8"), 1253022);
-  assert.equal(parseTeamId("https://fantasy.premierleague.com/entry/1253022/history"), 1253022);
-  assert.equal(parseTeamId("fantasy.premierleague.com/entry/1253022"), 1253022);
-  assert.equal(parseTeamId("https://fantasy.premierleague.com/entry/1253022?x=1"), 1253022);
+  assert.equal(parseTeamId("1234567"), 1234567);
+  assert.equal(parseTeamId("  1234567 "), 1234567);
+  assert.equal(parseTeamId("https://fantasy.premierleague.com/entry/1234567/event/8"), 1234567);
+  assert.equal(parseTeamId("https://fantasy.premierleague.com/entry/1234567/history"), 1234567);
+  assert.equal(parseTeamId("fantasy.premierleague.com/entry/1234567"), 1234567);
+  assert.equal(parseTeamId("https://fantasy.premierleague.com/entry/1234567?x=1"), 1234567);
 });
 
 test("team id: rejects what is not one", () => {

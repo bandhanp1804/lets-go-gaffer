@@ -17,8 +17,8 @@ func TestParseTeamArgs(t *testing.T) {
 		wantSwaps []string
 		wantErr   string
 	}{
-		{"id from the environment", "1253022", nil, 1253022, nil, ""},
-		{"positional id beats the environment", "1253022", []string{"42"}, 42, nil, ""},
+		{"id from the environment", "1234567", nil, 1234567, nil, ""},
+		{"positional id beats the environment", "1234567", []string{"42"}, 42, nil, ""},
 		{"-team flag", "", []string{"-team", "42"}, 42, nil, ""},
 		{"swaps are collected", "7", []string{"-swap", "A>B", "-swap", "C>D"}, 7, []string{"A>B", "C>D"}, ""},
 		{"flags then a positional id", "", []string{"-swap", "A>B", "42"}, 42, []string{"A>B"}, ""},
