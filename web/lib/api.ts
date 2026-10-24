@@ -30,6 +30,13 @@ export async function getJSON<T>(path: string, signal?: AbortSignal, headers?: R
   return (await res.json()) as T;
 }
 
+/** POSTs a JSON body. The server refuses a POST that is not application/json. */
+export async function postJSON<T>(path: string, body: unknown = {}, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+  if (!res.ok) throw await failure(res);
+  return (await res.json()) as T;
+}
+
 /** Builds "?a=1&b=x", leaving out empty values. */
 export function query(params: Record<string, string | number | boolean | undefined>): string {
   const q = new URLSearchParams();

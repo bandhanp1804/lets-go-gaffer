@@ -9,6 +9,7 @@ Settings are read from `.env` in the project root (copy `.env.example`, which is
 | `GAFFER_TEAM_ID` | optional | The team shown when the web app has not been told another one, and the one `gaffer team` and `lineup` use. The web app can pick any team itself. Find it in the address of your Points page on the FPL site: `.../entry/<TEAM_ID>/event/<N>`. |
 | `VOYAGE_API_KEY` | `news`, `search`, news in Ask and the UI | Voyage AI embeddings. Without it everything else works and the news tool reports itself unavailable. |
 | `VOYAGE_RPM` | optional | Requests per minute. Accounts without a payment method on file are limited to 3 (the default); raise it after adding one. A first `news` run takes a few minutes at 3. |
+| `GAFFER_NEWS_REFRESH` | optional | How often `gaffer serve` pulls the news by itself: a duration such as `30m` (the default; at least `5m`) or `off`. The Refresh button on the News page works either way. Needs `VOYAGE_API_KEY`. |
 | `VOYAGE_MODEL` | optional | Defaults to `voyage-4` (1024 dimensions, which the schema fixes). |
 | `ANTHROPIC_API_KEY` | `ask`, `chat`, `eval`, the Ask page | Without it `gaffer serve` still runs and `/api/ask` is off. |
 | `ANTHROPIC_MODEL` | optional | Defaults to `claude-haiku-5-5`: questions are short and Go does the computing. Use `claude-sonnet-5-5` for richer prose at a higher price. |

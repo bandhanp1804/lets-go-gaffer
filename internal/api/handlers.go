@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/bandhanpatel/lets-go-gaffer/internal/news"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/service"
 )
 
@@ -149,6 +150,27 @@ func floatParam(v string) (float64, error) {
 
 // whatIf weighs a transfer plan. It is a POST because the plan is a body, not because it
 // changes anything: nothing is stored and nothing is sent to FPL.
+// newsRefreshStatus says whether a refresh is running and how the last one went.
+func (s *Server) newsRefreshStatus(w http.ResponseWriter, _ *http.Request) {
+	if s.cfg.News == nil {
+		writeJSON(w, http.StatusOK, news.RefreshStatus{})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.cfg.News.Status())
+}
+
+// newsRefresh starts a refresh and answers at once: pulling and embedding can take a minute or
+// more on a rate-limited key, so the page polls newsRefreshStatus instead of waiting on this. A
+// refresh already running is not an error; the answer is the same ("running").
+func (s *Server) newsRefresh(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.News == nil {
+		s.fail(w, r, service.ErrNewsUnavailable)
+		return
+	}
+	s.cfg.News.Start()
+	writeJSON(w, http.StatusAccepted, s.cfg.News.Status())
+}
+
 func (s *Server) whatIf(w http.ResponseWriter, r *http.Request) {
 	var req service.WhatIfRequest
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))

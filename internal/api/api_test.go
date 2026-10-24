@@ -16,6 +16,7 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/api"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/assistant"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/llm"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/news"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/service"
 )
 
@@ -657,5 +658,62 @@ func TestChipsCaptainReachesTheService(t *testing.T) {
 	}
 	if w := r.do("GET", "/api/chips?captain=x", "", nil); w.Code != 400 {
 		t.Errorf("%d", w.Code)
+	}
+}
+
+// refresher is a NewsRefresher that records starts.
+type refresher struct {
+	starts  int
+	running bool
+}
+
+func (f *refresher) Start() bool {
+	f.starts++
+	was := f.running
+	f.running = true
+	return !was
+}
+
+func (f *refresher) Status() news.RefreshStatus {
+	return news.RefreshStatus{Available: true, Running: f.running, LastNew: 4}
+}
+
+func TestNewsRefresh(t *testing.T) {
+	f := &refresher{}
+	r := newRig(t, func(c *api.Config, _ *rig) { c.News = f })
+
+	w := r.do("POST", "/api/news/refresh", "{}", nil)
+	if w.Code != 202 || f.starts != 1 || !strings.Contains(w.Body.String(), `"running":true`) {
+		t.Fatalf("start: %d %s (starts %d)", w.Code, w.Body, f.starts)
+	}
+	again := r.do("POST", "/api/news/refresh", "{}", nil)
+	if again.Code != 202 || !strings.Contains(again.Body.String(), `"running":true`) {
+		t.Errorf("a second start while running is the same answer: %d %s", again.Code, again.Body)
+	}
+	got := r.do("GET", "/api/news/refresh", "", nil)
+	if got.Code != 200 || !strings.Contains(got.Body.String(), `"last_new":4`) {
+		t.Errorf("status: %d %s", got.Code, got.Body)
+	}
+}
+
+func TestNewsRefreshIsOffWithoutARefresher(t *testing.T) {
+	r := newRig(t, nil)
+
+	if w := r.do("GET", "/api/news/refresh", "", nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"available":false`) {
+		t.Errorf("status: %d %s", w.Code, w.Body)
+	}
+	if w := r.do("POST", "/api/news/refresh", "{}", nil); w.Code != 503 {
+		t.Errorf("start: %d %s, want 503", w.Code, w.Body)
+	}
+}
+
+func TestNewsRefreshRefusesAForeignOrigin(t *testing.T) {
+	f := &refresher{}
+	r := newRig(t, func(c *api.Config, _ *rig) { c.News = f })
+
+	w := r.do("POST", "/api/news/refresh", "{}", map[string]string{"Origin": "https://evil.example"})
+
+	if w.Code != 403 || f.starts != 0 {
+		t.Errorf("%d, starts %d: a page on another site must not be able to spend embedding credits", w.Code, f.starts)
 	}
 }

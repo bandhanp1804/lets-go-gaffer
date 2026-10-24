@@ -67,6 +67,72 @@ func voyageClient() (*http.Client, error) {
 	}), nil
 }
 
+// newsPipeline pulls the news: it refreshes the players, fetches every feed, and embeds and stores
+// what is new. `gaffer news` runs it once; `gaffer serve` runs it again on a timer and on request.
+type newsPipeline struct {
+	store    *db.Store
+	embedder news.Embedder
+}
+
+// newEmbedder builds the Voyage embedder from the environment. It returns an error if there is no
+// VOYAGE_API_KEY, so callers that can live without news check for the key first.
+func newEmbedder() (*embed.Voyage, error) {
+	key := os.Getenv("VOYAGE_API_KEY")
+	if key == "" {
+		return nil, errors.New("VOYAGE_API_KEY is not set (add it to .env)")
+	}
+	model := os.Getenv("VOYAGE_MODEL")
+	if model == "" {
+		model = "voyage-4"
+	}
+	vc, err := voyageClient()
+	if err != nil {
+		return nil, err
+	}
+	// 32 short texts is about 2K tokens, so even three requests a minute stay
+	// well under the 10K tokens/minute free-account limit.
+	return embed.NewVoyage(vc, embed.VoyageConfig{APIKey: key, Model: model, Dimensions: embeddingDims, BatchSize: 32})
+}
+
+// refresh runs one pull. The summary is returned even when the run failed part way: what was saved stays saved.
+func (p newsPipeline) refresh(ctx context.Context) (news.Summary, error) {
+	// One API call refreshes players (and FPL's news on them) without the
+	// minute-long history crawl.
+	boot, err := ingest.Bootstrap(ctx, fpl.NewHTTPClient(politeClient(100*time.Millisecond)), p.store)
+	if err != nil {
+		return news.Summary{}, err
+	}
+
+	feedClient := politeClient(500 * time.Millisecond)
+	sources := make([]news.Source, 0, len(feeds)+1)
+	for _, f := range feeds {
+		sources = append(sources, news.NewRSSSource(f.name, f.url, feedClient))
+	}
+	sources = append(sources, news.NewPlayerNewsSource(news.PlayerNewsItems(boot.Players, boot.Teams)))
+
+	start := time.Now()
+	sum, err := news.Ingest(ctx, sources, news.NewLinker(boot.Players, boot.Teams), p.embedder, p.store)
+
+	slog.Info("news ingest finished",
+		"fetched", sum.Fetched, "new", sum.New, "duplicates", sum.Duplicates, "linked_to_players", sum.Linked,
+		"elapsed", time.Since(start).Round(time.Millisecond))
+	names := make([]string, 0, len(sum.SourceErrors))
+	for name := range sum.SourceErrors {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		slog.Warn("source failed", "source", name, "err", sum.SourceErrors[name])
+	}
+	if err != nil {
+		return sum, err
+	}
+	if c, cerr := p.store.CountNews(ctx); cerr == nil {
+		slog.Info("news stored", "articles", c.Articles, "chunks", c.Chunks, "player_links", c.PlayerLinks)
+	}
+	return sum, nil
+}
+
 // runNews refreshes player data, then pulls news from RSS and FPL, embeds what
 // is new, and stores it for semantic search.
 func runNews(ctx context.Context) error {
@@ -74,13 +140,9 @@ func runNews(ctx context.Context) error {
 	if dsn == "" {
 		return errors.New("GAFFER_DSN is not set")
 	}
-	key := os.Getenv("VOYAGE_API_KEY")
-	if key == "" {
-		return errors.New("VOYAGE_API_KEY is not set (add it to .env)")
-	}
-	model := os.Getenv("VOYAGE_MODEL")
-	if model == "" {
-		model = "voyage-4"
+	embedder, err := newEmbedder()
+	if err != nil {
+		return err
 	}
 	migrations := os.Getenv("GAFFER_MIGRATIONS")
 	if migrations == "" {
@@ -95,54 +157,6 @@ func runNews(ctx context.Context) error {
 	if err := db.Migrate(ctx, pool, os.DirFS(migrations)); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
-	store := db.NewStore(pool)
-
-	// One API call refreshes players (and FPL's news on them) without the
-	// minute-long history crawl.
-	boot, err := ingest.Bootstrap(ctx, fpl.NewHTTPClient(politeClient(100*time.Millisecond)), store)
-	if err != nil {
-		return err
-	}
-
-	feedClient := politeClient(500 * time.Millisecond)
-	sources := make([]news.Source, 0, len(feeds)+1)
-	for _, f := range feeds {
-		sources = append(sources, news.NewRSSSource(f.name, f.url, feedClient))
-	}
-	sources = append(sources, news.NewPlayerNewsSource(news.PlayerNewsItems(boot.Players, boot.Teams)))
-
-	vc, err := voyageClient()
-	if err != nil {
-		return err
-	}
-	// 32 short texts is about 2K tokens, so even three requests a minute stay
-	// well under the 10K tokens/minute free-account limit.
-	embedder, err := embed.NewVoyage(vc, embed.VoyageConfig{
-		APIKey: key, Model: model, Dimensions: embeddingDims, BatchSize: 32,
-	})
-	if err != nil {
-		return err
-	}
-
-	start := time.Now()
-	sum, err := news.Ingest(ctx, sources, news.NewLinker(boot.Players, boot.Teams), embedder, store)
-
-	slog.Info("news ingest finished",
-		"fetched", sum.Fetched, "new", sum.New, "duplicates", sum.Duplicates, "linked_to_players", sum.Linked,
-		"elapsed", time.Since(start).Round(time.Millisecond))
-	names := make([]string, 0, len(sum.SourceErrors))
-	for name := range sum.SourceErrors {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		slog.Warn("source failed", "source", name, "err", sum.SourceErrors[name])
-	}
-	if err != nil {
-		return err
-	}
-	if c, cerr := store.CountNews(ctx); cerr == nil {
-		slog.Info("news stored", "articles", c.Articles, "chunks", c.Chunks, "player_links", c.PlayerLinks)
-	}
-	return nil
+	_, err = newsPipeline{store: db.NewStore(pool), embedder: embedder}.refresh(ctx)
+	return err
 }

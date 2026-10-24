@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/assistant"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/news"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/service"
 )
 
@@ -33,6 +34,12 @@ type Service interface {
 	ChipsFor(ctx context.Context, req service.ChipsRequest) (service.ChipsView, error)
 }
 
+// NewsRefresher pulls the news again on demand. *news.Refresher satisfies it.
+type NewsRefresher interface {
+	Start() bool // begins a refresh; false if one is already running
+	Status() news.RefreshStatus
+}
+
 // Conversation is one assistant conversation. *assistant.Session satisfies it.
 type Conversation interface {
 	Ask(ctx context.Context, question string, onText func(string)) (assistant.Answer, error)
@@ -42,6 +49,7 @@ type Conversation interface {
 type Config struct {
 	Service         Service
 	NewConversation func() Conversation // nil turns /api/ask off
+	News            NewsRefresher       // nil turns the news refresh endpoints off
 	AllowedOrigins  []string            // origins of the UI, e.g. "http://localhost:3001"
 	Logger          *slog.Logger        // default slog.Default()
 
@@ -97,6 +105,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	mux.HandleFunc("GET /api/transfers", s.read(s.transfers))
 	mux.HandleFunc("GET /api/players", s.read(s.players))
 	mux.HandleFunc("GET /api/news", s.read(s.news))
+	mux.HandleFunc("GET /api/news/refresh", s.newsRefreshStatus)
+	mux.HandleFunc("POST /api/news/refresh", s.newsRefresh)
 	mux.HandleFunc("POST /api/whatif", s.whatIf)
 	mux.HandleFunc("POST /api/ask", s.ask)
 

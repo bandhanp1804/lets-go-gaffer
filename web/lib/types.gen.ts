@@ -458,3 +458,13 @@ export interface ErrorBody {
   error: string;
   code?: string;
 }
+
+export interface RefreshStatus {
+  available: boolean;
+  running: boolean;
+  every?: string;
+  last_finished?: string;
+  last_fetched: number;
+  last_new: number;
+  last_error?: string;
+}
