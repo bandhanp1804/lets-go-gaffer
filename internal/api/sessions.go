@@ -26,9 +26,10 @@ type sessions struct {
 }
 
 type entry struct {
-	conv Conversation
-	last time.Time
-	busy bool // one question at a time per conversation
+	owner string // who it belongs to: a conversation about one team is never reused for another
+	conv  Conversation
+	last  time.Time
+	busy  bool // one question at a time per conversation
 }
 
 func newSessions(max int, idle time.Duration, now func() time.Time) *sessions {
@@ -37,7 +38,7 @@ func newSessions(max int, idle time.Duration, now func() time.Time) *sessions {
 
 // acquire marks a conversation busy and returns it; the caller must call release.
 // An empty id starts a new conversation.
-func (s *sessions) acquire(id string, create func() Conversation) (string, Conversation, func(), error) {
+func (s *sessions) acquire(id, owner string, create func() Conversation) (string, Conversation, func(), error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -50,9 +51,11 @@ func (s *sessions) acquire(id string, create func() Conversation) (string, Conve
 		if id, err = newID(); err != nil {
 			return "", nil, nil, err
 		}
-		e = &entry{conv: create()}
+		e = &entry{owner: owner, conv: create()}
 		s.m[id] = e
-	} else if e = s.m[id]; e == nil {
+	} else if e = s.m[id]; e == nil || e.owner != owner {
+		// A conversation from another team (or token) looks unknown rather than forbidden,
+		// so the client simply starts a fresh one and nothing is revealed about the other.
 		return "", nil, nil, errUnknownSession
 	}
 	if e.busy {

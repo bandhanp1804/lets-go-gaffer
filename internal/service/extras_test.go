@@ -357,7 +357,7 @@ func TestANewTokenTakesEffectImmediatelyAndNotAfterTheCacheExpires(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if before.Source != "public" || live.calls != 0 || !hasNote(before.Notes, "without a restart") {
+	if before.Source != "public" || live.calls != 0 || !hasNote(before.Notes, "fresh token") {
 		t.Fatalf("expired token: source %q live calls %d notes %v", before.Source, live.calls, before.Notes)
 	}
 

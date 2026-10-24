@@ -77,12 +77,15 @@ func (s *Service) Status(ctx context.Context) (StatusView, error) {
 	} else {
 		v.NewsArticles = c.Articles
 	}
-	v.Session = s.sessionView(now)
+	_, token, err := s.who(ctx)
+	if err != nil { // no team yet: there is no squad whose session could be reported
+		token = ""
+	}
+	v.Session = s.sessionView(now, token)
 	return v, nil
 }
 
-func (s *Service) sessionView(now time.Time) SessionView {
-	token := s.session()
+func (s *Service) sessionView(now time.Time, token string) SessionView {
 	if s.deps.Live == nil || token == "" {
 		return SessionView{State: "not configured"}
 	}

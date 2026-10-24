@@ -1,19 +1,22 @@
 import { createSSEParser } from "./sse.ts";
-import type { AskDone } from "./types.gen.ts";
+import type { AskDone, ErrorBody } from "./types.gen.ts";
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** A code the client acts on, such as "team_required"; empty for ordinary errors. */
+  code: string;
+  constructor(status: number, message: string, code = "") {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
 /** Reads the {"error": "..."} body the Go server sends, falling back to the status. */
 async function failure(res: Response): Promise<ApiError> {
   try {
-    const body = (await res.json()) as { error?: string };
-    if (body.error) return new ApiError(res.status, body.error);
+    const body = (await res.json()) as Partial<ErrorBody>;
+    if (body.error) return new ApiError(res.status, body.error, body.code ?? "");
   } catch {
     // not JSON (for example the dev server could not reach the API)
   }
@@ -21,8 +24,8 @@ async function failure(res: Response): Promise<ApiError> {
   return new ApiError(res.status, `Request failed (${res.status})`);
 }
 
-export async function getJSON<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(path, { signal, cache: "no-store" });
+export async function getJSON<T>(path: string, signal?: AbortSignal, headers?: Record<string, string>): Promise<T> {
+  const res = await fetch(path, { signal, cache: "no-store", headers });
   if (!res.ok) throw await failure(res);
   return (await res.json()) as T;
 }
@@ -46,10 +49,16 @@ export interface AskHandlers {
 }
 
 /** Asks a question and streams the answer. Resolves when the stream ends. */
-export async function ask(question: string, sessionId: string | undefined, h: AskHandlers, signal?: AbortSignal): Promise<void> {
+export async function ask(
+  question: string,
+  sessionId: string | undefined,
+  h: AskHandlers,
+  signal?: AbortSignal,
+  identity?: Record<string, string>,
+): Promise<void> {
   const res = await fetch("/api/ask", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...identity },
     body: JSON.stringify({ question, session_id: sessionId || undefined }),
     signal,
   });

@@ -10,6 +10,7 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/db"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/embed"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/httpx"
 )
 
 const teamID = 4321
@@ -176,6 +177,7 @@ type fakeFPL struct {
 	captainSlot    int
 	viceSlot       int
 	entryErr       error
+	missing        map[int]bool // team ids FPL answers 404 for
 	extraTransfers []fpl.Transfer
 }
 
@@ -183,14 +185,17 @@ func newFakeFPL(w *world) *fakeFPL {
 	return &fakeFPL{w: w, bank: 20, currentEvent: 7, captainSlot: 10, viceSlot: 6}
 }
 
-func (f *fakeFPL) FetchEntry(context.Context, int) (*fpl.Entry, error) {
+func (f *fakeFPL) FetchEntry(_ context.Context, id int) (*fpl.Entry, error) {
 	f.mu.Lock()
 	f.entryCalls++
 	f.mu.Unlock()
 	if f.entryErr != nil {
 		return nil, f.entryErr
 	}
-	return &fpl.Entry{ID: teamID, Name: "Test FC", FirstName: "Pat", LastName: "Doe", CurrentEvent: f.currentEvent}, nil
+	if f.missing[id] {
+		return nil, fmt.Errorf("GET entry: %w", &httpx.StatusError{StatusCode: 404})
+	}
+	return &fpl.Entry{ID: id, Name: "Test FC", FirstName: "Pat", LastName: "Doe", CurrentEvent: f.currentEvent}, nil
 }
 
 func (f *fakeFPL) FetchPicks(context.Context, int, int) (*fpl.Picks, error) {
@@ -234,10 +239,12 @@ type fakeLive struct {
 	team  *fpl.MyTeam
 	err   error
 	calls int
+	teams []int // the team id of each call
 }
 
-func (f *fakeLive) FetchMyTeam(context.Context, int) (*fpl.MyTeam, error) {
+func (f *fakeLive) FetchMyTeam(_ context.Context, id int) (*fpl.MyTeam, error) {
 	f.calls++
+	f.teams = append(f.teams, id)
 	return f.team, f.err
 }
 
@@ -279,3 +286,6 @@ func token(exp time.Time) string {
 	enc := func(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
 	return "Bearer " + enc(`{"alg":"none"}`) + "." + enc(fmt.Sprintf(`{"exp":%d,"sub":"SECRET-SUBJECT"}`, exp.Unix())) + ".SECRET-SIGNATURE"
 }
+
+// wrapRejected is the error the live client returns when FPL refuses a session.
+func wrapRejected() error { return fmt.Errorf("fetch my team: %w", fpl.ErrSessionRejected) }
