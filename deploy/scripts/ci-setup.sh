@@ -97,7 +97,10 @@ gh api -X POST "repos/$REPO/environments/production/deployment-branch-policies" 
 gh variable set AZURE_TENANT_ID -b "$TENANT"
 gh variable set AZURE_SUBSCRIPTION_ID -b "$SUB"
 gh variable set AZURE_PLAN_CLIENT_ID -b "$PLAN_ID"
-gh variable set ALERT_EMAIL -b "$(envvar alert_email deploy/terraform/terraform.tfvars | tr -d '" ')"
+# terraform.tfvars is HCL (`alert_email     = "x"`), not KEY=VALUE.
+alert=$(sed -nE 's/^alert_email[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/p' deploy/terraform/terraform.tfvars)
+[ -n "$alert" ] || { echo "alert_email is missing from deploy/terraform/terraform.tfvars" >&2; exit 1; }
+gh variable set ALERT_EMAIL -b "$alert"
 gh variable set OAUTH_GITHUB_USERS -b "$(envvar OAUTH_GITHUB_USERS deploy/azure.env)"
 model=$(envvar ANTHROPIC_MODEL .env); [ -z "$model" ] || gh variable set ANTHROPIC_MODEL -b "$model"
 
