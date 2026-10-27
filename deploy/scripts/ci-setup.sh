@@ -10,6 +10,9 @@
 #                              grant exactly one role (AcrPull, which Terraform gives the cluster)
 #   3. GitHub: the `production` environment (main branch only), its secrets copied from .env and
 #      deploy/azure.env without printing them, and the repository variables.
+#   4. Pull request previews: a third identity, gaffer-github-preview, usable only from the
+#      `preview` environment, that may push images and reach the cluster; and the variables the
+#      preview workflows read.
 set -euo pipefail
 
 REPO=${REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}
@@ -115,6 +118,26 @@ setsecret() { [ -n "$2" ] && printf '%s' "$2" | gh secret set "$1" --env product
 setsecret AZURE_CLIENT_ID "$DEPLOY_ID"
 for k in ANTHROPIC_API_KEY VOYAGE_API_KEY GAFFER_TEAM_ID NTFY_TOPIC; do setsecret "$k" "$(envvar "$k" .env)" || true; done
 for k in OAUTH_GITHUB_CLIENT_ID OAUTH_GITHUB_CLIENT_SECRET; do setsecret "$k" "$(envvar "$k" deploy/azure.env)" || true; done
+
+echo "== 4. previews"
+TF=deploy/terraform
+terraform -chdir="$TF" init -input=false -backend-config=backend.hcl >/dev/null
+RG=$(terraform -chdir="$TF" output -raw resource_group)
+AKS=$(terraform -chdir="$TF" output -raw cluster_name)
+ACR=$(terraform -chdir="$TF" output -raw acr_name)
+HOST=$(terraform -chdir="$TF" output -raw host)
+PREVIEW_ID=$(app gaffer-github-preview "$PREFIX:environment:preview")
+PREVIEW_SP=$(az ad sp show --id "$PREVIEW_ID" --query id -o tsv)
+role "$PREVIEW_SP" AcrPush "$(az acr show -n "$ACR" --query id -o tsv)"
+role "$PREVIEW_SP" "Azure Kubernetes Service Cluster User Role" "$(az aks show -g "$RG" -n "$AKS" --query id -o tsv)"
+gh api -X PUT "repos/$REPO/environments/preview" --input - >/dev/null <<EOF
+{"deployment_branch_policy":null}
+EOF
+gh variable set AZURE_PREVIEW_CLIENT_ID -b "$PREVIEW_ID"
+gh variable set PREVIEW_DOMAIN -b "$HOST"
+gh variable set ACR_NAME -b "$ACR"
+gh variable set AKS_RESOURCE_GROUP -b "$RG"
+gh variable set AKS_NAME -b "$AKS"
 
 echo
 echo "Done. Deploy with Actions > Deploy > Run workflow (on main)."

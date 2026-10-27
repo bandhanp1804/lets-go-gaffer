@@ -1,13 +1,12 @@
-# Every pull request and every push to main: the tests, the web checks, and the deploy files
-# checked. The deploy workflow calls this too, so it asks for no more than read access; the pull
+# Every push to main, and every pull request (called from preview.yml): the tests, the web
+# checks, and the deploy files checked. The deploy workflow calls this too, so it asks for no more than read access; the pull
 # request `terraform plan`, which logs in to Azure, is its own workflow (plan.yml).
 name: CI
 
 on:
-  pull_request:
   push:
     branches: [main]
-  workflow_call: # the deploy workflow runs these first
+  workflow_call: # pull requests run these through preview.yml, deploys through deploy.yml
 
 permissions:
   contents: read

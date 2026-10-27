@@ -14,9 +14,11 @@ envFrom:
       name: gaffer-env
   - secretRef:
       name: gaffer-secrets
+{{- if not .Values.preview }}
 env:
   - name: TEMPORAL_UI
     value: https://{{ .Values.host }}/temporal
+{{- end }}
 {{- end -}}
 
 {{/* An HPA on CPU for one deployment. */}}
