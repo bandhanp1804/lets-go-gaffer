@@ -2,7 +2,10 @@ import { availability } from "../lib/pitch.ts";
 import { one } from "../lib/format.ts";
 import type { Player } from "../lib/types.gen.ts";
 
-export type Mark = "out" | "in";
+/** "out"/"in": sold/bought in a what-if transfer; "off"/"on": a substitution. */
+export type Mark = "out" | "in" | "off" | "on";
+
+const markLabel: Partial<Record<Mark, string>> = { out: "selling", off: "coming off", on: "coming on" };
 
 interface Props {
   p: Player;
@@ -10,7 +13,6 @@ interface Props {
   /** Makes the card a button. */
   onClick?: () => void;
   selected?: boolean;
-  /** "out" for a player being sold in a what-if, "in" for one being bought. */
   mark?: Mark;
 }
 
@@ -36,7 +38,7 @@ export function PlayerCard({ p, role, onClick, selected, mark }: Props) {
           {p.gw_points}
         </span>
       ) : null}
-      {mark === "out" ? <div className="markline">selling</div> : null}
+      {mark && markLabel[mark] ? <div className={`markline markline-${mark}`}>{markLabel[mark]}</div> : null}
     </>
   );
   if (onClick) {
