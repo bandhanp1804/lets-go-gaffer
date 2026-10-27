@@ -672,6 +672,7 @@ th button.sort:focus-visible {
 }
 
 button.primary,
+a.button.primary,
 a.ghost {
   display: inline-flex;
   align-items: center;
@@ -682,7 +683,8 @@ a.ghost {
   text-decoration: none;
   cursor: pointer;
 }
-button.primary {
+button.primary,
+a.button.primary {
   background: var(--accent);
   border: 1px solid var(--accent);
   color: var(--accent-text);
@@ -1515,4 +1517,10 @@ ul.watched li {
 }
 .signout:hover {
   color: var(--accent);
+}
+
+.signedout {
+  max-width: 560px;
+  margin: 48px auto;
+  text-align: center;
 }

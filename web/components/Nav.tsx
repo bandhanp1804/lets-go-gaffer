@@ -24,6 +24,16 @@ const links = [
 export function Nav() {
   const path = usePathname();
   const { identity, ready, live, openModal, settings } = useTeam();
+  // The signed-out page is outside the login: every link from it would only ask for the login.
+  if (path === "/signed-out") {
+    return (
+      <nav className="nav" aria-label="Main">
+        <span className="brand">
+          <span className="ball" aria-hidden="true">⚽</span> Let’s Go Gaffer
+        </span>
+      </nav>
+    );
+  }
   return (
     <nav className="nav" aria-label="Main">
       <Link href="/" className="brand">
