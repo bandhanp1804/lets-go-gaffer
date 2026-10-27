@@ -123,6 +123,8 @@ type Service struct {
 	btMu   sync.Mutex // the backtest takes seconds, so it has its own lock and cache
 	btKey  string
 	btView *BacktestView
+
+	queries queryVectors // embeddings of recent questions
 }
 
 // New returns a Service.
@@ -130,7 +132,7 @@ func New(deps Deps, cfg Config) *Service {
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}
-	return &Service{deps: deps, cfg: cfg}
+	return &Service{deps: deps, cfg: cfg, queries: queryVectors{max: queryCacheSize}}
 }
 
 // baseSnap is the season's data, shared by every question.

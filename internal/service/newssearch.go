@@ -101,11 +101,16 @@ func (s *Service) Search(ctx context.Context, q NewsQuery) (NewsSearchView, erro
 		filter.Since = now.Add(-time.Duration(q.Days) * 24 * time.Hour)
 	}
 	// A question is embedded as a Query, not a Document: Voyage embeds them differently.
-	vecs, err := s.deps.Embedder.Embed(ctx, []string{query}, embed.Query)
-	if err != nil {
-		return NewsSearchView{}, fmt.Errorf("embed question: %w", err)
+	vec, ok := s.queries.get(query)
+	if !ok {
+		vecs, err := s.deps.Embedder.Embed(ctx, []string{query}, embed.Query)
+		if err != nil {
+			return NewsSearchView{}, fmt.Errorf("embed question: %w", err)
+		}
+		vec = vecs[0]
+		s.queries.put(query, vec)
 	}
-	hits, err := s.deps.Store.SearchNews(ctx, vecs[0], filter)
+	hits, err := s.deps.Store.SearchNews(ctx, vec, filter)
 	if err != nil {
 		return NewsSearchView{}, err
 	}

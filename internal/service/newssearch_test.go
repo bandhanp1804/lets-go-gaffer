@@ -299,3 +299,21 @@ func TestPlayerBox_AcceptsTheFullNameAsWellAsTheWebName(t *testing.T) {
 		}
 	}
 }
+
+// A key on the free tier allows 3 embeddings a minute: a question asked again must not spend one.
+func TestSearch_AQuestionAskedAgainIsNotEmbeddedAgain(t *testing.T) {
+	r := newRig(t, rigOpts{})
+	ask := func(q string) { search(t, r, service.NewsQuery{Query: q, NoDetect: true}) }
+
+	ask("is saka injured?")
+	ask("is saka injured?")
+	ask("  Is SAKA   injured? ") // the same question, typed differently
+	if got := len(r.emb.calls); got != 1 {
+		t.Fatalf("embedded %d times, want once", got)
+	}
+
+	ask("who scores most for arsenal?")
+	if got := len(r.emb.calls); got != 2 {
+		t.Errorf("a new question embedded %d times in all, want 2", got)
+	}
+}
