@@ -672,6 +672,7 @@ th button.sort:focus-visible {
 }
 
 button.primary,
+a.button.primary,
 a.ghost {
   display: inline-flex;
   align-items: center;
@@ -682,12 +683,14 @@ a.ghost {
   text-decoration: none;
   cursor: pointer;
 }
-button.primary {
+button.primary,
+a.button.primary {
   background: var(--accent);
   border: 1px solid var(--accent);
   color: var(--accent-text);
 }
 button.primary.big,
+a.button.primary.big,
 a.ghost.big {
   padding: 12px 22px;
   font-size: 1.05rem;
@@ -1505,4 +1508,43 @@ ul.watched li {
 }
 .health table {
   width: 100%;
+}
+
+.signout {
+  margin-left: 12px;
+  white-space: nowrap;
+  font-size: 0.9em;
+  color: var(--muted);
+}
+.signout:hover {
+  color: var(--accent);
+}
+
+/* The title page after signing out */
+.titlepage {
+  padding-top: 8px;
+}
+.titlenote {
+  margin-top: 18px;
+  font-size: 0.9em;
+  opacity: 0.85;
+}
+.titlefeatures {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+.titlefeatures li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 6px;
+}
+.titlefeatures span {
+  color: var(--muted);
 }

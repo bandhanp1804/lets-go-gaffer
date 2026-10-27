@@ -4,6 +4,10 @@
 # URL are set with --set on install.
 config:
   existingSecret: oauth2-proxy-secrets
+  # A name of our own. The first cookies were scoped to production's host only; sign-out clears
+  # only the domain-wide cookie, so a leftover host-only cookie of the same name kept people
+  # signed in. A new name leaves those behind (they expire on their own).
+  cookieName: _gaffer_auth
 extraArgs:
   provider: github
   email-domain: "*"
