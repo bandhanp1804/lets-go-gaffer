@@ -60,12 +60,18 @@ app() { # app NAME SUBJECT -> prints the app's client id
   [ -n "$id" ] || id=$(az ad app create --display-name "$1" --query appId -o tsv)
   az ad sp show --id "$id" -o none 2>/dev/null || az ad sp create --id "$id" -o none
   if [ -z "$(az ad app federated-credential list --id "$id" --query "[?subject=='$2'].name" -o tsv)" ]; then
+    # One credential per app, named github: replace one with an outdated subject.
+    az ad app federated-credential delete --id "$id" --federated-credential-id github -o none 2>/dev/null || true
     az ad app federated-credential create --id "$id" --parameters "{\"name\":\"github\",\"issuer\":\"https://token.actions.githubusercontent.com\",\"subject\":\"$2\",\"audiences\":[\"api://AzureADTokenExchange\"]}" -o none
   fi
   echo "$id"
 }
-PLAN_ID=$(app gaffer-github-plan "repo:$REPO:pull_request")
-DEPLOY_ID=$(app gaffer-github-deploy "repo:$REPO:environment:production")
+# GitHub's token subject starts with this prefix. It now carries immutable ids
+# (repo:owner@123/name@456), so it is read from GitHub instead of assumed.
+PREFIX=$(gh api "repos/$REPO/actions/oidc/customization/sub" -q .sub_claim_prefix 2>/dev/null || true)
+[ -n "$PREFIX" ] || PREFIX="repo:$REPO"
+PLAN_ID=$(app gaffer-github-plan "$PREFIX:pull_request")
+DEPLOY_ID=$(app gaffer-github-deploy "$PREFIX:environment:production")
 PLAN_SP=$(az ad sp show --id "$PLAN_ID" --query id -o tsv)
 DEPLOY_SP=$(az ad sp show --id "$DEPLOY_ID" --query id -o tsv)
 
