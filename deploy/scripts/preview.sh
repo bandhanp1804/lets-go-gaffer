@@ -90,7 +90,10 @@ up() {
     psql_job "seed-$ns" "
 psql -d postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE IF EXISTS $db WITH (FORCE)' -c 'CREATE DATABASE $db'
 pg_dump -Fc -d gaffer | pg_restore --no-owner --exit-on-error -d $db
-psql -d $db -v ON_ERROR_STOP=1 -c 'TRUNCATE user_settings, alerts, watchlist'
+for t in user_settings alerts watchlist; do
+  # Empty whichever exist: production may not have run a newer migration yet.
+  if [ \"\$(psql -d $db -tAc \"select to_regclass('\$t')\")\" = \"\$t\" ]; then psql -d $db -v ON_ERROR_STOP=1 -c \"TRUNCATE \$t\"; fi
+done
 "
     kubectl create namespace "$ns" >/dev/null
     kubectl label namespace "$ns" gaffer/preview=true gaffer/pr="$n" >/dev/null
