@@ -1,0 +1,39 @@
+# On a pull request: a read-only `terraform plan`, so the change to Azure is visible before it
+# merges. Kept apart from ci.yml because it logs in to Azure (id-token), which the deploy
+# workflow's call to CI must not need.
+name: Plan
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    if: github.event.pull_request.head.repo.full_name == github.repository # not from forks
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # to log in to Azure with OIDC, as the read-only plan identity
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.6
+      - name: terraform plan
+        working-directory: deploy/terraform
+        run: |
+          terraform init -input=false -backend-config=backend.hcl
+          # The plan identity can read the state but not lock it: plans never block a deploy.
+          terraform plan -input=false -lock=false -no-color | tee plan.txt
+      - name: summary
+        run: |
+          { echo '### terraform plan'; echo '```'; grep -E '^(Plan:|No changes)|will be (created|destroyed|updated|replaced)|must be replaced' deploy/terraform/plan.txt || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

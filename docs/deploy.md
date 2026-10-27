@@ -44,7 +44,8 @@ Rerun `deploy.sh app` to roll out new code: images are tagged with the commit.
 
 | Workflow | When | What it does |
 |---|---|---|
-| CI (`.github/workflows/ci.yml`) | every pull request and push to main | Go tests against a pgvector Postgres, web typecheck and tests, `terraform fmt`/`validate`, `helm lint`. On a pull request, also a read-only `terraform plan`, summarised on the run page. |
+| CI (`.github/workflows/ci.yml`) | every pull request and push to main | Go tests against a pgvector Postgres, web typecheck and tests, `terraform fmt`/`validate`, `helm lint`. |
+| Plan (`.github/workflows/plan.yml`) | every pull request | A read-only `terraform plan`, summarised on the run page. Its own workflow because it logs in to Azure, a permission the deploy's call to CI must not need. |
 | Deploy (`.github/workflows/deploy.yml`) | Actions > Deploy > Run workflow, on main | CI, then `terraform apply`, the images, and the Helm rollout (`deploy.sh infra`, then `app`). |
 
 The deploy is started by hand because GitHub's "required reviewers" approval needs a paid plan for a private repository; the click is the approval. On a public repository, add a `push` trigger and a reviewer on the `production` environment instead.
