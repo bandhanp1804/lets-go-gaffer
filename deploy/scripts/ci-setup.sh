@@ -14,6 +14,8 @@
 #      `preview` environment, that may push images and reach the cluster; and the variables the
 #      preview workflows read.
 set -euo pipefail
+# Paths below are from the repository root: run from there, whatever folder this was started in.
+cd "$(dirname "$0")/../.."
 
 REPO=${REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}
 LOCATION=${LOCATION:-northcentralus}

@@ -10,6 +10,8 @@
 # Secrets never pass through Terraform: they go from .env and deploy/azure.env straight into
 # Kubernetes Secrets.
 set -euo pipefail
+# Paths below are from the repository root: run from there, whatever folder this was started in.
+cd "$(dirname "$0")/../.."
 
 TF=deploy/terraform
 NS=gaffer

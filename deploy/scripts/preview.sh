@@ -13,6 +13,8 @@
 # Reads PREVIEW_DOMAIN (production's host), ACR_NAME, AKS_RESOURCE_GROUP and AKS_NAME from the
 # environment (GitHub repository variables), so it needs no Terraform state.
 set -euo pipefail
+# Paths below are from the repository root: run from there, whatever folder this was started in.
+cd "$(dirname "$0")/../.."
 
 PROD_NS=gaffer
 CHART=deploy/helm/gaffer
