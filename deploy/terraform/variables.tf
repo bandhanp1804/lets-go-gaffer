@@ -6,7 +6,7 @@ variable "subscription_id" {
 variable "location" {
   description = "Azure region."
   type        = string
-  default     = "eastus"
+  default     = "northcentralus" # the student subscription allows only a few regions; East US is not one
 }
 
 variable "name" {

@@ -1,0 +1,66 @@
+# Deploys main: CI, then Terraform apply, the images and the Helm rollout.
+#
+# Started by hand (Actions > Deploy > Run workflow): that click is the approval. GitHub's
+# "required reviewers" gate needs a paid plan for a private repository; on a public repository,
+# add `push: branches: [main]` here and a reviewer on the production environment instead.
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+# One deploy at a time; a newer push waits rather than racing an older one.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-24.04
+    if: github.ref == 'refs/heads/main'
+    environment: production # holds the deploy identity and the app secrets; main only
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
+      # Read by deploy.sh in place of .env and deploy/azure.env.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      GAFFER_TEAM_ID: ${{ secrets.GAFFER_TEAM_ID }}
+      NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      OAUTH_GITHUB_CLIENT_ID: ${{ secrets.OAUTH_GITHUB_CLIENT_ID }}
+      OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
+      OAUTH_GITHUB_USERS: ${{ vars.OAUTH_GITHUB_USERS }}
+      ACME_EMAIL: ${{ vars.ALERT_EMAIL }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.6
+          terraform_wrapper: false # deploy.sh reads raw outputs
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.3.1
+      - uses: docker/setup-buildx-action@v3
+      - name: terraform apply
+        run: deploy/scripts/deploy.sh infra
+      - name: roll out the app
+        run: deploy/scripts/deploy.sh app
