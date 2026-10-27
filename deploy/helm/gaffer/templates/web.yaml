@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gaffer-web
+  labels:
+    {{- include "gaffer.labels" . | nindent 4 }}
+    app: gaffer-web
+spec:
+  selector:
+    matchLabels: { app: gaffer-web }
+  template:
+    metadata:
+      labels: { app: gaffer-web }
+    spec:
+      containers:
+        - name: web
+          image: {{ include "gaffer.image" (dict "root" . "name" .Values.image.web) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - { name: http, containerPort: 3000 }
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 10
+          resources: {{- toYaml .Values.web.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gaffer-web
+  labels:
+    {{- include "gaffer.labels" . | nindent 4 }}
+spec:
+  selector: { app: gaffer-web }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+---
+{{ include "gaffer.hpa" (dict "root" . "name" "gaffer-web" "scaling" .Values.web.autoscaling) }}

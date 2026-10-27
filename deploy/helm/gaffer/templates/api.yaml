@@ -1,0 +1,64 @@
+{{- $host := required "set host, e.g. --set host=gaffer.20-1-2-3.sslip.io" .Values.host -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gaffer-api
+  labels:
+    {{- include "gaffer.labels" . | nindent 4 }}
+    app: gaffer-api
+spec:
+  selector:
+    matchLabels: { app: gaffer-api }
+  template:
+    metadata:
+      labels: { app: gaffer-api }
+    spec:
+      containers:
+        - name: api
+          image: {{ include "gaffer.image" (dict "root" . "name" .Values.image.gaffer) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Public mode: only reachable through the ingress, which has already checked the login.
+          args: ["serve", "-public", "-addr", ":8080",
+                 "-hosts", "{{ $host }},gaffer-api",
+                 "-origins", "https://{{ $host }}"]
+          {{- include "gaffer.env" . | nindent 10 }}
+          ports:
+            - { name: http, containerPort: 8080 }
+          readinessProbe:
+            httpGet: { path: /api/readyz, port: http, httpHeaders: [{ name: Host, value: gaffer-api }] }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/healthz, port: http, httpHeaders: [{ name: Host, value: gaffer-api }] }
+            periodSeconds: 20
+          resources: {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gaffer-api
+  labels:
+    {{- include "gaffer.labels" . | nindent 4 }}
+  annotations:
+    # An Ask conversation lives in one API pod's memory: keep each browser on one pod.
+    traefik.ingress.kubernetes.io/service.sticky.cookie: "true"
+    traefik.ingress.kubernetes.io/service.sticky.cookie.name: gaffer_api
+    traefik.ingress.kubernetes.io/service.sticky.cookie.secure: "true"
+    traefik.ingress.kubernetes.io/service.sticky.cookie.httponly: "true"
+spec:
+  selector: { app: gaffer-api }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+---
+{{ include "gaffer.hpa" (dict "root" . "name" "gaffer-api" "scaling" .Values.api.autoscaling) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gaffer-api
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: { app: gaffer-api }

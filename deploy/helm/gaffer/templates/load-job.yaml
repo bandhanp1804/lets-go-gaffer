@@ -1,0 +1,26 @@
+{{- if .Values.initialLoad }}
+# After the first install: load the season (players, teams, history), then start a news pull
+# on Temporal. Later updates come from the worker's schedules.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gaffer-initial-load
+  annotations:
+    helm.sh/hook: post-install
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: sync
+          image: {{ include "gaffer.image" (dict "root" . "name" .Values.image.gaffer) }}
+          args: ["sync"]
+          {{- include "gaffer.env" . | nindent 10 }}
+      containers:
+        - name: news
+          image: {{ include "gaffer.image" (dict "root" . "name" .Values.image.gaffer) }}
+          args: ["workflow", "-detach", "news"]
+          {{- include "gaffer.env" . | nindent 10 }}
+{{- end }}

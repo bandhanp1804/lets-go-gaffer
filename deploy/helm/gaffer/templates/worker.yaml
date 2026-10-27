@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gaffer-worker
+  labels:
+    {{- include "gaffer.labels" . | nindent 4 }}
+    app: gaffer-worker
+spec:
+  selector:
+    matchLabels: { app: gaffer-worker }
+  template:
+    metadata:
+      labels: { app: gaffer-worker }
+    spec:
+      # Let activities in flight finish on scale-down or rollout.
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: worker
+          image: {{ include "gaffer.image" (dict "root" . "name" .Values.image.gaffer) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["worker"]
+          {{- include "gaffer.env" . | nindent 10 }}
+          resources: {{- toYaml .Values.worker.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+---
+{{ include "gaffer.hpa" (dict "root" . "name" "gaffer-worker" "scaling" .Values.worker.autoscaling) }}
