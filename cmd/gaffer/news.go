@@ -41,17 +41,20 @@ func politeClient(interval time.Duration) *http.Client {
 }
 
 func politeClientWith(interval time.Duration, retry httpx.RetryConfig) *http.Client {
-	return &http.Client{Transport: httpx.NewRetryTransport(
-		httpx.NewRateLimitTransport(http.DefaultTransport, httpx.NewLimiter(interval)),
-		retry,
-	)}
+	return limitedClient(httpx.NewLimiter(interval), retry)
 }
 
-// voyageClient paces requests to Voyage's limit. Without a payment method on the
+func limitedClient(l httpx.Waiter, retry httpx.RetryConfig) *http.Client {
+	return &http.Client{Transport: httpx.NewRetryTransport(httpx.NewRateLimitTransport(http.DefaultTransport, l), retry)}
+}
+
+// voyageClient keeps requests within Voyage's limit. Without a payment method on the
 // account that is 3 requests/minute and 10K tokens/minute; set VOYAGE_RPM higher
-// once the account has standard limits. The extra second absorbs clock skew
-// between us and Voyage's window. Retries back off for a long time because a
-// 429 means waiting out part of a minute, not milliseconds.
+// once the account has standard limits. The limit is per minute, not an even
+// spacing, so up to rpm requests go at once and a searcher only waits once the
+// minute's budget is spent. The extra second absorbs clock skew between us and
+// Voyage's window. Retries back off for a long time because a 429 means waiting
+// out part of a minute, not milliseconds.
 func voyageClient() (*http.Client, error) {
 	rpm := 3
 	if v := os.Getenv("VOYAGE_RPM"); v != "" {
@@ -61,7 +64,7 @@ func voyageClient() (*http.Client, error) {
 		}
 		rpm = n
 	}
-	return politeClientWith(time.Minute/time.Duration(rpm)+time.Second, httpx.RetryConfig{
+	return limitedClient(httpx.NewWindowLimiter(rpm, time.Minute+time.Second), httpx.RetryConfig{
 		MaxAttempts: 5, BaseDelay: 15 * time.Second, MaxDelay: time.Minute,
 	}), nil
 }
