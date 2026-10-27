@@ -15,7 +15,9 @@ env:
   GAFFER_NEWS_REFRESH: 30m
   GAFFER_EVAL_SCHEDULE: "0 3 * * *"
   TZ: America/New_York
-  VOYAGE_RPM: "3"
+  # Voyage requests a minute per pod. 300 needs a payment method on the Voyage account (standard
+  # limits; the free tokens still apply). Without one Voyage allows 3: set this back to "3".
+  VOYAGE_RPM: "300"
 
 api:
   resources:
