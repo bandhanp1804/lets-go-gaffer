@@ -1,6 +1,6 @@
 # Every pull request and every push to main: the tests, the web checks, and the deploy files
-# checked. On a pull request, also a read-only `terraform plan` so the change to Azure is visible
-# before it merges.
+# checked. The deploy workflow calls this too, so it asks for no more than read access; the pull
+# request `terraform plan`, which logs in to Azure, is its own workflow (plan.yml).
 name: CI
 
 on:
@@ -72,31 +72,3 @@ jobs:
           version: v4.3.1
       - name: helm lint
         run: helm lint deploy/helm/gaffer --set host=ci.example --set acmeEmail=ci@example.com
-
-  plan:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      id-token: write # to log in to Azure with OIDC, as the read-only plan identity
-    env:
-      ARM_USE_OIDC: "true"
-      ARM_CLIENT_ID: ${{ vars.AZURE_PLAN_CLIENT_ID }}
-      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.16.6
-      - name: terraform plan
-        working-directory: deploy/terraform
-        run: |
-          terraform init -input=false -backend-config=backend.hcl
-          # The plan identity can read the state but not lock it: plans never block a deploy.
-          terraform plan -input=false -lock=false -no-color | tee plan.txt
-      - name: summary
-        run: |
-          { echo '### terraform plan'; echo '```'; grep -E '^(Plan:|No changes)|will be (created|destroyed|updated|replaced)|must be replaced' deploy/terraform/plan.txt || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
