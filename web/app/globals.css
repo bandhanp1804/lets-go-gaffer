@@ -690,6 +690,7 @@ a.button.primary {
   color: var(--accent-text);
 }
 button.primary.big,
+a.button.primary.big,
 a.ghost.big {
   padding: 12px 22px;
   font-size: 1.05rem;
@@ -1519,8 +1520,31 @@ ul.watched li {
   color: var(--accent);
 }
 
-.signedout {
-  max-width: 560px;
-  margin: 48px auto;
-  text-align: center;
+/* The title page after signing out */
+.titlepage {
+  padding-top: 8px;
+}
+.titlenote {
+  margin-top: 18px;
+  font-size: 0.9em;
+  opacity: 0.85;
+}
+.titlefeatures {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+.titlefeatures li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 6px;
+}
+.titlefeatures span {
+  color: var(--muted);
 }
