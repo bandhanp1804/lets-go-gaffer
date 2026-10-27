@@ -10,7 +10,10 @@ terraform {
       version = "= 3.9.1"
     }
   }
-  # Local state: one person, one machine. It holds the database password, so it is gitignored.
+  # State lives in an Azure storage account (deploy/scripts/ci-setup.sh made it), so the laptop and
+  # GitHub Actions share it and take turns through its lock. Names are in backend.hcl; access is
+  # by Entra ID, not storage keys.
+  backend "azurerm" {}
 }
 
 provider "azurerm" {

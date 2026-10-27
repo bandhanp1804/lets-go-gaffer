@@ -1,0 +1,102 @@
+# Every pull request and every push to main: the tests, the web checks, and the deploy files
+# checked. On a pull request, also a read-only `terraform plan` so the change to Azure is visible
+# before it merges.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call: # the deploy workflow runs these first
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: gaffer
+          POSTGRES_PASSWORD: gaffer
+          POSTGRES_DB: gaffer_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gaffer -d gaffer_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      GAFFER_TEST_DSN: postgres://gaffer:gaffer@localhost:5432/gaffer_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  web:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "23.6"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+
+  deploy-files:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.6
+      - name: terraform fmt and validate
+        working-directory: deploy/terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.3.1
+      - name: helm lint
+        run: helm lint deploy/helm/gaffer --set host=ci.example --set acmeEmail=ci@example.com
+
+  plan:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # to log in to Azure with OIDC, as the read-only plan identity
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.6
+      - name: terraform plan
+        working-directory: deploy/terraform
+        run: |
+          terraform init -input=false -backend-config=backend.hcl
+          # The plan identity can read the state but not lock it: plans never block a deploy.
+          terraform plan -input=false -lock=false -no-color | tee plan.txt
+      - name: summary
+        run: |
+          { echo '### terraform plan'; echo '```'; grep -E '^(Plan:|No changes)|will be (created|destroyed|updated|replaced)|must be replaced' deploy/terraform/plan.txt || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
