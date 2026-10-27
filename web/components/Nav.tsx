@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { canSignOut, signOutURL } from "../lib/signout.ts";
 import { AlertsBadge } from "./AlertsBadge.tsx";
 import { useTeam } from "./TeamProvider.tsx";
 
@@ -22,7 +23,17 @@ const links = [
 
 export function Nav() {
   const path = usePathname();
-  const { identity, ready, live, openModal } = useTeam();
+  const { identity, ready, live, openModal, settings } = useTeam();
+  // The signed-out page is outside the login: every link from it would only ask for the login.
+  if (path === "/signed-out") {
+    return (
+      <nav className="nav" aria-label="Main">
+        <span className="brand">
+          <span className="ball" aria-hidden="true">⚽</span> Let’s Go Gaffer
+        </span>
+      </nav>
+    );
+  }
   return (
     <nav className="nav" aria-label="Main">
       <Link href="/" className="brand">
@@ -45,6 +56,11 @@ export function Nav() {
         {!ready ? "…" : identity.teamId === null ? "Pick your team" : `Team ${identity.teamId}`}
         {ready && identity.teamId !== null ? <span className={live ? "tag live" : "tag"}>{live ? "live" : "public"}</span> : null}
       </button>
+      {canSignOut(settings?.user) ? (
+        <a className="signout" href={signOutURL(window.location.host)} title={`Signed in as ${settings?.user}`}>
+          Sign out
+        </a>
+      ) : null}
     </nav>
   );
 }

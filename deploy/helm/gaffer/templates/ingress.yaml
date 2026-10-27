@@ -57,6 +57,31 @@ spec:
             backend: { service: { name: gaffer-web, port: { number: 80 } } }
 {{- if not .Values.preview }}
 ---
+# The signed-out page, and the static files it needs, are outside the login: landing anywhere
+# else after signing out sends someone still logged in to GitHub straight back in. Nothing here
+# reads data; the API stays behind the login.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gaffer-public
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  tls:
+    - hosts: [{{ $host | quote }}]
+      secretName: gaffer-tls
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /signed-out
+            pathType: Exact
+            backend: { service: { name: gaffer-web, port: { number: 80 } } }
+          - path: /_next/static
+            pathType: Prefix
+            backend: { service: { name: gaffer-web, port: { number: 80 } } }
+---
 # The login itself is not behind the login.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
