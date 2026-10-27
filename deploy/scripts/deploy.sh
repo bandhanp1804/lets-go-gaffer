@@ -85,6 +85,12 @@ app() {
     v=$(envvar "$k" .env)
     [ -n "$v" ] && args+=(--from-literal="$k=$v")
   done
+  # The key that encrypts saved settings: made once, then always the one already in the
+  # cluster. A new key would make every saved team and token unreadable.
+  local datakey
+  datakey=$(kubectl -n "$NS" get secret gaffer-secrets -o jsonpath='{.data.GAFFER_DATA_KEY}' 2>/dev/null | base64 -d || true)
+  [ -n "$datakey" ] || datakey=$(openssl rand -base64 32)
+  args+=(--from-literal=GAFFER_DATA_KEY="$datakey")
   kubectl -n "$NS" create secret generic gaffer-secrets "${args[@]}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   kubectl -n "$NS" create secret generic temporal-db --from-literal=password="$pgpass" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   local cookie

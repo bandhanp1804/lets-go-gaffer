@@ -855,3 +855,97 @@ func TestReadyz(t *testing.T) {
 		}
 	}
 }
+
+// settings is a SettingsService with one saved viewer per user.
+type settings struct {
+	saved   map[string]service.Viewer
+	updates []string // users who saved something
+	off     bool
+}
+
+func (f *settings) Get(_ context.Context, user string) (service.UserSettingsView, error) {
+	if f.off {
+		return service.UserSettingsView{}, service.ErrSettingsUnavailable
+	}
+	if user == "" {
+		return service.UserSettingsView{}, &service.InputError{Msg: "settings need a signed-in user"}
+	}
+	v := f.saved[user]
+	return service.UserSettingsView{User: user, TeamID: v.TeamID, Token: service.SavedTokenView{Saved: v.Token != ""}}, nil
+}
+func (f *settings) Update(ctx context.Context, user string, req service.UserSettingsRequest) (service.UserSettingsView, error) {
+	f.updates = append(f.updates, user)
+	return f.Get(ctx, user)
+}
+func (f *settings) Viewer(_ context.Context, user string) (service.Viewer, error) {
+	if f.off {
+		return service.Viewer{}, service.ErrSettingsUnavailable
+	}
+	return f.saved[user], nil
+}
+
+func TestSavedSettingsChooseTheSquad(t *testing.T) {
+	const savedToken = "Bearer saved.SECRET.token"
+	tests := []struct {
+		name    string
+		headers []string // user headers configured: behind the proxy
+		hdr     map[string]string
+		want    service.Viewer
+	}{
+		{"local user, nothing sent: the saved team and token", nil, nil, service.Viewer{TeamID: 111, Token: savedToken}},
+		{"signed in by email", []string{"X-Auth-Request-Email", "X-Auth-Request-User"},
+			map[string]string{"X-Auth-Request-Email": "Alice@Example.com", "X-Auth-Request-User": "alice"}, service.Viewer{TeamID: 222, Token: savedToken}},
+		{"signed in, no email: the username", []string{"X-Auth-Request-Email", "X-Auth-Request-User"},
+			map[string]string{"X-Auth-Request-User": "bob"}, service.Viewer{TeamID: 333}},
+		{"the saved team named: its saved token is added", nil, map[string]string{"X-Gaffer-Team": "111"}, service.Viewer{TeamID: 111, Token: savedToken}},
+		{"another team named: the saved token is never applied to it", nil, map[string]string{"X-Gaffer-Team": "999"}, service.Viewer{TeamID: 999}},
+		{"a token sent: it is used as is", nil, map[string]string{"X-Gaffer-Team": "999", "X-Gaffer-Token": "Bearer a.b.c"}, service.Viewer{TeamID: 999, Token: "Bearer a.b.c"}},
+		{"behind the proxy with no user: nothing saved applies", []string{"X-Auth-Request-User"}, nil, service.Viewer{}},
+		{"a user header without a proxy is ignored", nil, map[string]string{"X-Auth-Request-User": "bob"}, service.Viewer{TeamID: 111, Token: savedToken}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &settings{saved: map[string]service.Viewer{
+				"local":             {TeamID: 111, Token: savedToken},
+				"alice@example.com": {TeamID: 222, Token: savedToken},
+				"bob":               {TeamID: 333},
+			}}
+			r := newRig(t, func(c *api.Config, _ *rig) { c.Settings, c.UserHeaders = f, tt.headers })
+
+			if w := r.do("GET", "/api/team", "", tt.hdr); w.Code != 200 {
+				t.Fatalf("%d %s", w.Code, w.Body)
+			}
+			if r.svc.viewer != tt.want {
+				t.Errorf("viewer = %+v, want %+v", r.svc.viewer, tt.want)
+			}
+		})
+	}
+}
+
+func TestSettingsEndpoints(t *testing.T) {
+	f := &settings{saved: map[string]service.Viewer{"alice": {TeamID: 42, Token: "Bearer x.SECRET.y"}}}
+	r := newRig(t, func(c *api.Config, _ *rig) { c.Settings, c.UserHeaders = f, []string{"X-Auth-Request-User"} })
+	as := map[string]string{"X-Auth-Request-User": "alice"}
+
+	w := r.do("GET", "/api/settings", "", as)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"team_id":42`) || strings.Contains(w.Body.String(), "SECRET") {
+		t.Errorf("get: %d %s", w.Code, w.Body)
+	}
+	if w := r.do("POST", "/api/settings", `{"team_id": 7}`, as); w.Code != 200 || len(f.updates) != 1 || f.updates[0] != "alice" {
+		t.Errorf("post: %d %s %v", w.Code, w.Body, f.updates)
+	}
+	if w := r.do("POST", "/api/settings", `{"team": 7}`, as); w.Code != 400 {
+		t.Errorf("unknown field: %d", w.Code)
+	}
+	if w := r.do("GET", "/api/settings", "", nil); w.Code != 400 {
+		t.Errorf("behind the proxy without a user: %d %s", w.Code, w.Body)
+	}
+
+	off := newRig(t, func(c *api.Config, _ *rig) { c.Settings = &settings{off: true} })
+	if w := off.do("GET", "/api/settings", "", nil); w.Code != 503 {
+		t.Errorf("without a key: %d", w.Code)
+	}
+	if w := off.do("GET", "/api/team", "", nil); w.Code != 200 {
+		t.Errorf("settings being off must not break the rest: %d", w.Code)
+	}
+}

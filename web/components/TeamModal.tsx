@@ -7,7 +7,8 @@ import { useTeam } from "./TeamProvider.tsx";
 
 /** The "which team?" dialog: a team id, and optionally a token for the live squad. */
 export function TeamModal() {
-  const { identity, modalOpen, closeModal, setIdentity, clear } = useTeam();
+  const { identity, modalOpen, closeModal, setIdentity, clear, settings, live: liveNow } = useTeam();
+  const [saveError, setSaveError] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
   const [teamText, setTeamText] = useState("");
   const [live, setLive] = useState(false);
@@ -22,28 +23,36 @@ export function TeamModal() {
     if (!d) return;
     if (modalOpen && !d.open) {
       setTeamText(identity.teamId === null ? "" : String(identity.teamId));
-      setLive(identity.token !== "");
+      // A token saved on the server is never sent back: the box starts empty and keeps it.
+      setLive(liveNow);
       setTokenText(identity.token);
+      setSaveError("");
       setShowToken(false);
       setNow(Date.now());
       d.showModal();
     } else if (!modalOpen && d.open) {
       d.close();
     }
-  }, [modalOpen, identity]);
+  }, [modalOpen, identity, liveNow]);
 
   const teamId = parseTeamId(teamText);
   const teamError = teamText.trim() !== "" && teamId === null ? "That is not a team id. Use the number from your Points page address, or paste the whole address." : "";
   const token = live && tokenText.trim() !== "" ? cleanToken(tokenText) : null;
   const left = token?.ok ? expiresIn(token.token, now) : null;
   const tokenError = token && !token.ok ? token.reason : left === "expired" ? "That token has expired. Tokens last about an hour; get a fresh one." : "";
-  const canSubmit = teamId !== null && (!live || (token?.ok === true && left !== "expired"));
+  // With a token saved on the server, live can stay on without pasting it again.
+  const keepSaved = settings !== null && liveNow && live && tokenText.trim() === "";
+  const canSubmit = teamId !== null && (!live || keepSaved || (token?.ok === true && left !== "expired"));
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit || teamId === null) return;
-    setIdentity({ teamId, token: live && token?.ok ? token.token : "" });
-    closeModal();
+    try {
+      await setIdentity({ teamId, token: live && token?.ok ? token.token : "" }, keepSaved);
+      closeModal();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not save.");
+    }
   }
 
   async function copySnippet() {
@@ -102,9 +111,15 @@ export function TeamModal() {
 
         {live ? (
           <section className="livebox" aria-label="Live squad token">
-            <p className="privacy">
-              <strong>About your token.</strong> It is a login for your FPL account, so treat it like a password. Here it stays in this browser tab (it is forgotten when you close the tab), goes only to this app running on your own computer, and is passed on to FPL and nowhere else. It is never saved or logged, and it stops working after about an hour.
-            </p>
+            {settings !== null ? (
+              <p className="privacy">
+                <strong>About your token.</strong> It is a login for your FPL account, so treat it like a password. It is saved for your sign-in only, encrypted on the server with a key the database never holds, never sent back to a browser or logged, and passed on to FPL and nowhere else. It stops working after about an hour; remove it any time on the Setup page.
+              </p>
+            ) : (
+              <p className="privacy">
+                <strong>About your token.</strong> It is a login for your FPL account, so treat it like a password. Here it stays in this browser tab (it is forgotten when you close the tab), goes only to this app running on your own computer, and is passed on to FPL and nowhere else. It is never saved or logged, and it stops working after about an hour.
+              </p>
+            )}
 
             <h3>Easiest way to get it</h3>
             <ol className="steps">
@@ -162,14 +177,15 @@ export function TeamModal() {
           </section>
         ) : null}
 
+        {keepSaved ? <p className="fieldok">Using your saved token ({settings?.token.expires_in ?? "still valid"} left). Paste a new one to replace it.</p> : null}
+        {saveError ? <p className="fielderror">{saveError}</p> : null}
         <footer>
           {identity.teamId !== null ? (
             <button
               type="button"
               className="link"
               onClick={() => {
-                clear();
-                closeModal();
+                void clear().then(closeModal);
               }}
             >
               Forget this team
