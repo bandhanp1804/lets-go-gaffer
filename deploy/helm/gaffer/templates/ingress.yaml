@@ -1,0 +1,76 @@
+{{- $host := .Values.host -}}
+# Everything except /oauth2 passes the GitHub login first: Traefik asks oauth2-proxy about each
+# request (forwardAuth), and only a signed-in, allowed user gets through.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: github-login
+spec:
+  forwardAuth:
+    address: http://oauth2-proxy.{{ .Release.Namespace }}.svc.cluster.local/
+    trustForwardHeader: true
+    authResponseHeaders: ["X-Auth-Request-User", "X-Auth-Request-Email"]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gaffer
+  labels:
+    {{- include "gaffer.labels" . | nindent 4 }}
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-github-login@kubernetescrd
+spec:
+  tls:
+    - hosts: [{{ $host | quote }}]
+      secretName: gaffer-tls
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: gaffer-api, port: { number: 80 } } }
+          - path: /temporal
+            pathType: Prefix
+            backend: { service: { name: temporal-web, port: { number: 8080 } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: gaffer-web, port: { number: 80 } } }
+---
+# The login itself is not behind the login.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gaffer-oauth2
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  tls:
+    - hosts: [{{ $host | quote }}]
+      secretName: gaffer-tls
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /oauth2
+            pathType: Prefix
+            backend: { service: { name: oauth2-proxy, port: { number: 80 } } }
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: {{ required "set acmeEmail for Let's Encrypt" .Values.acmeEmail | quote }}
+    privateKeySecretRef:
+      name: letsencrypt-account
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik

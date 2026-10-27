@@ -1,14 +1,17 @@
 # The Go binary for every server-side part: `gaffer serve` (API), `gaffer worker` (Temporal
 # worker) and one-off jobs (`gaffer sync`). Build from the repository root:
 #   docker build -f deploy/docker/Dockerfile.gaffer -t gaffer .
-FROM golang:1.26.10-alpine3.24 AS build
+# The build stage runs on the builder's own platform and cross-compiles, so building the amd64
+# image on an arm64 Mac is fast (no emulation).
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine3.24 AS build
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 # Static, no cgo, so it runs on distroless with nothing else installed.
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/gaffer ./cmd/gaffer
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags "-s -w" -o /out/gaffer ./cmd/gaffer
 
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app

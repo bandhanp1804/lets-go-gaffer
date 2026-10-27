@@ -1,0 +1,79 @@
+# Values for the official Temporal chart (temporal/temporal 1.7.0, server 1.32), installed into the
+# gaffer namespace against Azure Postgres. The host comes from --set on install (deploy/scripts).
+server:
+  config:
+    persistence:
+      # Fixed for the life of the cluster; 4 is plenty for one manager's workflows.
+      numHistoryShards: 4
+      datastores:
+        default:
+          sql:
+            pluginName: postgres12
+            driverName: postgres12
+            databaseName: temporal
+            connectAddr: "PGHOST:5432" # replaced with --set on install
+            connectProtocol: tcp
+            user: gaffer
+            existingSecret: temporal-db
+            secretKey: password
+            createDatabase: false # Terraform created it
+            manageSchema: true
+            # B1ms allows about 50 connections in all: four services x two stores x 3, and the app.
+            maxConns: 3
+            maxIdleConns: 1
+            maxConnLifetime: "1h"
+            tls:
+              enabled: true # Azure requires TLS
+              enableHostVerification: false
+        visibility:
+          sql:
+            pluginName: postgres12
+            driverName: postgres12
+            databaseName: temporal_visibility
+            connectAddr: "PGHOST:5432"
+            connectProtocol: tcp
+            user: gaffer
+            existingSecret: temporal-db
+            secretKey: password
+            createDatabase: false
+            manageSchema: true
+            maxConns: 3
+            maxIdleConns: 1
+            maxConnLifetime: "1h"
+            tls:
+              enabled: true
+              enableHostVerification: false
+    namespaces:
+      create: true
+      namespace:
+        - name: default
+          retention: 7d
+  frontend:
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }
+  history:
+    resources:
+      requests: { cpu: 50m, memory: 192Mi }
+      limits: { memory: 512Mi }
+  matching:
+    resources:
+      requests: { cpu: 30m, memory: 96Mi }
+      limits: { memory: 256Mi }
+  worker:
+    resources:
+      requests: { cpu: 20m, memory: 96Mi }
+      limits: { memory: 256Mi }
+
+admintools:
+  enabled: false # the schema and namespace jobs still run
+
+web:
+  enabled: true
+  # Served under https://<host>/temporal, behind the same GitHub login as the app.
+  additionalEnv:
+    - name: TEMPORAL_UI_PUBLIC_PATH
+      value: /temporal
+  resources:
+    requests: { cpu: 20m, memory: 64Mi }
+    limits: { memory: 192Mi }

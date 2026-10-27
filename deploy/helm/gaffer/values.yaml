@@ -1,0 +1,42 @@
+# The public host name, e.g. gaffer.20-1-2-3.sslip.io. Set on install.
+host: ""
+
+image:
+  registry: "" # e.g. gaffer1a2b3c.azurecr.io; set on install
+  gaffer: gaffer
+  web: gaffer-web
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Settings that are not secret. Secrets (keys, DSN, FPL token, ntfy topic, team id) come from
+# the existing gaffer-secrets Secret, made by deploy/scripts/bootstrap.sh from .env.
+env:
+  TEMPORAL_ADDRESS: temporal-frontend:7233
+  GAFFER_NEWS_REFRESH: 30m
+  GAFFER_EVAL_SCHEDULE: "0 3 * * *"
+  TZ: America/New_York
+  VOYAGE_RPM: "3"
+
+api:
+  resources:
+    requests: { cpu: 50m, memory: 96Mi }
+    limits: { memory: 384Mi }
+  autoscaling: { min: 1, max: 3, cpu: 70 }
+
+worker:
+  resources:
+    requests: { cpu: 50m, memory: 96Mi }
+    limits: { memory: 384Mi }
+  autoscaling: { min: 1, max: 2, cpu: 70 }
+
+web:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 512Mi }
+  autoscaling: { min: 1, max: 3, cpu: 70 }
+
+# The first data load after install: the season, then the news (as a workflow).
+initialLoad: true
+
+# cert-manager issuer for the TLS certificate.
+acmeEmail: ""

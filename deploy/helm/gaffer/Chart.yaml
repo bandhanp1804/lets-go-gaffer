@@ -1,0 +1,6 @@
+apiVersion: v2
+name: gaffer
+description: lets-go-gaffer on Kubernetes - web app, API and Temporal worker, each autoscaled.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

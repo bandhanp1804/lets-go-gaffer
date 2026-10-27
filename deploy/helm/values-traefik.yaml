@@ -1,0 +1,25 @@
+# Traefik (traefik/traefik 42.1.3) as the one ingress, behind the one Azure load balancer.
+# ingress-nginx was retired in March 2026, so it is not used.
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+providers:
+  kubernetesCRD:
+    enabled: true
+  kubernetesIngress:
+    enabled: true
+    publishedService:
+      enabled: true
+service:
+  type: LoadBalancer
+ports:
+  web:
+    # Plain http only redirects to https.
+    redirections:
+      entryPoint:
+        to: websecure
+        scheme: https
+        permanent: true
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits: { memory: 256Mi }
