@@ -19,6 +19,14 @@ type Store struct {
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
+// Ping checks that the database answers, for a readiness probe.
+func (s *Store) Ping(ctx context.Context) error {
+	if err := s.pool.Ping(ctx); err != nil {
+		return fmt.Errorf("ping database: %w", err)
+	}
+	return nil
+}
+
 // execBatch runs sql once per index 0..n-1 inside a single transaction, so a bulk
 // upsert either fully applies or leaves nothing behind. n == 0 is a no-op.
 func (s *Store) execBatch(ctx context.Context, sql string, n int, args func(i int) []any) error {

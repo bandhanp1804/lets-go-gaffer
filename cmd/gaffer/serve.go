@@ -21,11 +21,15 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/workflows"
 )
 
-const serveUsage = "usage: gaffer serve [-addr 127.0.0.1:8080] [-origins http://localhost:3001,...]"
+const serveUsage = "usage: gaffer serve [-addr 127.0.0.1:8080] [-origins http://localhost:3001,...] [-public -hosts gaffer.example.com,...]"
 
 type serveOpts struct {
 	addr    string
 	origins []string
+	// public is for running behind a login proxy (the Kubernetes ingress): the server may listen
+	// beyond loopback, and answers requests whose Host is one of hosts.
+	public bool
+	hosts  []string
 }
 
 func parseServeArgs(args []string) (serveOpts, error) {
@@ -35,21 +39,40 @@ func parseServeArgs(args []string) (serveOpts, error) {
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&o.addr, "addr", "127.0.0.1:8080", "address to listen on (loopback only)")
 	fs.StringVar(&origins, "origins", "http://localhost:3001,http://127.0.0.1:3001", "web origins allowed to call the API")
+	var hosts string
+	fs.BoolVar(&o.public, "public", false, "listen beyond loopback; only behind a proxy that logs people in")
+	fs.StringVar(&hosts, "hosts", "", "with -public, the Host names this server answers to")
 	if err := fs.Parse(args); err != nil {
 		return o, fmt.Errorf("%w\n%s", err, serveUsage)
 	}
 	if fs.NArg() != 0 {
 		return o, errors.New(serveUsage)
 	}
-	if err := requireLoopback(o.addr); err != nil {
-		return o, err
-	}
-	for _, s := range strings.Split(origins, ",") {
-		if s = strings.TrimSpace(s); s != "" {
-			o.origins = append(o.origins, s)
+	o.origins, o.hosts = splitList(origins), splitList(hosts)
+	switch {
+	case o.public && len(o.hosts) == 0:
+		return o, errors.New("-public needs -hosts: the names the proxy sends in Host, such as gaffer.example.com")
+	case !o.public && len(o.hosts) > 0:
+		return o, errors.New("-hosts is only for -public")
+	case !o.public:
+		if err := requireLoopback(o.addr); err != nil {
+			return o, err
 		}
 	}
+	if _, _, err := net.SplitHostPort(o.addr); err != nil {
+		return o, fmt.Errorf("-addr %q: %w", o.addr, err)
+	}
 	return o, nil
+}
+
+func splitList(s string) []string {
+	var out []string
+	for _, v := range strings.Split(s, ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // requireLoopback refuses any address that is not this machine. The API has no login and
@@ -79,7 +102,7 @@ func runServe(ctx context.Context, w io.Writer, args []string) error {
 	defer closeSvc()
 	svc := st.svc
 
-	cfg := api.Config{Service: svc, AllowedOrigins: o.origins, Logger: slog.Default()}
+	cfg := api.Config{Service: svc, AllowedOrigins: o.origins, AllowedHosts: o.hosts, Logger: slog.Default(), Ready: st.store.Ping}
 	inbox := &service.Inbox{Store: st.store}
 	cfg.Inbox = inbox
 	if addr := temporalAddress(false); addr != "" {
