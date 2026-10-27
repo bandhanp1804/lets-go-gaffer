@@ -791,3 +791,67 @@ func TestInboxEndpointsAreOffWithoutAnInbox(t *testing.T) {
 		}
 	}
 }
+
+func TestGuard_AnswersNamedHostsOnlyWhenConfigured(t *testing.T) {
+	tests := []struct {
+		name   string
+		hosts  []string
+		host   string
+		origin string
+		status int
+	}{
+		{"named host behind the proxy", []string{"gaffer.1-2-3-4.sslip.io", "gaffer-api"}, "gaffer.1-2-3-4.sslip.io", "https://gaffer.1-2-3-4.sslip.io", 200},
+		{"case and port do not matter", []string{"gaffer-api"}, "GAFFER-API:8080", "", 200},
+		{"loopback still works", []string{"gaffer-api"}, "localhost:8080", "", 200},
+		{"an unnamed host is refused", []string{"gaffer-api"}, "evil.example", "", 403},
+		{"no names configured: as before", nil, "gaffer-api:8080", "", 403},
+		{"a named host with a foreign origin", []string{"gaffer-api"}, "gaffer-api", "https://evil.example", 403},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newRig(t, func(c *api.Config, _ *rig) {
+				c.AllowedHosts = tt.hosts
+				c.AllowedOrigins = append(c.AllowedOrigins, "https://gaffer.1-2-3-4.sslip.io")
+			})
+			hdr := map[string]string{}
+			if tt.origin != "" {
+				hdr["Origin"] = tt.origin
+			}
+			req := httptest.NewRequest("GET", "/api/healthz", nil)
+			req.Host = tt.host
+			for k, v := range hdr {
+				req.Header.Set(k, v)
+			}
+			w := httptest.NewRecorder()
+			r.srv.Handler().ServeHTTP(w, req)
+			if w.Code != tt.status {
+				t.Errorf("%d %s, want %d", w.Code, w.Body, tt.status)
+			}
+		})
+	}
+}
+
+func TestReadyz(t *testing.T) {
+	tests := []struct {
+		name   string
+		ready  func(context.Context) error
+		status int
+		leak   string
+	}{
+		{"no check configured", nil, 200, ""},
+		{"database answers", func(context.Context) error { return nil }, 200, ""},
+		{"database down", func(context.Context) error {
+			return errors.New("dial tcp 10.0.2.4:5432: password authentication failed")
+		}, 503, "password"},
+	}
+	for _, tt := range tests {
+		r := newRig(t, func(c *api.Config, _ *rig) { c.Ready = tt.ready })
+		w := r.do("GET", "/api/readyz", "", nil)
+		if w.Code != tt.status {
+			t.Errorf("%s: %d %s", tt.name, w.Code, w.Body)
+		}
+		if tt.leak != "" && strings.Contains(w.Body.String(), tt.leak) {
+			t.Errorf("%s: the reason leaked: %s", tt.name, w.Body)
+		}
+	}
+}

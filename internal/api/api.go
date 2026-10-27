@@ -57,11 +57,13 @@ type Conversation interface {
 // Config configures the server. Only Service is required.
 type Config struct {
 	Service         Service
-	NewConversation func() Conversation // nil turns /api/ask off
-	News            NewsRefresher       // nil turns the news refresh endpoints off
-	Inbox           Inbox               // nil turns the alerts, watchlist and health endpoints off
-	AllowedOrigins  []string            // origins of the UI, e.g. "http://localhost:3001"
-	Logger          *slog.Logger        // default slog.Default()
+	NewConversation func() Conversation             // nil turns /api/ask off
+	News            NewsRefresher                   // nil turns the news refresh endpoints off
+	Inbox           Inbox                           // nil turns the alerts, watchlist and health endpoints off
+	AllowedOrigins  []string                        // origins of the UI, e.g. "http://localhost:3001"
+	AllowedHosts    []string                        // Host names answered besides loopback; set only behind a login proxy
+	Ready           func(ctx context.Context) error // nil: always ready. Checked by /api/readyz
+	Logger          *slog.Logger                    // default slog.Default()
 
 	MaxSessions int           // conversations kept in memory; default 100
 	SessionIdle time.Duration // idle time before a conversation is forgotten; default 30m
@@ -106,6 +108,18 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	mux.HandleFunc("GET /api/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.Ready != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+			defer cancel()
+			if err := cfg.Ready(ctx); err != nil {
+				s.log.Warn("not ready", "err", err)
+				writeError(w, http.StatusServiceUnavailable, "not ready")
+				return
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	})
 	mux.HandleFunc("GET /api/status", s.read(func(ctx context.Context, r *http.Request) (any, error) { return cfg.Service.Status(ctx) }))
 	mux.HandleFunc("GET /api/squad", s.read(s.squad))
 	mux.HandleFunc("GET /api/backtest", s.read(func(ctx context.Context, r *http.Request) (any, error) { return cfg.Service.Backtest(ctx) }))
@@ -125,7 +139,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	mux.HandleFunc("POST /api/whatif", s.whatIf)
 	mux.HandleFunc("POST /api/ask", s.ask)
 
-	s.handler = recoverer(s.log, logRequests(s.log, guard(cfg.AllowedOrigins, s.withViewer(mux))))
+	s.handler = recoverer(s.log, logRequests(s.log, guard(cfg.AllowedOrigins, cfg.AllowedHosts, s.withViewer(mux))))
 	return s, nil
 }
 

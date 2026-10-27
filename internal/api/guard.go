@@ -23,9 +23,12 @@ import (
 //
 // A POST must also be application/json. A page cannot send that cross-origin without a
 // CORS preflight, and this server never answers a preflight.
-func guard(allowedOrigins []string, next http.Handler) http.Handler {
+//
+// Behind a login proxy (the Kubernetes ingress) the server also answers to allowedHosts, the
+// names the proxy forwards. Those requests have already passed the login.
+func guard(allowedOrigins, allowedHosts []string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !loopbackHost(r.Host) {
+		if !loopbackHost(r.Host) && !namedHost(r.Host, allowedHosts) {
 			writeError(w, http.StatusForbidden, "this server answers only to localhost")
 			return
 		}
@@ -49,6 +52,20 @@ func loopbackHost(hostport string) bool {
 	}
 	host = strings.Trim(host, "[]")
 	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
+// namedHost reports whether a Host header is one of names, ignoring case and port.
+func namedHost(hostport string, names []string) bool {
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+	for _, n := range names {
+		if strings.EqualFold(host, n) {
+			return true
+		}
+	}
+	return false
 }
 
 // recoverer turns a panic in a handler into a 500 instead of a dropped connection.

@@ -1,0 +1,13 @@
+# Never send secrets or build output into an image's build context.
+.env
+.env.*
+!.env.example
+.git
+.vscode
+gaffer
+**/node_modules
+web/.next*
+web/tsconfig.tsbuildinfo
+deploy/terraform/.terraform
+deploy/terraform/*.tfstate*
+deploy/terraform/*.tfvars

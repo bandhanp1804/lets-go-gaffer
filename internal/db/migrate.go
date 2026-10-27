@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -18,10 +19,18 @@ const migrationLockKey = 726_001
 // been applied yet. Each migration runs in its own transaction together with its
 // bookkeeping row, so a failure leaves nothing half-applied.
 func Migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) error {
-	_, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
-		version    TEXT PRIMARY KEY,
-		applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
-	)`)
+	// Under the same lock as the migrations: two replicas creating the table at the same moment
+	// can otherwise both fail on the catalog, IF NOT EXISTS notwithstanding.
+	err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, migrationLockKey); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+			version    TEXT PRIMARY KEY,
+			applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("create schema_migrations: %w", err)
 	}
