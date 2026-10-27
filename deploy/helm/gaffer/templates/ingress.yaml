@@ -20,7 +20,7 @@ metadata:
   name: github-login
 spec:
   forwardAuth:
-    address: http://oauth2-proxy.{{ .Release.Namespace }}.svc.cluster.local/
+    address: http://oauth2-proxy.{{ .Values.authNamespace }}.svc.cluster.local/
     trustForwardHeader: true
     authResponseHeaders: ["X-Auth-Request-User", "X-Auth-Request-Email"]
 ---
@@ -47,12 +47,15 @@ spec:
           - path: /api
             pathType: Prefix
             backend: { service: { name: gaffer-api, port: { number: 80 } } }
+          {{- if not .Values.preview }}
           - path: /temporal
             pathType: Prefix
             backend: { service: { name: temporal-web, port: { number: 8080 } } }
+          {{- end }}
           - path: /
             pathType: Prefix
             backend: { service: { name: gaffer-web, port: { number: 80 } } }
+{{- if not .Values.preview }}
 ---
 # The login itself is not behind the login.
 apiVersion: networking.k8s.io/v1
@@ -88,3 +91,4 @@ spec:
       - http01:
           ingress:
             ingressClassName: traefik
+{{- end }}

@@ -1,6 +1,14 @@
 # The public host name, e.g. gaffer.20-1-2-3.sslip.io. Set on install.
 host: ""
 
+# A pull request preview (deploy/scripts/preview.sh): web and API only, in its own namespace and
+# database, with no background workflows, no certificate issuer and no login routes of its own (it
+# uses production's login, whose cookie covers the preview's subdomain).
+preview: false
+
+# Where oauth2-proxy runs: production's namespace, also used by previews.
+authNamespace: gaffer
+
 image:
   registry: "" # e.g. gaffer1a2b3c.azurecr.io; set on install
   gaffer: gaffer

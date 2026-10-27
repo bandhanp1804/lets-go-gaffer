@@ -117,7 +117,8 @@ app() {
     -f "$CHARTS/values-oauth2-proxy.yaml" \
     --set "extraArgs.github-user=$users" \
     --set "extraArgs.redirect-url=https://$host/oauth2/callback" \
-    --set "extraArgs.whitelist-domain=$host" \
+    --set "extraArgs.whitelist-domain=$host\\,.$host" \
+    --set "extraArgs.cookie-domain=.$host" \
     --wait
 
   echo "== app"

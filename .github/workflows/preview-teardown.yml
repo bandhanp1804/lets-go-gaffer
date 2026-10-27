@@ -1,0 +1,48 @@
+# Removes a pull request's preview (namespace and database) when the PR is merged or closed, and
+# every night removes any preview whose PR is no longer open, in case a teardown was missed.
+name: Preview teardown
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number || 'sweep' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  teardown:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    environment: preview
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: read # the sweep asks whether each PR is still open
+    env:
+      AKS_RESOURCE_GROUP: ${{ vars.AKS_RESOURCE_GROUP }}
+      AKS_NAME: ${{ vars.AKS_NAME }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_PREVIEW_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.3.1
+      - name: remove this PR's preview
+        if: github.event_name == 'pull_request'
+        run: deploy/scripts/preview.sh down "${{ github.event.pull_request.number }}"
+      - name: remove previews of closed PRs
+        if: github.event_name != 'pull_request'
+        run: deploy/scripts/preview.sh sweep

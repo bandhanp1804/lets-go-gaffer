@@ -1,4 +1,4 @@
-{{- if .Values.initialLoad }}
+{{- if and .Values.initialLoad (not .Values.preview) }}
 # After the first install: load the season (players, teams, history), then start a news pull
 # on Temporal. Later updates come from the worker's schedules.
 apiVersion: batch/v1

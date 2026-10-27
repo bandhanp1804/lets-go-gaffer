@@ -1,3 +1,4 @@
+{{- if not .Values.preview }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -26,3 +27,4 @@ spec:
             readOnlyRootFilesystem: true
 ---
 {{ include "gaffer.hpa" (dict "root" . "name" "gaffer-worker" "scaling" .Values.worker.autoscaling) }}
+{{- end }}

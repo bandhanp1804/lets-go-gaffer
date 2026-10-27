@@ -44,7 +44,9 @@ Rerun `deploy.sh app` to roll out new code: images are tagged with the commit.
 
 | Workflow | When | What it does |
 |---|---|---|
-| CI (`.github/workflows/ci.yml`) | every pull request and push to main | Go tests against a pgvector Postgres, web typecheck and tests, `terraform fmt`/`validate`, `helm lint`. |
+| Preview (`.github/workflows/preview.yml`) | every pull request from this repository, on each push | CI, then a preview of the PR at `https://pr-N.<host>`, linked from a comment on the PR. |
+| Preview teardown (`.github/workflows/preview-teardown.yml`) | a PR merged or closed; nightly | Removes that PR's preview (namespace and database). The nightly run removes any preview whose PR is no longer open. |
+| CI (`.github/workflows/ci.yml`) | every push to main, and inside Preview and Deploy | Go tests against a pgvector Postgres, web typecheck and tests, `terraform fmt`/`validate`, `helm lint`. |
 | Plan (`.github/workflows/plan.yml`) | every pull request | A read-only `terraform plan`, summarised on the run page. Its own workflow because it logs in to Azure, a permission the deploy's call to CI must not need. |
 | Deploy (`.github/workflows/deploy.yml`) | Actions > Deploy > Run workflow, on main | CI, then `terraform apply`, the images, and the Helm rollout (`deploy.sh infra`, then `app`). |
 
@@ -56,6 +58,20 @@ GitHub logs in to Azure with OIDC: short-lived tokens, no stored Azure password.
 - **gaffer-github-deploy**, usable only from the `production` environment (main branch only): Contributor, write on the state, and allowed to grant exactly one role, AcrPull, which Terraform gives the cluster.
 
 The app keys live in the `production` environment's secrets; the script copies them from `.env` and `deploy/azure.env` without printing them. Terraform state is in an Azure storage account (Entra ID access only, no keys), named in `deploy/terraform/backend.hcl`, so your laptop and CI share it and take turns through its lock.
+
+## Pull request previews
+
+Every pull request from a branch of this repository gets a preview, so reviewers can try a feature before it merges:
+
+- **Address:** `https://pr-N.gaffer.<ip>.sslip.io`, posted as a comment on the PR and on the run page, rebuilt on every push.
+- **Login:** the same GitHub login as production, and the same people are allowed in. The login cookie covers the previews' subdomains, so one sign-in works for all of them.
+- **Data:** a new preview starts from a copy of production's database, without anyone's saved settings, alerts or watchlist. It has its own encryption key, so no production token is ever readable in a preview.
+- **Runs:** the web app and the API only, in the PR's own namespace on the production cluster. There is no worker, so no scheduled news, alerts, briefing or eval; the **Refresh news** button still works.
+- **Removed:** when the PR is merged or closed, and by a nightly sweep for any that were missed. At most three run at once (`MAX_PREVIEWS`).
+- **Cost:** nothing extra while they fit on the running node; the autoscaler adds the second node (about $27/mo, pro-rated) only if they don't.
+- **Trust:** a preview runs the PR's code with the cluster's access and the API keys, so previews are never built for forks. Only open PRs from people you trust.
+
+The preview identity, `gaffer-github-preview`, is usable only from the `preview` environment and may push images and reach the cluster. `deploy/scripts/ci-setup.sh` creates it.
 
 ## Day to day
 
