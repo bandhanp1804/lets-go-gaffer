@@ -63,17 +63,20 @@ app() {
   docker buildx build --platform linux/amd64 -f deploy/docker/Dockerfile.web -t "$acr/gaffer-web:$tag" --push .
 
   echo "== platform: Traefik, cert-manager"
+  # Platform charts are applied with --force-conflicts: AKS's admissions enforcer edits some of
+  # their objects (cert-manager's webhook namespaceSelector) after install, and Helm 4's
+  # server-side apply otherwise refuses every later upgrade over that field. AKS sets it again.
   helm repo add traefik https://traefik.github.io/charts >/dev/null
   helm repo add jetstack https://charts.jetstack.io >/dev/null
   helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests >/dev/null
   helm repo add temporal https://go.temporal.io/helm-charts >/dev/null
   helm repo update >/dev/null
-  helm upgrade --install traefik traefik/traefik --version 42.1.3 -n traefik --create-namespace \
+  helm upgrade --install --force-conflicts traefik traefik/traefik --version 42.1.3 -n traefik --create-namespace \
     -f "$CHARTS/values-traefik.yaml" \
     --set "service.annotations.service\.beta\.kubernetes\.io/azure-load-balancer-ipv4=$(out ingress_ip)" \
     --set "service.annotations.service\.beta\.kubernetes\.io/azure-load-balancer-resource-group=$(az aks show -g "$(out resource_group)" -n "$(out cluster_name)" --query nodeResourceGroup -o tsv)" \
     --wait
-  helm upgrade --install cert-manager jetstack/cert-manager --version v1.21.3 -n cert-manager --create-namespace \
+  helm upgrade --install --force-conflicts cert-manager jetstack/cert-manager --version v1.21.3 -n cert-manager --create-namespace \
     --set crds.enabled=true --set resources.requests.cpu=10m --set resources.requests.memory=48Mi --wait
 
   echo "== secrets"
@@ -103,7 +106,7 @@ app() {
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
   echo "== Temporal"
-  helm upgrade --install temporal temporal/temporal --version 1.7.0 -n "$NS" -f "$CHARTS/values-temporal.yaml" \
+  helm upgrade --install --force-conflicts temporal temporal/temporal --version 1.7.0 -n "$NS" -f "$CHARTS/values-temporal.yaml" \
     --set "server.config.persistence.datastores.default.sql.connectAddr=$pghost:5432" \
     --set "server.config.persistence.datastores.visibility.sql.connectAddr=$pghost:5432" \
     --wait --timeout 15m
@@ -113,7 +116,7 @@ app() {
   local users
   users=$(envvar OAUTH_GITHUB_USERS deploy/azure.env)
   users=${users//,/\\,}
-  helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy --version 10.7.1 -n "$NS" \
+  helm upgrade --install --force-conflicts oauth2-proxy oauth2-proxy/oauth2-proxy --version 10.7.1 -n "$NS" \
     -f "$CHARTS/values-oauth2-proxy.yaml" \
     --set "extraArgs.github-user=$users" \
     --set "extraArgs.redirect-url=https://$host/oauth2/callback" \
