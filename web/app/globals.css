@@ -1506,3 +1506,13 @@ ul.watched li {
 .health table {
   width: 100%;
 }
+
+.signout {
+  margin-left: 12px;
+  white-space: nowrap;
+  font-size: 0.9em;
+  color: var(--muted);
+}
+.signout:hover {
+  color: var(--accent);
+}
