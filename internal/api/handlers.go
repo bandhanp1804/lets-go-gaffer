@@ -189,6 +189,34 @@ func (s *Server) newsRefresh(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, st)
 }
 
+func (s *Server) settings(ctx context.Context, _ *http.Request) (any, error) {
+	if s.cfg.Settings == nil {
+		return nil, service.ErrSettingsUnavailable
+	}
+	return s.cfg.Settings.Get(ctx, userOf(ctx))
+}
+
+// updateSettings saves the user's team and token: {"team_id": 1234567, "token": "...",
+// "clear_token": false}. The answer never contains the token.
+func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Settings == nil {
+		s.fail(w, r, service.ErrSettingsUnavailable)
+		return
+	}
+	var req service.UserSettingsRequest
+	if !readBody(w, r, &req, `{"team_id": 1234567, "token": "Bearer ..."}`) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ReadTimeout)
+	defer cancel()
+	v, err := s.cfg.Settings.Update(ctx, userOf(ctx), req)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
 // errInboxOff is returned by the inbox endpoints of a server built without one.
 var errInboxOff = errors.New("alerts are not available on this server")
 
@@ -436,7 +464,7 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 		writeJSON(w, http.StatusBadRequest, ErrorBody{Error: err.Error(), Code: "team_required"})
 	case errors.As(err, &in):
 		writeError(w, http.StatusBadRequest, in.Msg)
-	case errors.Is(err, service.ErrNewsUnavailable), errors.Is(err, errInboxOff):
+	case errors.Is(err, service.ErrNewsUnavailable), errors.Is(err, errInboxOff), errors.Is(err, service.ErrSettingsUnavailable):
 		writeError(w, http.StatusServiceUnavailable, err.Error())
 	case errors.Is(err, context.DeadlineExceeded):
 		writeError(w, http.StatusGatewayTimeout, "the request took too long")

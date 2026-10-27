@@ -17,11 +17,12 @@ const links = [
   { href: "/ask", label: "Ask" },
   { href: "/model", label: "Model" },
   { href: "/alerts", label: "Alerts" },
+  { href: "/setup", label: "Setup" },
 ];
 
 export function Nav() {
   const path = usePathname();
-  const { identity, ready, openModal } = useTeam();
+  const { identity, ready, live, openModal } = useTeam();
   return (
     <nav className="nav" aria-label="Main">
       <Link href="/" className="brand">
@@ -42,7 +43,7 @@ export function Nav() {
       </ul>
       <button type="button" className="teamchip" onClick={openModal} aria-haspopup="dialog">
         {!ready ? "…" : identity.teamId === null ? "Pick your team" : `Team ${identity.teamId}`}
-        {ready && identity.teamId !== null ? <span className={identity.token ? "tag live" : "tag"}>{identity.token ? "live" : "public"}</span> : null}
+        {ready && identity.teamId !== null ? <span className={live ? "tag live" : "tag"}>{live ? "live" : "public"}</span> : null}
       </button>
     </nav>
   );

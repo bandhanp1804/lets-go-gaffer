@@ -424,6 +424,26 @@ export interface OutlookWeek {
   lead_over_squad: number;
 }
 
+export interface UserSettings {
+  user: string;
+  team_id: number;
+  token: SavedToken;
+}
+
+export interface SavedToken {
+  saved: boolean;
+  expired: boolean;
+  expires_at?: string;
+  expires_in?: string;
+}
+
+export interface UserSettingsRequest {
+  team_id?: number;
+  token?: string;
+  clear_token?: boolean;
+  clear_team?: boolean;
+}
+
 export interface Alerts {
   alerts: Alert[];
   unread: number;
