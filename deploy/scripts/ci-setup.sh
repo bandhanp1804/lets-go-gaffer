@@ -30,6 +30,8 @@ role() { # role ASSIGNEE ROLE SCOPE [extra args]: assign unless already assigned
 }
 
 echo "== 1. Terraform state"
+# A provider that is not registered makes Azure answer "SubscriptionNotFound"; register first.
+az provider register -n Microsoft.Storage --wait -o none
 az group create -n "$STATE_RG" -l "$LOCATION" -o none
 SA=$(az storage account list -g "$STATE_RG" --query '[0].name' -o tsv)
 if [ -z "$SA" ]; then
