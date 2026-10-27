@@ -14,12 +14,15 @@ service:
   type: LoadBalancer
 ports:
   web:
-    # Plain http only redirects to https.
-    redirections:
-      entryPoint:
-        to: websecure
-        scheme: https
-        permanent: true
+    # Plain http only redirects to https, except Let's Encrypt's challenge, which must be answered
+    # over http for the certificate to be issued.
+    allowACMEByPass: true
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
 resources:
   requests: { cpu: 50m, memory: 64Mi }
   limits: { memory: 256Mi }

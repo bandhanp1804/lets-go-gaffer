@@ -72,3 +72,17 @@ jobs:
           version: v4.3.1
       - name: helm lint
         run: helm lint deploy/helm/gaffer --set host=ci.example --set acmeEmail=ci@example.com
+      # Each platform chart checks our values against its schema, as deploy.sh will install them.
+      - name: platform chart values
+        run: |
+          helm repo add traefik https://traefik.github.io/charts
+          helm repo add jetstack https://charts.jetstack.io
+          helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests
+          helm repo add temporal https://go.temporal.io/helm-charts
+          helm template t traefik/traefik --version 42.1.3 -f deploy/helm/values-traefik.yaml >/dev/null
+          helm template c jetstack/cert-manager --version v1.21.3 --set crds.enabled=true >/dev/null
+          helm template o oauth2-proxy/oauth2-proxy --version 10.7.1 -f deploy/helm/values-oauth2-proxy.yaml \
+            --set 'extraArgs.github-user=a\,b' --set extraArgs.redirect-url=https://ci.example/oauth2/callback >/dev/null
+          helm template temporal temporal/temporal --version 1.7.0 -f deploy/helm/values-temporal.yaml \
+            --set server.config.persistence.datastores.default.sql.connectAddr=db:5432 \
+            --set server.config.persistence.datastores.visibility.sql.connectAddr=db:5432 >/dev/null

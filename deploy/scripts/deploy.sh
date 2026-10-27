@@ -52,7 +52,9 @@ app() {
   init
   local host acr tag pghost pgpass
   host=$(out host); acr=$(out acr_login_server); pghost=$(out postgres_host); pgpass=$(out postgres_password)
-  tag=$(git rev-parse --short HEAD)$(git diff --quiet || echo -dirty)
+  # In CI the checkout is the commit (tools may touch files like the Terraform lock); locally,
+  # uncommitted changes are marked so a dirty image is never mistaken for a commit.
+  if [ -n "$CI" ]; then tag=${GITHUB_SHA:0:7}; else tag=$(git rev-parse --short HEAD)$(git diff --quiet || echo -dirty); fi
   eval "$(out get_credentials)"
 
   echo "== images ($tag) for linux/amd64"
@@ -101,9 +103,13 @@ app() {
     --wait --timeout 15m
 
   echo "== GitHub login"
+  # Helm's --set splits on commas, so the commas between usernames are escaped.
+  local users
+  users=$(envvar OAUTH_GITHUB_USERS deploy/azure.env)
+  users=${users//,/\\,}
   helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy --version 10.7.1 -n "$NS" \
     -f "$CHARTS/values-oauth2-proxy.yaml" \
-    --set "extraArgs.github-user=$(envvar OAUTH_GITHUB_USERS deploy/azure.env)" \
+    --set "extraArgs.github-user=$users" \
     --set "extraArgs.redirect-url=https://$host/oauth2/callback" \
     --set "extraArgs.whitelist-domain=$host" \
     --wait
