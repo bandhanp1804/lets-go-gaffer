@@ -3,6 +3,7 @@ package httpx_test
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -104,5 +105,75 @@ func TestLimiter_ConcurrentCallersAreSpaced(t *testing.T) {
 	total := goroutines * perG
 	if got, want := time.Since(start), time.Duration(total-1)*interval; got < want {
 		t.Errorf("%d concurrent calls took %v, want >= %v", total, got, want)
+	}
+}
+
+func TestWindowLimiter_LetsNGoAtOnceThenWaitsForTheWindow(t *testing.T) {
+	const window = 80 * time.Millisecond
+	l := httpx.NewWindowLimiter(3, window)
+
+	start := time.Now()
+	for i := 0; i < 3; i++ {
+		if err := l.Wait(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if burst := time.Since(start); burst >= window/2 {
+		t.Errorf("the first 3 took %v: they should not wait", burst)
+	}
+
+	if err := l.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := time.Since(start); got < window {
+		t.Errorf("the 4th started after %v, want >= %v (the window from the first)", got, window)
+	}
+}
+
+func TestWindowLimiter_ConcurrentCallersNeverExceedNPerWindow(t *testing.T) {
+	const (
+		n      = 2
+		window = 60 * time.Millisecond
+		calls  = 6
+	)
+	l := httpx.NewWindowLimiter(n, window)
+	var mu sync.Mutex
+	var starts []time.Time
+	var wg sync.WaitGroup
+	for i := 0; i < calls; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := l.Wait(context.Background()); err != nil {
+				t.Error(err)
+				return
+			}
+			mu.Lock()
+			starts = append(starts, time.Now())
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+
+	// In start order, start i and start i+n must be at least a window apart.
+	sort.Slice(starts, func(i, j int) bool { return starts[i].Before(starts[j]) })
+	// Slots are reserved exactly a window apart, but a goroutine can be scheduled a moment after
+	// its slot, so the observed gap may fall short by scheduler jitter (callers pad the window).
+	const jitter = 5 * time.Millisecond
+	for i := 0; i+n < len(starts); i++ {
+		if gap := starts[i+n].Sub(starts[i]); gap < window-jitter {
+			t.Errorf("starts %d and %d are %v apart, want >= %v", i, i+n, gap, window)
+		}
+	}
+}
+
+func TestWindowLimiter_WaitHonoursContext(t *testing.T) {
+	l := httpx.NewWindowLimiter(1, time.Hour)
+	_ = l.Wait(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	if err := l.Wait(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("err = %v, want the deadline", err)
 	}
 }
