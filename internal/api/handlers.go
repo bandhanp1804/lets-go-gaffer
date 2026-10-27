@@ -314,6 +314,22 @@ func (s *Server) whatIf(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, v)
 }
 
+// subs weighs substitutions: {"swaps": [{"out": 110, "in": 115}]}. Like whatIf it changes nothing.
+func (s *Server) subs(w http.ResponseWriter, r *http.Request) {
+	var req service.SubsRequest
+	if !readBody(w, r, &req, `{"swaps": [{"out": 110, "in": 115}]}`) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ReadTimeout)
+	defer cancel()
+	v, err := s.cfg.Service.Subs(ctx, req)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
 // askRequest is the body of POST /api/ask.
 type askRequest struct {
 	Question  string `json:"question"`

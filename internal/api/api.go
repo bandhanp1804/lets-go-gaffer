@@ -31,6 +31,7 @@ type Service interface {
 	BuildSquad(ctx context.Context, req service.SquadRequest) (service.SquadView, error)
 	Backtest(ctx context.Context) (service.BacktestView, error)
 	WhatIf(ctx context.Context, req service.WhatIfRequest) (service.WhatIfView, error)
+	Subs(ctx context.Context, req service.SubsRequest) (service.SubsView, error)
 	ChipsFor(ctx context.Context, req service.ChipsRequest) (service.ChipsView, error)
 }
 
@@ -150,6 +151,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	mux.HandleFunc("POST /api/watchlist", s.setWatch)
 	mux.HandleFunc("GET /api/health/runs", s.read(s.health))
 	mux.HandleFunc("POST /api/whatif", s.whatIf)
+	mux.HandleFunc("POST /api/whatif/subs", s.subs)
 	mux.HandleFunc("POST /api/ask", s.ask)
 
 	s.handler = recoverer(s.log, logRequests(s.log, guard(cfg.AllowedOrigins, cfg.AllowedHosts, s.withViewer(mux))))

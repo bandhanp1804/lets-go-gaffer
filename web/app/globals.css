@@ -1548,3 +1548,57 @@ ul.watched li {
 .titlefeatures span {
   color: var(--muted);
 }
+
+/* Substitutions in What if */
+.card.mark-off {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.5);
+  opacity: 0.85;
+}
+.card.mark-on {
+  border-color: var(--good);
+  box-shadow: 0 0 0 3px rgba(46, 160, 67, 0.55);
+}
+.markline-on {
+  color: var(--good);
+}
+.modeswitch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin: 4px 0 16px;
+}
+.modeswitch button {
+  border: none;
+  background: none;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+}
+.modeswitch button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.subsummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: baseline;
+}
+.subsummary .big {
+  font-size: 1.6rem;
+  font-weight: 750;
+}
+.status-good {
+  color: var(--good);
+}
+.subsummary .label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
