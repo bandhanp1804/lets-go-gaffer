@@ -19,14 +19,26 @@ tf() { terraform -chdir="$TF" "$@"; }
 out() { tf output -raw "$1"; }
 die() { echo "deploy: $*" >&2; exit 1; }
 
-# envvar KEY FILE: the value of KEY in FILE, without echoing it.
-envvar() { grep -E "^$1=" "$2" 2>/dev/null | head -1 | cut -d= -f2- || true; }
+# envvar KEY FILE: the value of KEY from the environment (as in CI), else from FILE, never echoed.
+envvar() {
+  if [ -n "${!1:-}" ]; then printf '%s' "${!1}"; return; fi
+  grep -E "^$1=" "$2" 2>/dev/null | head -1 | cut -d= -f2- || true
+}
+
+# In GitHub Actions there is no .env, no tfvars and nobody to answer a prompt.
+CI=${CI:-}
+
+init() { tf init -input=false -backend-config=backend.hcl >/dev/null; }
 
 infra() {
   az account show >/dev/null 2>&1 || die "run az login first"
-  [ -f "$TF/terraform.tfvars" ] || die "copy $TF/terraform.tfvars.example to terraform.tfvars and fill it in"
-  tf init -input=false
-  tf apply -input=false
+  [ -n "$CI" ] || [ -f "$TF/terraform.tfvars" ] || die "copy $TF/terraform.tfvars.example to terraform.tfvars and fill it in"
+  init
+  if [ -n "$CI" ]; then
+    tf apply -input=false -auto-approve # the approval was the production environment's
+  else
+    tf apply -input=false
+  fi
   eval "$(out get_credentials)"
   echo
   echo "Infrastructure is up. The app will be at: https://$(out host)"
@@ -36,7 +48,8 @@ infra() {
 }
 
 app() {
-  [ -f deploy/azure.env ] || die "copy deploy/azure.env.example to deploy/azure.env and fill it in"
+  [ -n "$CI" ] || [ -f deploy/azure.env ] || die "copy deploy/azure.env.example to deploy/azure.env and fill it in"
+  init
   local host acr tag pghost pgpass
   host=$(out host); acr=$(out acr_login_server); pghost=$(out postgres_host); pgpass=$(out postgres_password)
   tag=$(git rev-parse --short HEAD)$(git diff --quiet || echo -dirty)
@@ -76,8 +89,8 @@ app() {
   cookie=$(kubectl -n "$NS" get secret oauth2-proxy-secrets -o jsonpath='{.data.cookie-secret}' 2>/dev/null | base64 -d || true)
   [ -n "$cookie" ] || cookie=$(openssl rand -base64 32 | head -c 32)
   kubectl -n "$NS" create secret generic oauth2-proxy-secrets \
-    --from-literal=client-id="$(envvar GITHUB_CLIENT_ID deploy/azure.env)" \
-    --from-literal=client-secret="$(envvar GITHUB_CLIENT_SECRET deploy/azure.env)" \
+    --from-literal=client-id="$(envvar OAUTH_GITHUB_CLIENT_ID deploy/azure.env)" \
+    --from-literal=client-secret="$(envvar OAUTH_GITHUB_CLIENT_SECRET deploy/azure.env)" \
     --from-literal=cookie-secret="$cookie" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
@@ -90,7 +103,7 @@ app() {
   echo "== GitHub login"
   helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy --version 10.7.1 -n "$NS" \
     -f "$CHARTS/values-oauth2-proxy.yaml" \
-    --set "extraArgs.github-user=$(envvar GITHUB_USERS deploy/azure.env)" \
+    --set "extraArgs.github-user=$(envvar OAUTH_GITHUB_USERS deploy/azure.env)" \
     --set "extraArgs.redirect-url=https://$host/oauth2/callback" \
     --set "extraArgs.whitelist-domain=$host" \
     --wait
@@ -104,6 +117,7 @@ app() {
 }
 
 status() {
+  init
   eval "$(out get_credentials)" >/dev/null 2>&1
   kubectl -n "$NS" get pods,hpa
   echo

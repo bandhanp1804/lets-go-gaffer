@@ -76,6 +76,7 @@ See the [command reference](docs/cli.md) for the rest.
 | [Web UI](docs/web-ui.md) | the screens, choosing a team, design notes |
 | [The assistant](docs/assistant.md) | its tools, the checks on what it says, and how it is evaluated |
 | [How the numbers are made](docs/model.md) | the expected-points model, its backtest, lineup, transfers, chips, points |
+| [Deploying to Azure](docs/deploy.md) | Terraform, AKS, Helm, costs, stop and start |
 | [Background workflows](docs/temporal.md) | Temporal: schedules, alerts, the briefing, backfills |
 | [Development](docs/development.md) | tests, generated types, opt-in live tests, troubleshooting |
 | [Roadmap](docs/roadmap.md) | what is done and what is next |
