@@ -361,6 +361,44 @@ export interface WhatIfMoveRequest {
   in: number;
 }
 
+export interface Subs {
+  gameweek: number;
+  valid: boolean;
+  problems: string[];
+  swaps: SubsSwap[];
+  formation_before: string;
+  formation: string;
+  expected_points_before: number;
+  expected_points_after: number;
+  expected_points_change: number;
+  best_expected_points: number;
+  best_formation: string;
+  expected_points_vs_best: number;
+  captain_before: string;
+  captain: string;
+  vice_captain: string;
+  starting: Player[];
+  bench: Player[];
+  insights: string[];
+  xp_basis: string;
+  notes: string[];
+}
+
+export interface SubsSwap {
+  out: Player;
+  in: Player;
+  delta: number;
+}
+
+export interface SubsRequest {
+  swaps: SubsSwapRequest[];
+}
+
+export interface SubsSwapRequest {
+  out: number;
+  in: number;
+}
+
 export interface Chips {
   first_gameweek: number;
   gameweeks: number;

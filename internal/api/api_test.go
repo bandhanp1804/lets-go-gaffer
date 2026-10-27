@@ -29,6 +29,7 @@ type svc struct {
 	whatIfReq service.WhatIfRequest
 	formation string
 	viewer    service.Viewer
+	subsReq   service.SubsRequest
 	squadReq  service.SquadRequest
 	mu        sync.Mutex
 	err       error
@@ -46,6 +47,12 @@ func (s *svc) BuildSquad(_ context.Context, r service.SquadRequest) (service.Squ
 	s.squadReq = r
 	s.mu.Unlock()
 	return service.SquadView{Formation: "3-4-3", Budget: "£100.0m"}, s.err
+}
+func (s *svc) Subs(_ context.Context, r service.SubsRequest) (service.SubsView, error) {
+	s.mu.Lock()
+	s.subsReq = r
+	s.mu.Unlock()
+	return service.SubsView{Valid: true, Formation: "3-5-2", Problems: []string{}}, s.err
 }
 func (s *svc) WhatIf(_ context.Context, r service.WhatIfRequest) (service.WhatIfView, error) {
 	s.mu.Lock()
@@ -947,5 +954,23 @@ func TestSettingsEndpoints(t *testing.T) {
 	}
 	if w := off.do("GET", "/api/team", "", nil); w.Code != 200 {
 		t.Errorf("settings being off must not break the rest: %d", w.Code)
+	}
+}
+
+func TestSubsEndpoint(t *testing.T) {
+	r := newRig(t, nil)
+
+	w := r.do("POST", "/api/whatif/subs", `{"swaps": [{"out": 110, "in": 115}]}`, nil)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"formation":"3-5-2"`) {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if len(r.svc.subsReq.Swaps) != 1 || r.svc.subsReq.Swaps[0] != (service.SubsSwapRequest{Out: 110, In: 115}) {
+		t.Errorf("request reached the service as %+v", r.svc.subsReq)
+	}
+	if w := r.do("POST", "/api/whatif/subs", `{"subs": []}`, nil); w.Code != 400 {
+		t.Errorf("unknown field: %d", w.Code)
+	}
+	if w := r.do("GET", "/api/whatif/subs", "", nil); w.Code != 405 {
+		t.Errorf("GET: %d", w.Code)
 	}
 }

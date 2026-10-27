@@ -1,6 +1,6 @@
 node_modules
 .next
-.next-test
+.next-*
 next-env.d.ts
 *.tsbuildinfo
 AGENTS.md
