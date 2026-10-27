@@ -49,6 +49,13 @@ type Inbox interface {
 	Health(ctx context.Context) (service.HealthView, error)
 }
 
+// SettingsService keeps each user's team and token. *service.Settings satisfies it.
+type SettingsService interface {
+	Get(ctx context.Context, user string) (service.UserSettingsView, error)
+	Update(ctx context.Context, user string, req service.UserSettingsRequest) (service.UserSettingsView, error)
+	Viewer(ctx context.Context, user string) (service.Viewer, error)
+}
+
 // Conversation is one assistant conversation. *assistant.Session satisfies it.
 type Conversation interface {
 	Ask(ctx context.Context, question string, onText func(string)) (assistant.Answer, error)
@@ -57,13 +64,17 @@ type Conversation interface {
 // Config configures the server. Only Service is required.
 type Config struct {
 	Service         Service
-	NewConversation func() Conversation             // nil turns /api/ask off
-	News            NewsRefresher                   // nil turns the news refresh endpoints off
-	Inbox           Inbox                           // nil turns the alerts, watchlist and health endpoints off
-	AllowedOrigins  []string                        // origins of the UI, e.g. "http://localhost:3001"
-	AllowedHosts    []string                        // Host names answered besides loopback; set only behind a login proxy
-	Ready           func(ctx context.Context) error // nil: always ready. Checked by /api/readyz
-	Logger          *slog.Logger                    // default slog.Default()
+	NewConversation func() Conversation // nil turns /api/ask off
+	News            NewsRefresher       // nil turns the news refresh endpoints off
+	Inbox           Inbox               // nil turns the alerts, watchlist and health endpoints off
+	Settings        SettingsService     // nil turns saved settings off
+	// UserHeaders name the signed-in user, in order of preference, as set by the login proxy.
+	// Empty means no proxy: there is one local user. Set them only behind the proxy.
+	UserHeaders    []string
+	AllowedOrigins []string                        // origins of the UI, e.g. "http://localhost:3001"
+	AllowedHosts   []string                        // Host names answered besides loopback; set only behind a login proxy
+	Ready          func(ctx context.Context) error // nil: always ready. Checked by /api/readyz
+	Logger         *slog.Logger                    // default slog.Default()
 
 	MaxSessions int           // conversations kept in memory; default 100
 	SessionIdle time.Duration // idle time before a conversation is forgotten; default 30m
@@ -131,6 +142,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	mux.HandleFunc("GET /api/news", s.read(s.news))
 	mux.HandleFunc("GET /api/news/refresh", s.newsRefreshStatus)
 	mux.HandleFunc("POST /api/news/refresh", s.newsRefresh)
+	mux.HandleFunc("GET /api/settings", s.read(s.settings))
+	mux.HandleFunc("POST /api/settings", s.updateSettings)
 	mux.HandleFunc("GET /api/alerts", s.read(s.alerts))
 	mux.HandleFunc("POST /api/alerts/read", s.markRead)
 	mux.HandleFunc("GET /api/watchlist", s.read(s.watchlist))

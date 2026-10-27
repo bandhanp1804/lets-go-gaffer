@@ -17,6 +17,7 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/assistant"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/llm"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/news"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/secretbox"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/service"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/workflows"
 )
@@ -105,6 +106,20 @@ func runServe(ctx context.Context, w io.Writer, args []string) error {
 	cfg := api.Config{Service: svc, AllowedOrigins: o.origins, AllowedHosts: o.hosts, Logger: slog.Default(), Ready: st.store.Ping}
 	inbox := &service.Inbox{Store: st.store}
 	cfg.Inbox = inbox
+	// Saved settings need the encryption key. Without it the server still runs; the Setup page
+	// says settings are off and the browser keeps the team itself.
+	if key := os.Getenv("GAFFER_DATA_KEY"); key != "" {
+		box, err := secretbox.FromBase64(key)
+		if err != nil {
+			return fmt.Errorf("GAFFER_DATA_KEY: %w", err)
+		}
+		cfg.Settings = &service.Settings{Store: st.store, Box: box}
+	}
+	if o.public {
+		// The login proxy names the user; the ingress strips these headers from what the
+		// browser sends, so only the proxy can set them.
+		cfg.UserHeaders = []string{"X-Auth-Request-Email", "X-Auth-Request-User"}
+	}
 	if addr := temporalAddress(false); addr != "" {
 		// With Temporal the worker pulls the news on its schedule; the button starts a workflow.
 		c, err := dialTemporal(ctx, addr)
