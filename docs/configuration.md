@@ -20,6 +20,8 @@ Settings are read from `.env` in the project root (copy `.env.example`, which is
 | `TEMPORAL_ADDRESS` | background workflows | Where the Temporal server listens, e.g. `localhost:7233`. Set, `gaffer serve` hands news pulls and watches to the workflows; unset, it refreshes news in-process. `gaffer worker` defaults to `localhost:7233`. See [temporal.md](temporal.md). |
 | `TEMPORAL_NAMESPACE`, `TEMPORAL_UI` | optional | Default `default` and `http://localhost:8233`. |
 | `GAFFER_EVAL_SCHEDULE` | optional | Cron for the nightly eval, in the machine's time zone; default `0 3 * * *`, or `off`. |
+| `GAFFER_LOG_FORMAT` | optional | `json` writes JSON log lines (the cluster sets it, for Datadog); anything else, text. Either way a line logged inside a trace carries its ids. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | optional | Where `serve` and `worker` send OpenTelemetry traces and metrics, e.g. `http://localhost:4318`. Unset: nothing is sent. The other standard `OTEL_*` variables apply too ([observability.md](observability.md)). |
 | `NTFY_TOPIC` | optional | Also push alerts to your phone through ntfy. Treat it like a password. |
 | `NTFY_SERVER` | optional | Default `https://ntfy.sh`. |
 | `GAFFER_TEST_DSN` | tests | A database whose name ends in `_test`: the tests truncate it. |

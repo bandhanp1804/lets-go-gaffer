@@ -10,10 +10,11 @@
 - **Deployed to Azure:** Terraform, AKS with autoscaling, Helm, sign-in with GitHub, Google or Microsoft (Dex) with daily limits, container images, and GitHub Actions (CI on every PR, a Terraform plan on PRs, deploys from main) ([deploy.md](deploy.md)).
 - **Background workflows (Temporal):** scheduled news pulls, watched-player alerts, the gameweek briefing, the full sync and backtest, the nightly eval, and resumable backfills, with alerts in an inbox and on the phone ([temporal.md](temporal.md)).
 
+- **Observability:** OpenTelemetry traces and metrics, logs tied to traces, and dashboards, monitors and an SLO as code in Datadog, alerting to the phone ([observability.md](observability.md)).
+
 ## Planned, in order
 
 1. **UI polish** from hands-on testing.
-2. **Metrics:** Prometheus metrics from the API and worker, and dashboards.
 
 ## Ideas not scheduled
 

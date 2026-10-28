@@ -10,6 +10,7 @@ Browser ─https─▶ Traefik (one load balancer, sslip.io name, Let's Encrypt 
                      └─ /temporal  → Temporal UI (owners only: GAFFER_OWNERS)
 worker (gaffer worker, 1–2 pods) and api ─▶ Temporal (official chart) ─▶ Postgres
 everything ─▶ Azure Postgres Flexible Server B1ms on a private subnet (pgvector)
+Datadog Agent (when DD_API_KEY is set) ─▶ traces, metrics, logs to Datadog: observability.md
 ```
 
 ## What it costs

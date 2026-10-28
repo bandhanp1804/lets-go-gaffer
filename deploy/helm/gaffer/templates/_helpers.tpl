@@ -14,11 +14,34 @@ envFrom:
       name: gaffer-env
   - secretRef:
       name: gaffer-secrets
-{{- if not .Values.preview }}
 env:
+  # JSON lines, which the Datadog Agent parses into fields (level, msg, trace ids).
+  - name: GAFFER_LOG_FORMAT
+    value: json
+{{- if not .Values.preview }}
   - name: TEMPORAL_UI
     value: https://{{ .Values.host }}/temporal
 {{- end }}
+{{- with .Values.telemetry.otlpEndpoint }}
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: {{ . | quote }}
+  - name: OTEL_RESOURCE_ATTRIBUTES
+    value: {{ printf "deployment.environment=%s,deployment.environment.name=%s,service.version=%s" (include "gaffer.envName" $) (include "gaffer.envName" $) $.Values.image.tag | quote }}
+{{- end }}
+{{- end -}}
+
+{{/* The environment telemetry is filed under: prod, or the preview's namespace (pr-12). */}}
+{{- define "gaffer.envName" -}}
+{{- if .Values.preview }}{{ .Release.Namespace }}{{ else }}prod{{ end -}}
+{{- end -}}
+
+{{/* A pod's labels: the selector label, and Datadog's unified service tags, which join a pod's
+     logs, traces and metrics under one service, environment and version. */}}
+{{- define "gaffer.podLabels" -}}
+app: {{ .name }}
+tags.datadoghq.com/service: {{ .name }}
+tags.datadoghq.com/env: {{ include "gaffer.envName" .root }}
+tags.datadoghq.com/version: {{ .root.Values.image.tag | quote }}
 {{- end -}}
 
 {{/* An HPA on CPU for one deployment. */}}

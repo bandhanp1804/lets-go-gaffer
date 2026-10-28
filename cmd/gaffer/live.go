@@ -13,6 +13,8 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/httpx"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/myteam"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/projection"
+
+	"github.com/bandhanpatel/lets-go-gaffer/internal/telemetry"
 )
 
 // FPL publishes a squad only as of the last deadline; transfers made since are
@@ -40,7 +42,7 @@ func sessionClient(token string) *http.Client {
 // runs (a server): it is asked for on every request.
 func sessionClientFunc(token func() string) *http.Client {
 	return &http.Client{Transport: httpx.NewRetryTransport(
-		httpx.NewRateLimitTransport(fpl.NewSessionTransportFunc(http.DefaultTransport, token, fpl.Host), httpx.NewLimiter(100*time.Millisecond)),
+		httpx.NewRateLimitTransport(fpl.NewSessionTransportFunc(telemetry.Transport(http.DefaultTransport), token, fpl.Host), httpx.NewLimiter(100*time.Millisecond)),
 		httpx.RetryConfig{MaxAttempts: 4, BaseDelay: 500 * time.Millisecond, MaxDelay: 10 * time.Second},
 	)}
 }

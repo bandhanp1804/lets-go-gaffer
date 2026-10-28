@@ -16,6 +16,8 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/httpx"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/ingest"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/news"
+
+	"github.com/bandhanpatel/lets-go-gaffer/internal/telemetry"
 )
 
 // embeddingDims must match the vector(1024) column in migrations/0001.
@@ -45,7 +47,7 @@ func politeClientWith(interval time.Duration, retry httpx.RetryConfig) *http.Cli
 }
 
 func limitedClient(l httpx.Waiter, retry httpx.RetryConfig) *http.Client {
-	return &http.Client{Transport: httpx.NewRetryTransport(httpx.NewRateLimitTransport(http.DefaultTransport, l), retry)}
+	return &http.Client{Transport: httpx.NewRetryTransport(httpx.NewRateLimitTransport(telemetry.Transport(http.DefaultTransport), l), retry)}
 }
 
 // voyageClient keeps requests within Voyage's limit. Without a payment method on the
