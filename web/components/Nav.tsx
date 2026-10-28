@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { isPublicPath, signInURL } from "../lib/session.ts";
 import { canSignOut, signOutURL } from "../lib/signout.ts";
 import type { Usage } from "../lib/types.gen.ts";
 import { useApi } from "../lib/useApi.ts";
+import { useSession } from "../lib/useSession.ts";
 import { AlertsBadge } from "./AlertsBadge.tsx";
 import { useTeam } from "./TeamProvider.tsx";
 
@@ -30,13 +32,20 @@ export function Nav() {
   const owner = usage.data === undefined || usage.data.unlimited;
   const path = usePathname();
   const { identity, ready, live, openModal, settings } = useTeam();
-  // The signed-out page is outside the login: every link from it would only ask for the login.
-  if (path === "/signed-out") {
+  const session = useSession();
+  // The pages served without a login show only the way in until the browser is known to be
+  // signed in: every other link would only ask for the login.
+  if (isPublicPath(path) && session !== "in") {
     return (
       <nav className="nav" aria-label="Main">
-        <span className="brand">
+        <Link href="/" className="brand">
           <span className="ball" aria-hidden="true">⚽</span> Let’s Go Gaffer
-        </span>
+        </Link>
+        {session === "out" ? (
+          <a className="signin" href={signInURL}>
+            Sign in
+          </a>
+        ) : null}
       </nav>
     );
   }
