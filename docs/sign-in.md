@@ -24,7 +24,7 @@ These steps create identities and secrets, so they are done by you, not by scrip
 ### 1. Google
 
 1. In the [Google Cloud console](https://console.cloud.google.com), create a project (for example `lets-go-gaffer`) and open it.
-2. **APIs & Services** → **OAuth consent screen** (Google Auth Platform): **External**, app name `Let's Go Gaffer`, your email as support and developer contact. Under **Authorized domains** add `sslip.io`. Scopes: only the default `openid`, `email` and `profile`. **Publish** the app (in testing mode only listed test users can sign in).
+2. **APIs & Services** → **OAuth consent screen** (Google Auth Platform): **External**, app name `Let's Go Gaffer`, your email as support and developer contact. Under **Authorized domains** add `sslip.io`. Scopes: only the default `openid`, `email` and `profile`. Under **App domain**, set the home page to `https://gaffer.52-162-179-134.sslip.io/`, the privacy policy to `https://gaffer.52-162-179-134.sslip.io/privacy` and the terms of service to `https://gaffer.52-162-179-134.sslip.io/terms` (both are readable without signing in, once deployed). **Publish** the app (in testing mode only listed test users can sign in).
 3. **Credentials** → **Create credentials** → **OAuth client ID** → **Web application** → **Authorized redirect URIs**: `https://gaffer.52-162-179-134.sslip.io/dex/callback` → **Create**.
 4. Copy the client ID and secret. **→ save as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`**
 
@@ -68,3 +68,7 @@ Each signed-in user other than the owners has a daily budget, reset at midnight 
 | News refreshes | 3 | `GAFFER_LIMIT_REFRESH` |
 
 Past the limit the API answers `429` with a plain message, and the Setup page shows what is left today. Counts are kept in Postgres (`usage_counts`), so every API pod shares them. Owners (`GAFFER_OWNERS`) and the local user on your own computer are never limited.
+
+## What visitors can and cannot do
+
+Visitors can use everything except the owner's own features: the **Alerts** inbox and the **watchlist** (whose alerts go to the owner's phone) answer `403 owner_only`, and the page hides them. Model health on the Model page stays public. Daily counts are deleted after 30 days, as the [privacy policy](../web/app/privacy/page.tsx) says.

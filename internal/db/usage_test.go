@@ -61,3 +61,21 @@ func TestStore_TakeUsageUnderConcurrencyNeverGoesOver(t *testing.T) {
 		t.Errorf("%d of 20 concurrent uses allowed, want exactly 5", allowed)
 	}
 }
+
+func TestStore_PruneUsageDropsOnlyOlderDays(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+	old := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	recent := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	_, _, _ = s.TakeUsage(ctx, "alice", "ask", old, 5)
+	_, _, _ = s.TakeUsage(ctx, "alice", "ask", recent, 5)
+
+	n, err := s.PruneUsage(ctx, time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC))
+
+	if err != nil || n != 1 {
+		t.Fatalf("pruned %d (%v), want 1", n, err)
+	}
+	if got, _ := s.UsageOn(ctx, "alice", recent); got["ask"] != 1 {
+		t.Errorf("the recent day must stay: %v", got)
+	}
+}
