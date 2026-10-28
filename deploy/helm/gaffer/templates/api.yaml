@@ -1,4 +1,4 @@
-{{- $host := required "set host, e.g. --set host=gaffer.20-1-2-3.sslip.io" .Values.host -}}
+{{- $host := required "set host, e.g. --set host=letsgogaffer.tech" .Values.host -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

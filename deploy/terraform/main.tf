@@ -97,8 +97,8 @@ resource "azurerm_kubernetes_cluster" "main" {
   }
 }
 
-# The ingress address, fixed for the life of the cluster: the sslip.io name and the GitHub login
-# callback are built from it, so stopping and starting the cluster must not change it. It sits in
+# The ingress address, fixed for the life of the cluster: the domain's records, the old sslip.io
+# name and the sign-in callbacks all depend on it, so stopping and starting the cluster must not change it. It sits in
 # the node resource group, where the cluster may already attach it to its load balancer.
 resource "azurerm_public_ip" "ingress" {
   name                = "${var.name}-ingress"
