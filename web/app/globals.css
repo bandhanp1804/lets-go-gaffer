@@ -1520,33 +1520,99 @@ ul.watched li {
   color: var(--accent);
 }
 
-/* The title page after signing out */
-.titlepage {
+/* The landing page (and the signed-out page, which reuses it) */
+.landing {
   padding-top: 8px;
+}
+.landing h2 {
+  margin-top: 40px;
 }
 .titlenote {
   margin-top: 18px;
   font-size: 0.9em;
   opacity: 0.85;
 }
-.titlefeatures {
+.landingfeatures {
   list-style: none;
   padding: 0;
-  margin: 24px 0 0;
+  margin: 0;
+}
+.landingfeatures .feature:hover {
+  transform: none;
+  border-color: var(--border);
+}
+.steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
+  gap: 12px;
+  counter-reset: none;
 }
-.titlefeatures li {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 16px;
+.steps li {
   display: grid;
   gap: 6px;
+  padding: 16px;
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, var(--turf-1), var(--surface) 70%);
+  border: 1px solid var(--border);
 }
-.titlefeatures span {
+.stepnum {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--gold);
+  color: #1a1503;
+  font-weight: 800;
+}
+.trust {
+  margin-top: 40px;
+}
+.trust h2 {
+  margin-top: 0;
+}
+.stack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 28px;
+}
+.stack ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.stack li {
+  font-size: 0.85em;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
   color: var(--muted);
+}
+.landingcta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 40px 0 8px;
+  padding: 20px 24px;
+  border-radius: 14px;
+  background: linear-gradient(120deg, var(--turf-1), var(--turf-2));
+  color: var(--chalk);
+  font-size: 1.15rem;
+}
+.nav .signin {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--accent);
 }
 
 /* Substitutions in What if */
