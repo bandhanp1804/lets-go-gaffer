@@ -57,7 +57,8 @@ spec:
             backend: { service: { name: gaffer-web, port: { number: 80 } } }
 {{- if not .Values.preview }}
 ---
-# The signed-out page, and the static files it needs, are outside the login: landing anywhere
+# The signed-out page, the privacy policy and terms, and the static files they need, are outside
+# the login: landing anywhere
 # else after signing out sends someone still logged in to GitHub straight back in. Nothing here
 # reads data; the API stays behind the login.
 apiVersion: networking.k8s.io/v1
@@ -76,6 +77,13 @@ spec:
       http:
         paths:
           - path: /signed-out
+            pathType: Exact
+            backend: { service: { name: gaffer-web, port: { number: 80 } } }
+          # The privacy policy and terms must be readable before signing in (Google links to them).
+          - path: /privacy
+            pathType: Exact
+            backend: { service: { name: gaffer-web, port: { number: 80 } } }
+          - path: /terms
             pathType: Exact
             backend: { service: { name: gaffer-web, port: { number: 80 } } }
           - path: /_next/static

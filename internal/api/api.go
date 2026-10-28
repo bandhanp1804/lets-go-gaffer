@@ -62,6 +62,8 @@ type SettingsService interface {
 type Limiter interface {
 	Take(ctx context.Context, user, kind string) error
 	Usage(ctx context.Context, user string) (service.UsageView, error)
+	// IsOwner says whether the user runs the site: owners alone see the alerts and watchlist.
+	IsOwner(user string) bool
 }
 
 // Conversation is one assistant conversation. *assistant.Session satisfies it.

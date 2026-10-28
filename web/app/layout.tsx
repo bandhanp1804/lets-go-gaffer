@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { Footer } from "../components/Footer.tsx";
 import { Nav } from "../components/Nav.tsx";
 import { TeamModal } from "../components/TeamModal.tsx";
 import { TeamProvider } from "../components/TeamProvider.tsx";
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <TeamProvider>
           <Nav />
           <main>{children}</main>
+          <Footer />
           <TeamModal />
         </TeamProvider>
       </body>

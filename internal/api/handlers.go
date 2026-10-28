@@ -240,6 +240,19 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, v)
 }
 
+// errOwnerOnly refuses a visitor the owner's own features: the alerts inbox and the watchlist,
+// whose alerts reach the owner's phone.
+var errOwnerOnly = errors.New("alerts and the watchlist are for the site's owner")
+
+// ownerOnly lets the request through only for an owner. Without limits configured there is no
+// login proxy either, so the one user is the owner.
+func (s *Server) ownerOnly(ctx context.Context) error {
+	if s.cfg.Limits == nil || s.cfg.Limits.IsOwner(userOf(ctx)) {
+		return nil
+	}
+	return errOwnerOnly
+}
+
 // errInboxOff is returned by the inbox endpoints of a server built without one.
 var errInboxOff = errors.New("alerts are not available on this server")
 
@@ -247,12 +260,18 @@ func (s *Server) alerts(ctx context.Context, _ *http.Request) (any, error) {
 	if s.cfg.Inbox == nil {
 		return nil, errInboxOff
 	}
+	if err := s.ownerOnly(ctx); err != nil {
+		return nil, err
+	}
 	return s.cfg.Inbox.Alerts(ctx)
 }
 
 func (s *Server) watchlist(ctx context.Context, _ *http.Request) (any, error) {
 	if s.cfg.Inbox == nil {
 		return nil, errInboxOff
+	}
+	if err := s.ownerOnly(ctx); err != nil {
+		return nil, err
 	}
 	return s.cfg.Inbox.Watchlist(ctx)
 }
@@ -281,6 +300,10 @@ func (s *Server) markRead(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, errInboxOff)
 		return
 	}
+	if err := s.ownerOnly(r.Context()); err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	var body struct {
 		UpTo int64 `json:"up_to"`
 	}
@@ -300,6 +323,10 @@ func (s *Server) markRead(w http.ResponseWriter, r *http.Request) {
 func (s *Server) setWatch(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Inbox == nil {
 		s.fail(w, r, errInboxOff)
+		return
+	}
+	if err := s.ownerOnly(r.Context()); err != nil {
+		s.fail(w, r, err)
 		return
 	}
 	var body struct {
@@ -504,6 +531,8 @@ func askError(ctx context.Context, err error) string {
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	var in *service.InputError
 	switch {
+	case errors.Is(err, errOwnerOnly):
+		writeJSON(w, http.StatusForbidden, ErrorBody{Error: err.Error(), Code: "owner_only"})
 	case errors.Is(err, service.ErrLimitReached):
 		writeJSON(w, http.StatusTooManyRequests, ErrorBody{Error: err.Error(), Code: "limit_reached"})
 	case errors.Is(err, service.ErrTeamRequired):

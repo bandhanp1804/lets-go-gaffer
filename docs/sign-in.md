@@ -68,3 +68,7 @@ Each signed-in user other than the owners has a daily budget, reset at midnight 
 | News refreshes | 3 | `GAFFER_LIMIT_REFRESH` |
 
 Past the limit the API answers `429` with a plain message, and the Setup page shows what is left today. Counts are kept in Postgres (`usage_counts`), so every API pod shares them. Owners (`GAFFER_OWNERS`) and the local user on your own computer are never limited.
+
+## What visitors can and cannot do
+
+Visitors can use everything except the owner's own features: the **Alerts** inbox and the **watchlist** (whose alerts go to the owner's phone) answer `403 owner_only`, and the page hides them. Model health on the Model page stays public. Daily counts are deleted after 30 days, as the [privacy policy](../web/app/privacy/page.tsx) says.

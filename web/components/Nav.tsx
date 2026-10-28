@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { canSignOut, signOutURL } from "../lib/signout.ts";
+import type { Usage } from "../lib/types.gen.ts";
+import { useApi } from "../lib/useApi.ts";
 import { AlertsBadge } from "./AlertsBadge.tsx";
 import { useTeam } from "./TeamProvider.tsx";
 
@@ -22,6 +24,10 @@ const links = [
 ];
 
 export function Nav() {
+  // Alerts are the owner's; visitors are not shown the link. An older API without /api/usage
+  // leaves it shown.
+  const usage = useApi<Usage>("/api/usage");
+  const owner = usage.data === undefined || usage.data.unlimited;
   const path = usePathname();
   const { identity, ready, live, openModal, settings } = useTeam();
   // The signed-out page is outside the login: every link from it would only ask for the login.
@@ -40,7 +46,7 @@ export function Nav() {
         <span className="ball" aria-hidden="true">⚽</span> Let’s Go Gaffer
       </Link>
       <ul>
-        {links.map((l) => {
+        {links.filter((l) => owner || l.href !== "/alerts").map((l) => {
           const active = l.href === "/" ? path === "/" : path.startsWith(l.href);
           return (
             <li key={l.href}>

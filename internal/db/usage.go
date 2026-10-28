@@ -44,3 +44,13 @@ func (s *Store) UsageOn(ctx context.Context, user string, day time.Time) (map[st
 	}
 	return out, rows.Err()
 }
+
+// PruneUsage deletes daily counts from before day, so they are kept only as long as the privacy
+// policy says. It returns how many rows went.
+func (s *Store) PruneUsage(ctx context.Context, before time.Time) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM usage_counts WHERE day < $1`, before.UTC().Format(time.DateOnly))
+	if err != nil {
+		return 0, fmt.Errorf("prune usage: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
