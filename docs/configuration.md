@@ -14,6 +14,8 @@ Settings are read from `.env` in the project root (copy `.env.example`, which is
 | `ANTHROPIC_API_KEY` | `ask`, `chat`, `eval`, the Ask page | Without it `gaffer serve` still runs and `/api/ask` is off. |
 | `ANTHROPIC_MODEL` | optional | Defaults to `claude-haiku-5-5`: questions are short and Go does the computing. Use `claude-sonnet-5-5` for richer prose at a higher price. |
 | `FPL_AUTH_HEADER` | optional | Your login token, for a **live squad** from the command line or as the server's default. See below. |
+| `GAFFER_OWNERS` | the deployed site | Comma-separated emails never held to the daily limits ([sign-in.md](sign-in.md#limits)). The local user on your own computer is never limited. |
+| `GAFFER_LIMIT_ASK`, `GAFFER_LIMIT_SEARCH`, `GAFFER_LIMIT_REFRESH` | optional | Each signed-in visitor's daily allowance of Ask questions (15), news searches (40) and news refreshes (3). `0` turns one off. |
 | `GAFFER_DATA_KEY` | the Setup page | Base64 32-byte key (`openssl rand -base64 32`) that encrypts each user's saved team and token. Unset, settings are off and the browser remembers the team. Changing it makes saved settings unreadable, and users save them again. In the cluster `deploy.sh` makes it once and keeps it. |
 | `TEMPORAL_ADDRESS` | background workflows | Where the Temporal server listens, e.g. `localhost:7233`. Set, `gaffer serve` hands news pulls and watches to the workflows; unset, it refreshes news in-process. `gaffer worker` defaults to `localhost:7233`. See [temporal.md](temporal.md). |
 | `TEMPORAL_NAMESPACE`, `TEMPORAL_UI` | optional | Default `default` and `http://localhost:8233`. |

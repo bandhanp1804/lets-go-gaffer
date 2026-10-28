@@ -81,7 +81,9 @@ jobs:
           helm template t traefik/traefik --version 42.1.3 -f deploy/helm/values-traefik.yaml >/dev/null
           helm template c jetstack/cert-manager --version v1.21.3 --set crds.enabled=true >/dev/null
           helm template o oauth2-proxy/oauth2-proxy --version 10.7.1 -f deploy/helm/values-oauth2-proxy.yaml \
-            --set 'extraArgs.github-user=a\,b' --set extraArgs.redirect-url=https://ci.example/oauth2/callback >/dev/null
+            --set extraArgs.oidc-issuer-url=https://ci.example/dex --set extraArgs.redirect-url=https://ci.example/oauth2/callback >/dev/null
+          helm repo add dex https://charts.dexidp.io
+          helm template dex dex/dex --version 0.26.0 -f deploy/helm/values-dex.yaml >/dev/null
           helm template temporal temporal/temporal --version 1.7.0 -f deploy/helm/values-temporal.yaml \
             --set server.config.persistence.datastores.default.sql.connectAddr=db:5432 \
             --set server.config.persistence.datastores.visibility.sql.connectAddr=db:5432 >/dev/null

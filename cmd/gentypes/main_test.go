@@ -28,7 +28,7 @@ func TestEveryResponseTypeTheUIUsesIsGenerated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"MyTeam", "Lineup", "Transfers", "Players", "NewsSearch", "News", "NewsPlayer", "RefreshStatus", "Subs", "SubsSwap", "SubsSwapRequest", "SubsRequest", "UserSettings", "UserSettingsRequest", "SavedToken", "Alerts", "Alert", "Watchlist", "Watched", "Health", "EvalRun", "BacktestRun", "Status", "Squad", "Backtest", "WhatIf", "WhatIfMove", "WhatIfLineup", "WhatIfWeek",
+	for _, name := range []string{"MyTeam", "Lineup", "Transfers", "Players", "NewsSearch", "News", "NewsPlayer", "RefreshStatus", "Usage", "UsageItem", "Subs", "SubsSwap", "SubsSwapRequest", "SubsRequest", "UserSettings", "UserSettingsRequest", "SavedToken", "Alerts", "Alert", "Watchlist", "Watched", "Health", "EvalRun", "BacktestRun", "Status", "Squad", "Backtest", "WhatIf", "WhatIfMove", "WhatIfLineup", "WhatIfWeek",
 		"Player", "Move", "Suggestion", "Params", "AskDone", "AskSource", "AskTool", "AskUsage"} {
 		if !strings.Contains(text, "export interface "+name+" {") {
 			t.Errorf("no interface %s", name)
