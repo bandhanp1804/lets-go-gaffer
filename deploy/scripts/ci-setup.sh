@@ -112,8 +112,8 @@ gh variable set AZURE_PLAN_CLIENT_ID -b "$PLAN_ID"
 alert=$(sed -nE 's/^alert_email[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/p' deploy/terraform/terraform.tfvars)
 [ -n "$alert" ] || { echo "alert_email is missing from deploy/terraform/terraform.tfvars" >&2; exit 1; }
 gh variable set ALERT_EMAIL -b "$alert"
-# Sign-in (docs/sign-in.md): the Entra External ID tenant and app, once they exist.
-for k in ENTRA_TENANT_ID ENTRA_CLIENT_ID; do
+# Sign-in (docs/sign-in.md): the Google and Microsoft apps, once they exist.
+for k in GOOGLE_CLIENT_ID MICROSOFT_CLIENT_ID; do
   v=$(envvar "$k" deploy/azure.env)
   [ -z "$v" ] || gh variable set "$k" -b "$v"
 done
@@ -123,7 +123,7 @@ model=$(envvar ANTHROPIC_MODEL .env); [ -z "$model" ] || gh variable set ANTHROP
 setsecret() { [ -n "$2" ] && printf '%s' "$2" | gh secret set "$1" --env production; }
 setsecret AZURE_CLIENT_ID "$DEPLOY_ID"
 for k in ANTHROPIC_API_KEY VOYAGE_API_KEY GAFFER_TEAM_ID NTFY_TOPIC; do setsecret "$k" "$(envvar "$k" .env)" || true; done
-for k in OAUTH_GITHUB_CLIENT_ID OAUTH_GITHUB_CLIENT_SECRET ENTRA_CLIENT_SECRET GAFFER_OWNERS; do setsecret "$k" "$(envvar "$k" deploy/azure.env)" || true; done
+for k in OAUTH_GITHUB_CLIENT_ID OAUTH_GITHUB_CLIENT_SECRET GOOGLE_CLIENT_SECRET MICROSOFT_CLIENT_SECRET GAFFER_OWNERS; do setsecret "$k" "$(envvar "$k" deploy/azure.env)" || true; done
 
 echo "== 4. previews"
 TF=deploy/terraform

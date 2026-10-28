@@ -19,7 +19,7 @@ export default function SignedOut() {
             Sign in
           </a>
         </div>
-        <p className="titlenote">You’re signed out. Sign in again with GitHub, an emailed code or Google. If you used GitHub or Google, you are still signed in there: sign out there too on a shared computer.</p>
+        <p className="titlenote">You’re signed out. Sign in again with GitHub, Google or Microsoft. You are still signed in with whichever you used: sign out there too on a shared computer.</p>
       </Hero>
       <ul className="titlefeatures">
         <li>
