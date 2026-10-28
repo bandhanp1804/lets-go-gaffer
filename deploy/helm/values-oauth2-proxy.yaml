@@ -1,5 +1,5 @@
 # oauth2-proxy (oauth2-proxy/oauth2-proxy 10.7.1): the login in front of everything. It signs
-# people in through Dex (GitHub, email code or Google; see docs/sign-in.md), and lets in anyone
+# people in through Dex (GitHub, Google or Microsoft; see docs/sign-in.md), and lets in anyone
 # who signs in: the app's daily limits keep visitors from running up the API bill. Credentials
 # come from the oauth2-proxy-secrets Secret made by deploy/scripts/deploy.sh; Dex's addresses are
 # set with --set on install.

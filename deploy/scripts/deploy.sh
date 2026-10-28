@@ -148,14 +148,15 @@ app() {
   status
 }
 
-# dex_config HOST CLIENT_SECRET prints Dex's config: GitHub always, and Entra External ID (email
-# code or Google) once its tenant is set up (docs/sign-in.md). It holds secrets, so it only ever
+# dex_config HOST CLIENT_SECRET prints Dex's config: GitHub always, plus Google and Microsoft once
+# their credentials are in deploy/azure.env (docs/sign-in.md). It holds secrets, so it only ever
 # goes into the dex-config Secret.
 dex_config() {
-  local host=$1 secret=$2 tenant client csecret
-  tenant=$(envvar ENTRA_TENANT_ID deploy/azure.env)
-  client=$(envvar ENTRA_CLIENT_ID deploy/azure.env)
-  csecret=$(envvar ENTRA_CLIENT_SECRET deploy/azure.env)
+  local host=$1 secret=$2 gid gsecret mid msecret
+  gid=$(envvar GOOGLE_CLIENT_ID deploy/azure.env)
+  gsecret=$(envvar GOOGLE_CLIENT_SECRET deploy/azure.env)
+  mid=$(envvar MICROSOFT_CLIENT_ID deploy/azure.env)
+  msecret=$(envvar MICROSOFT_CLIENT_SECRET deploy/azure.env)
   cat <<EOF
 issuer: https://$host/dex
 storage:
@@ -184,20 +185,29 @@ connectors:
       clientSecret: $(envvar OAUTH_GITHUB_CLIENT_SECRET deploy/azure.env)
       redirectURI: https://$host/dex/callback
 EOF
-  if [ -n "$tenant" ] && [ -n "$client" ] && [ -n "$csecret" ]; then
+  if [ -n "$gid" ] && [ -n "$gsecret" ]; then
     cat <<EOF
-  - type: oidc
-    id: entra
-    name: Email code or Google
+  - type: google
+    id: google
+    name: Google
     config:
-      issuer: https://$tenant.ciamlogin.com/$tenant/v2.0
-      clientID: $client
-      clientSecret: $csecret
+      clientID: $gid
+      clientSecret: $gsecret
       redirectURI: https://$host/dex/callback
-      scopes: [openid, profile, email]
-      # Entra sends no email_verified claim; it verifies the address itself (the one-time code,
-      # or Google's own check), so Dex is told to accept the email as given.
-      insecureSkipEmailVerified: true
+EOF
+  fi
+  if [ -n "$mid" ] && [ -n "$msecret" ]; then
+    cat <<EOF
+  - type: microsoft
+    id: microsoft
+    name: Microsoft
+    config:
+      clientID: $mid
+      clientSecret: $msecret
+      redirectURI: https://$host/dex/callback
+      # Work, school and personal (Outlook, Hotmail) accounts alike.
+      tenant: common
+      emailToLowercase: true
 EOF
   fi
 }

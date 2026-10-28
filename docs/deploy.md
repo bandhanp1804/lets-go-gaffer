@@ -1,10 +1,10 @@
 # Deploying to Azure
 
-The whole app runs on Azure Kubernetes Service, provisioned with Terraform and installed with Helm, behind a sign-in (GitHub, an emailed code or Google: [sign-in.md](sign-in.md)). Every part is a Kubernetes deployment, and the web app, API and worker scale on CPU.
+The whole app runs on Azure Kubernetes Service, provisioned with Terraform and installed with Helm, behind a sign-in (GitHub, Google or Microsoft: [sign-in.md](sign-in.md)). Every part is a Kubernetes deployment, and the web app, API and worker scale on CPU.
 
 ```
 Browser ─https─▶ Traefik (one load balancer, sslip.io name, Let's Encrypt certificate)
-                 └─ oauth2-proxy ─▶ Dex (GitHub, or email code / Google via Entra External ID)
+                 └─ oauth2-proxy ─▶ Dex (GitHub, Google or Microsoft)
                      ├─ /          → web     Next.js, 1–3 pods
                      ├─ /api       → api     gaffer serve, 1–3 pods, sticky cookie
                      └─ /temporal  → Temporal UI
@@ -64,7 +64,7 @@ The app keys live in the `production` environment's secrets; the script copies t
 Every pull request from a branch of this repository gets a preview, so reviewers can try a feature before it merges:
 
 - **Address:** `https://pr-N.gaffer.<ip>.sslip.io`, posted as a comment on the PR and on the run page, rebuilt on every push.
-- **Login:** the same sign-in as production (GitHub, email code or Google), with the same daily limits. The login cookie covers the previews' subdomains, so one sign-in works for all of them.
+- **Login:** the same sign-in as production (GitHub, Google or Microsoft), with the same daily limits. The login cookie covers the previews' subdomains, so one sign-in works for all of them.
 - **Data:** a new preview starts from a copy of production's database, without anyone's saved settings, alerts or watchlist. It has its own encryption key, so no production token is ever readable in a preview.
 - **Runs:** the web app and the API only, in the PR's own namespace on the production cluster. There is no worker, so no scheduled news, alerts, briefing or eval; the **Refresh news** button still works.
 - **Removed:** when the PR is merged or closed, and by a nightly sweep for any that were missed. At most three run at once (`MAX_PREVIEWS`).
