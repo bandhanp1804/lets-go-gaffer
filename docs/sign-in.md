@@ -24,7 +24,7 @@ These steps create identities and secrets, so they are done by you, not by scrip
 ### 1. Google
 
 1. In the [Google Cloud console](https://console.cloud.google.com), create a project (for example `lets-go-gaffer`) and open it.
-2. **APIs & Services** → **OAuth consent screen** (Google Auth Platform): **External**, app name `Let's Go Gaffer`, your email as support and developer contact. Under **Authorized domains** add `sslip.io`. Scopes: only the default `openid`, `email` and `profile`. Under **App domain**, set the home page to `https://gaffer.52-162-179-134.sslip.io/`, the privacy policy to `https://gaffer.52-162-179-134.sslip.io/privacy` and the terms of service to `https://gaffer.52-162-179-134.sslip.io/terms` (both are readable without signing in, once deployed). **Publish** the app (in testing mode only listed test users can sign in).
+2. **APIs & Services** → **OAuth consent screen** (Google Auth Platform): **External**, app name `Let's Go Gaffer`, your email as support and developer contact. Under **Authorized domains** add `sslip.io`. Scopes: only the default `openid`, `email` and `profile`. **Publish** the app (in testing mode only listed test users can sign in).
 3. **Credentials** → **Create credentials** → **OAuth client ID** → **Web application** → **Authorized redirect URIs**: `https://gaffer.52-162-179-134.sslip.io/dex/callback` → **Create**.
 4. Copy the client ID and secret. **→ save as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`**
 
