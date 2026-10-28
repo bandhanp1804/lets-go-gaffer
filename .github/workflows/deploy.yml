@@ -52,6 +52,7 @@ jobs:
       # dashboards and monitors.
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
       DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+      DD_NOTIFY: ${{ vars.ALERT_EMAIL }} # who the monitors email
       ACME_EMAIL: ${{ vars.ALERT_EMAIL }}
     steps:
       - uses: actions/checkout@v5

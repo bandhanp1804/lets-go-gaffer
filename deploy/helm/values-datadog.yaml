@@ -42,6 +42,12 @@ datadog:
     enabled: true
 
   # Off: each is a separate Datadog product or costs node memory this cluster does not have.
+  # The chart turns Service Discovery (a system-probe container) and the Datadog Operator on by
+  # default in recent versions; neither is used here.
+  discovery:
+    enabled: false
+  operator:
+    enabled: false
   processAgent:
     enabled: false
     processCollection: false
@@ -71,7 +77,7 @@ agents:
         limits: { memory: 384Mi }
     traceAgent:
       resources:
-        requests: { cpu: 20m, memory: 64Mi }
+        requests: { cpu: 20m, memory: 48Mi } # uses about 30Mi
         limits: { memory: 192Mi }
 
 clusterAgent:
