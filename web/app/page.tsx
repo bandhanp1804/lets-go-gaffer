@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { Async } from "../components/Async.tsx";
 import { Hero } from "../components/Hero.tsx";
+import { Landing } from "../components/Landing.tsx";
 import { Notes } from "../components/Notes.tsx";
 import { useTeam } from "../components/TeamProvider.tsx";
 import { one, signed } from "../lib/format.ts";
 import type { Lineup, Status } from "../lib/types.gen.ts";
 import { useApi } from "../lib/useApi.ts";
+import { useSession } from "../lib/useSession.ts";
 
 const features = [
   { href: "/lineup", icon: "①", title: "Best XI", text: "The eleven with the best expected points, the captain, and the close calls the numbers cannot settle." },
@@ -18,7 +20,16 @@ const features = [
   { href: "/model", icon: "📈", title: "The model", text: "How well it predicted weeks already played, checked on gameweeks it never saw." },
 ];
 
+/**
+ * The home page, served without a login: visitors who are not signed in see what the app does and
+ * a way in; signed-in users see their week. The server renders the landing page (so it is what a
+ * crawler reads), and a signed-in browser swaps in the app's home as soon as the check answers.
+ */
 export default function Home() {
+  return useSession() === "in" ? <AppHome /> : <Landing />;
+}
+
+function AppHome() {
   const { identity, ready, openModal } = useTeam();
   const status = useApi<Status>("/api/status");
   const hasTeam = identity.teamId !== null || status.data?.team_configured === true;

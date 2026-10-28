@@ -52,10 +52,12 @@ spec:
             backend: { service: { name: gaffer-web, port: { number: 80 } } }
 {{- if not .Values.preview }}
 ---
-# The signed-out page, the privacy policy and terms, and the static files they need, are outside
-# the login: landing anywhere
-# else after signing out sends someone still logged in to GitHub straight back in. Nothing here
-# reads data; the API stays behind the login.
+# The home page, the signed-out page, the privacy policy and terms, and the static files they
+# need, are outside the login. Nothing here reads data; the API stays behind the login, and the
+# home page asks /oauth2/auth whether to show the app or the landing page.
+#
+# Traefik ranks routes by the length of their rule, so Path(`/terms`) would lose to the login
+# ingress's shorter-looking but longer PathPrefix(`/`): the priority puts these first.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -63,6 +65,7 @@ metadata:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.priority: "1000"
 spec:
   tls:
     - hosts: [{{ $host | quote }}]
@@ -71,6 +74,9 @@ spec:
     - host: {{ $host | quote }}
       http:
         paths:
+          - path: /
+            pathType: Exact
+            backend: { service: { name: gaffer-web, port: { number: 80 } } }
           - path: /signed-out
             pathType: Exact
             backend: { service: { name: gaffer-web, port: { number: 80 } } }
@@ -97,6 +103,7 @@ metadata:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.priority: "1000"
 spec:
   tls:
     - hosts: [{{ $host | quote }}]
