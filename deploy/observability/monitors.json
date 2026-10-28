@@ -1,0 +1,184 @@
+[
+  {
+    "name": "[gaffer] API error rate above 5%",
+    "type": "query alert",
+    "query": "sum(last_10m):sum:trace.http.server.request.errors{service:gaffer-api,env:prod}.as_count() / sum:trace.http.server.request.hits{service:gaffer-api,env:prod}.as_count() > 0.05",
+    "message": "{{#is_alert}}More than 5% of API requests failed with a 5xx in the last 10 minutes ({{value}}).{{/is_alert}}{{#is_recovery}}The API error rate is back under 5%.{{/is_recovery}}\n\n@webhook-gaffer-ntfy",
+    "tags": [
+      "service:gaffer",
+      "managed-by:repo"
+    ],
+    "options": {
+      "notify_no_data": false,
+      "require_full_window": false,
+      "include_tags": true,
+      "thresholds": {
+        "critical": 0.05,
+        "warning": 0.02
+      }
+    }
+  },
+  {
+    "name": "[gaffer] API p95 latency above 3s (Ask excluded)",
+    "type": "query alert",
+    "query": "percentile(last_15m):p95:trace.http.server.request{service:gaffer-api,env:prod,!resource_name:post_/api/ask} > 3",
+    "message": "{{#is_alert}}API p95 latency is {{value}}s over 15 minutes (Ask is watched separately).{{/is_alert}}{{#is_recovery}}API latency is back to normal.{{/is_recovery}}\n\n@webhook-gaffer-ntfy",
+    "tags": [
+      "service:gaffer",
+      "managed-by:repo"
+    ],
+    "options": {
+      "notify_no_data": false,
+      "require_full_window": false,
+      "include_tags": true,
+      "thresholds": {
+        "critical": 3,
+        "warning": 2
+      }
+    }
+  },
+  {
+    "name": "[gaffer] Ask p95 latency above 45s",
+    "type": "query alert",
+    "query": "percentile(last_15m):p95:trace.http.server.request{service:gaffer-api,env:prod,resource_name:post_/api/ask} > 45",
+    "message": "{{#is_alert}}Ask answers take {{value}}s at p95: Claude or a tool call is slow.{{/is_alert}}{{#is_recovery}}Ask latency is back to normal.{{/is_recovery}}\n\n@webhook-gaffer-ntfy",
+    "tags": [
+      "service:gaffer",
+      "managed-by:repo"
+    ],
+    "options": {
+      "notify_no_data": false,
+      "require_full_window": false,
+      "include_tags": true,
+      "thresholds": {
+        "critical": 45
+      }
+    }
+  },
+  {
+    "name": "[gaffer] Pod restarting",
+    "type": "query alert",
+    "query": "change(max(last_15m),last_15m):max:kubernetes.containers.restarts{kube_namespace:gaffer} by {kube_deployment} > 1",
+    "message": "{{#is_alert}}{{kube_deployment.name}} restarted {{value}} times in 15 minutes: check its logs (crash, or out of memory).{{/is_alert}}{{#is_recovery}}{{kube_deployment.name}} is stable again.{{/is_recovery}}\n\n@webhook-gaffer-ntfy",
+    "tags": [
+      "service:gaffer",
+      "managed-by:repo"
+    ],
+    "options": {
+      "notify_no_data": false,
+      "require_full_window": false,
+      "include_tags": true,
+      "thresholds": {
+        "critical": 1
+      }
+    }
+  },
+  {
+    "name": "[gaffer] Workflow failed",
+    "type": "query alert",
+    "query": "sum(last_30m):sum:trace.temporal.run_workflow.errors{env:prod} by {resource_name}.as_count() > 0",
+    "message": "{{#is_alert}}The {{resource_name.name}} workflow failed. Its run is in the Temporal UI (owners only), and the trace in APM.{{/is_alert}}{{#is_recovery}}{{resource_name.name}} is running cleanly again.{{/is_recovery}}\n\n@webhook-gaffer-ntfy",
+    "tags": [
+      "service:gaffer",
+      "managed-by:repo"
+    ],
+    "options": {
+      "notify_no_data": false,
+      "require_full_window": false,
+      "include_tags": true,
+      "thresholds": {
+        "critical": 0
+      }
+    }
+  },
+  {
+    "name": "[gaffer] No new news in 24 hours",
+    "type": "query alert",
+    "query": "sum(last_1d):sum:gaffer.news.stories{result:new,env:prod}.as_count() < 1",
+    "message": "{{#is_alert}}No new story was stored in 24 hours: the feeds, Voyage, or the refresh schedule may be broken.{{/is_alert}}{{#is_no_data}}No news refresh has reported in 24 hours: is the worker running?{{/is_no_data}}{{#is_recovery}}News is coming in again.{{/is_recovery}}\n\n@webhook-gaffer-ntfy",
+    "tags": [
+      "service:gaffer",
+      "managed-by:repo"
+    ],
+    "options": {
+      "notify_no_data": true,
+      "require_full_window": false,
+      "include_tags": true,
+      "thresholds": {
+        "critical": 1
+      },
+      "no_data_timeframe": 1500
+    }
+  },
+  {
+    "name": "[gaffer] Claude spend above $2 in a day",
+    "type": "query alert",
+    "query": "sum(last_1d):sum:gaffer.llm.cost{env:prod}.as_count() > 2",
+    "message": "{{#is_alert}}Estimated Claude spend reached ${{value}} in the last 24 hours. Check the Claude and spend dashboard: who is asking, and is the cache working?{{/is_alert}}{{#is_recovery}}Claude spend is back under $2 a day.{{/is_recovery}}\n\n@webhook-gaffer-ntfy",
+    "tags": [
+      "service:gaffer",
+      "managed-by:repo"
+    ],
+    "options": {
+      "notify_no_data": false,
+      "require_full_window": false,
+      "include_tags": true,
+      "thresholds": {
+        "critical": 2,
+        "warning": 1
+      }
+    }
+  },
+  {
+    "name": "[gaffer] Node memory above 90%",
+    "type": "query alert",
+    "query": "avg(last_15m):avg:system.mem.pct_usable{*} by {host} < 0.1",
+    "message": "{{#is_alert}}{{host.name}} has under 10% memory left: pods may be evicted, and the autoscaler may add the second node.{{/is_alert}}{{#is_recovery}}{{host.name}} memory is back to normal.{{/is_recovery}}\n\n@webhook-gaffer-ntfy",
+    "tags": [
+      "service:gaffer",
+      "managed-by:repo"
+    ],
+    "options": {
+      "notify_no_data": false,
+      "require_full_window": false,
+      "include_tags": true,
+      "thresholds": {
+        "critical": 0.1,
+        "warning": 0.15
+      }
+    }
+  },
+  {
+    "name": "[gaffer] TLS certificate not ready",
+    "type": "query alert",
+    "query": "max(last_1h):max:cert_manager.certificate.ready_status{condition:false} by {name} > 0",
+    "message": "{{#is_alert}}Certificate {{name.name}} has not been ready for an hour: renewal is failing, and the site will show a certificate error when it expires.{{/is_alert}}{{#is_recovery}}Certificate {{name.name}} is ready.{{/is_recovery}}\n\n@webhook-gaffer-ntfy",
+    "tags": [
+      "service:gaffer",
+      "managed-by:repo"
+    ],
+    "options": {
+      "notify_no_data": false,
+      "require_full_window": false,
+      "include_tags": true,
+      "thresholds": {
+        "critical": 0
+      }
+    }
+  },
+  {
+    "name": "[gaffer] API availability SLO burning fast",
+    "type": "slo alert",
+    "query": "burn_rate(\"__SLO_ID__\").over(\"7d\").long_window(\"1h\").short_window(\"5m\") > 14.4",
+    "message": "{{#is_alert}}The API is failing fast enough to spend the week's error budget (1%) in about 12 hours.{{/is_alert}}{{#is_recovery}}The error-budget burn has slowed.{{/is_recovery}}\n\n@webhook-gaffer-ntfy",
+    "tags": [
+      "service:gaffer",
+      "managed-by:repo"
+    ],
+    "options": {
+      "thresholds": {
+        "critical": 14.4
+      }
+    }
+  }
+]

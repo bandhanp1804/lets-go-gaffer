@@ -11,7 +11,8 @@ spec:
     matchLabels: { app: gaffer-api }
   template:
     metadata:
-      labels: { app: gaffer-api }
+      labels:
+        {{- include "gaffer.podLabels" (dict "root" . "name" "gaffer-api") | nindent 8 }}
     spec:
       containers:
         - name: api

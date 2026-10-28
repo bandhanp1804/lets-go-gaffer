@@ -49,18 +49,38 @@ server:
         - name: default
           retention: 7d
   frontend:
+    # Read by Datadog's Temporal integration (workflow, task-queue and persistence metrics);
+    # ignored when Datadog is not installed.
+    podAnnotations:
+      ad.datadoghq.com/temporal-frontend.checks: |
+        {"temporal": {"instances": [{"openmetrics_endpoint": "http://%%host%%:9090/metrics"}]}}
     resources:
       requests: { cpu: 50m, memory: 128Mi }
       limits: { memory: 384Mi }
   history:
+    # Read by Datadog's Temporal integration (workflow, task-queue and persistence metrics);
+    # ignored when Datadog is not installed.
+    podAnnotations:
+      ad.datadoghq.com/temporal-history.checks: |
+        {"temporal": {"instances": [{"openmetrics_endpoint": "http://%%host%%:9090/metrics"}]}}
     resources:
       requests: { cpu: 50m, memory: 192Mi }
       limits: { memory: 512Mi }
   matching:
+    # Read by Datadog's Temporal integration (workflow, task-queue and persistence metrics);
+    # ignored when Datadog is not installed.
+    podAnnotations:
+      ad.datadoghq.com/temporal-matching.checks: |
+        {"temporal": {"instances": [{"openmetrics_endpoint": "http://%%host%%:9090/metrics"}]}}
     resources:
       requests: { cpu: 30m, memory: 96Mi }
       limits: { memory: 256Mi }
   worker:
+    # Read by Datadog's Temporal integration (workflow, task-queue and persistence metrics);
+    # ignored when Datadog is not installed.
+    podAnnotations:
+      ad.datadoghq.com/temporal-worker.checks: |
+        {"temporal": {"instances": [{"openmetrics_endpoint": "http://%%host%%:9090/metrics"}]}}
     resources:
       requests: { cpu: 20m, memory: 96Mi }
       limits: { memory: 256Mi }

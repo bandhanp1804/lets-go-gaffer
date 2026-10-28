@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/db"
+
+	"github.com/bandhanpatel/lets-go-gaffer/internal/telemetry"
 )
 
 // Message is one notification. User is whose inbox it goes to; "" is the owners', and only the
@@ -119,6 +121,7 @@ func (m Multi) Notify(ctx context.Context, msg Message) error {
 	if err := m.Inbox.Notify(ctx, msg); err != nil {
 		return fmt.Errorf("store alert: %w", err)
 	}
+	telemetry.AlertSent(ctx, msg.User == "")
 	if msg.User != "" {
 		return nil
 	}

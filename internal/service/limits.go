@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/bandhanpatel/lets-go-gaffer/internal/telemetry"
 )
 
 // The features with a daily limit: each spends an API credit (Claude or Voyage) per use.
@@ -123,6 +125,7 @@ func (l *Limits) Take(ctx context.Context, user, kind string) error {
 		return err
 	}
 	if !ok {
+		telemetry.LimitHit(ctx, kind)
 		return &LimitError{Kind: kind, Limit: limit}
 	}
 	return nil

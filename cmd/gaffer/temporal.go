@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/client"
+	temporalotel "go.temporal.io/sdk/contrib/opentelemetry"
+	"go.temporal.io/sdk/interceptor"
 	tlog "go.temporal.io/sdk/log"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/assistant"
@@ -18,6 +20,8 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/news"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/notify"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/workflows"
+
+	"github.com/bandhanpatel/lets-go-gaffer/internal/telemetry"
 )
 
 // temporalAddress is where the workflow server listens. For `gaffer serve` an empty value means
@@ -48,11 +52,19 @@ func temporalNamespace() string {
 
 // dialTemporal connects to the workflow server, failing fast if it is not there.
 func dialTemporal(ctx context.Context, addr string) (client.Client, error) {
+	// The tracing interceptor carries the caller's trace into the workflow and its activities, so
+	// one trace runs from the click in the browser to the Claude call a workflow makes. Workers made
+	// from this client use it too.
+	tracing, err := temporalotel.NewTracingInterceptor(temporalotel.TracerOptions{SpanStarter: telemetry.TemporalSpan})
+	if err != nil {
+		return nil, fmt.Errorf("trace Temporal calls: %w", err)
+	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	c, err := client.DialContext(ctx, client.Options{
 		HostPort: addr, Namespace: temporalNamespace(),
-		Logger: tlog.NewStructuredLogger(slog.Default()),
+		Logger:       tlog.NewStructuredLogger(slog.Default()),
+		Interceptors: []interceptor.ClientInterceptor{tracing},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("connect to Temporal at %s (is it running? docker compose -f deploy/docker/docker-compose.yml up -d): %w", addr, err)
@@ -90,7 +102,7 @@ func notifier(store notify.AlertStore) notify.Notifier {
 		if server == "" {
 			server = "https://ntfy.sh"
 		}
-		m.Pushes = append(m.Pushes, notify.Ntfy{Server: server, Topic: topic, Client: &http.Client{Timeout: 15 * time.Second}})
+		m.Pushes = append(m.Pushes, notify.Ntfy{Server: server, Topic: topic, Client: &http.Client{Timeout: 15 * time.Second, Transport: telemetry.Transport(nil)}})
 	}
 	return m
 }

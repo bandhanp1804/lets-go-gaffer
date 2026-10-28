@@ -34,12 +34,18 @@ export default function Privacy() {
           <strong>How much you use the costly features.</strong> A daily count of your Ask questions, news searches and news refreshes, used only to apply the daily limits.
         </li>
         <li>
+          <strong>Players you watch, and your alerts.</strong> When you star a player, we store that with your email address, and the news and status changes about that player
+          go into your own inbox on the Alerts page. Only you see them.
+        </li>
+        <li>
           <strong>Your questions to Ask.</strong> They are sent to Anthropic to be answered. A conversation is held in the server’s memory while you use it and forgotten after 30
           idle minutes; it is not saved to the database.
         </li>
         <li>
           <strong>Technical logs.</strong> The sign-in service records your email, the page or address requested and the time; the app records the path, the result and how long it
-          took, without your search text or any token. These logs stay in the servers’ own log files, which are regularly overwritten.
+          took, without your search text or any token. The app also times each request and the calls it makes for it (to FPL, Anthropic and the news services), recording the
+          page address without your search text, your IP address and your browser type, but not your questions or any token. Logs and these timings go to Datadog, which we use
+          only to keep the site running.
         </li>
         <li>
           <strong>Cookies and browser storage.</strong> Sign-in cookies (one for your session, and a short-lived one that protects the sign-in step itself), and a cookie that keeps your Ask conversation on the same server. If saved settings are turned off, your
@@ -48,7 +54,7 @@ export default function Privacy() {
       </ul>
 
       <h2>What we do not do</h2>
-      <p>We do not sell your data, show ads, or use analytics or tracking services. We never change anything in your FPL account: your token is used only to read your squad.</p>
+      <p>We do not sell your data, show ads, or use analytics or advertising trackers: Datadog (below) is used only to find faults and slow pages. We never change anything in your FPL account: your token is used only to read your squad.</p>
 
       <h2>Who else handles it</h2>
       <ul>
@@ -65,6 +71,9 @@ export default function Privacy() {
           <strong>Voyage AI</strong> receives the text of news searches and Ask questions about news, to match them with stories.
         </li>
         <li>
+          <strong>Datadog</strong> receives the technical logs and request timings described above, in the United States.
+        </li>
+        <li>
           <strong>GitHub, Google or Microsoft</strong>, whichever you sign in with, under their own privacy policies.
         </li>
       </ul>
@@ -74,7 +83,9 @@ export default function Privacy() {
         <li>Saved settings: until you remove them on the Setup page or ask us to.</li>
         <li>Daily usage counts: 30 days, then deleted automatically.</li>
         <li>Ask conversations: not stored.</li>
-        <li>Logs: until the log files are overwritten.</li>
+        <li>Watched players: until you unstar them.</li>
+        <li>Alerts in your inbox: until you ask us to delete them.</li>
+        <li>Logs and request timings: 15 days in Datadog.</li>
       </ul>
 
       <h2>Your choices</h2>

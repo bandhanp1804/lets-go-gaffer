@@ -13,6 +13,11 @@ authNamespace: gaffer
 # means nobody: the /temporal route is then not served at all.
 ownerEmails: ""
 
+# Where the API and the worker send traces and metrics (OpenTelemetry over HTTP): the Datadog
+# Agent on the same node. Set by deploy.sh when Datadog is installed; empty sends nothing.
+telemetry:
+  otlpEndpoint: ""
+
 image:
   registry: "" # e.g. gaffer1a2b3c.azurecr.io; set on install
   gaffer: gaffer

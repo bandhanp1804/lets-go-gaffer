@@ -11,6 +11,8 @@ import (
 	"sync"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/embed"
+
+	"github.com/bandhanpatel/lets-go-gaffer/internal/telemetry"
 )
 
 // ChunkSize is how many items are embedded and saved together.
@@ -76,6 +78,12 @@ func (s *PlayerNewsSource) Items(ctx context.Context) ([]Item, error) {
 // Items are processed in source order, then feed order, whatever order the
 // sources finish in. linker may be nil to skip linking.
 func Ingest(ctx context.Context, sources []Source, linker *Linker, e Embedder, s Store) (Summary, error) {
+	sum, err := ingest(ctx, sources, linker, e, s)
+	telemetry.NewsRefreshed(ctx, sum.New, sum.Duplicates, sum.FailedSources())
+	return sum, err
+}
+
+func ingest(ctx context.Context, sources []Source, linker *Linker, e Embedder, s Store) (Summary, error) {
 	sum := Summary{SourceErrors: map[string]error{}}
 
 	results := make([][]Item, len(sources))

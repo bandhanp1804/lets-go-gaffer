@@ -73,14 +73,34 @@ app() {
   helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests >/dev/null
   helm repo add temporal https://go.temporal.io/helm-charts >/dev/null
   helm repo add dex https://charts.dexidp.io >/dev/null
+  helm repo add datadog https://helm.datadoghq.com >/dev/null
   helm repo update >/dev/null
+  # Datadog (docs/observability.md) only when its API key is set: without one the app still
+  # deploys, just without telemetry. Traefik and the app then send their traces to the agent.
+  local ddkey otlp="" traefik_tracing=()
+  ddkey=$(envvar DD_API_KEY deploy/azure.env)
+  if [ -n "$ddkey" ]; then
+    otlp=http://datadog.datadog.svc.cluster.local:4318
+    traefik_tracing=(-f "$CHARTS/values-traefik-tracing.yaml")
+  fi
   helm upgrade --install --force-conflicts traefik traefik/traefik --version 42.1.3 -n traefik --create-namespace \
-    -f "$CHARTS/values-traefik.yaml" \
+    -f "$CHARTS/values-traefik.yaml" ${traefik_tracing[@]+"${traefik_tracing[@]}"} \
     --set "service.annotations.service\.beta\.kubernetes\.io/azure-load-balancer-ipv4=$(out ingress_ip)" \
     --set "service.annotations.service\.beta\.kubernetes\.io/azure-load-balancer-resource-group=$(az aks show -g "$(out resource_group)" -n "$(out cluster_name)" --query nodeResourceGroup -o tsv)" \
     --wait
   helm upgrade --install --force-conflicts cert-manager jetstack/cert-manager --version v1.21.3 -n cert-manager --create-namespace \
-    --set crds.enabled=true --set resources.requests.cpu=10m --set resources.requests.memory=48Mi --wait
+    -f "$CHARTS/values-cert-manager.yaml" --wait
+
+  if [ -n "$ddkey" ]; then
+    echo "== Datadog Agent"
+    kubectl create namespace datadog --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    kubectl -n datadog create secret generic datadog-secret --from-literal=api-key="$ddkey" \
+      --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    helm upgrade --install --force-conflicts datadog datadog/datadog --version 3.263.0 -n datadog \
+      -f "$CHARTS/values-datadog.yaml" --set datadog.clusterName="$(out cluster_name)" --wait
+  else
+    echo "== Datadog: skipped (no DD_API_KEY)"
+  fi
 
   echo "== secrets"
   kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
@@ -144,6 +164,7 @@ app() {
   helm upgrade --install gaffer "$CHARTS/gaffer" -n "$NS" \
     --set host="$host" --set image.registry="$acr" --set image.tag="$tag" \
     --set "ownerEmails=${owners//,/\\,}" \
+    --set telemetry.otlpEndpoint="$otlp" \
     --set acmeEmail="$(envvar ACME_EMAIL deploy/azure.env)" \
     --wait --timeout 15m
   status
