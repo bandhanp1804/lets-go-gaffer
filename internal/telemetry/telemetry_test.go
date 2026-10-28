@@ -161,7 +161,7 @@ func TestTransportNamesClientSpansByHost(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer srv.Close()
 	ctx, parent := otel.Tracer("test").Start(context.Background(), "parent")
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/v1/messages", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/my-team/1234/?token=x", nil)
 	before := len(spans.Ended())
 	resp, err := (&http.Client{Transport: Transport(nil)}).Do(req)
 	if err != nil {
@@ -176,6 +176,12 @@ func TestTransportNamesClientSpansByHost(t *testing.T) {
 	}
 	if want := "POST " + req.URL.Host; ended[0].Name() != want {
 		t.Errorf("client span %q, want %q", ended[0].Name(), want)
+	}
+	if got, want := attr(ended[0].Attributes(), "url.full"), "http://"+req.URL.Host; got != want {
+		t.Errorf("url.full %q, want only %q: the path and query must not be recorded", got, want)
+	}
+	if got, want := attr(ended[0].Attributes(), "resource.name"), "POST "+req.URL.Host; got != want {
+		t.Errorf("resource %q, want %q", got, want)
 	}
 	if ended[0].Parent().SpanID() != parent.SpanContext().SpanID() {
 		t.Error("the request span is not a child of the caller's span")
@@ -270,4 +276,30 @@ func attr(kvs []attribute.KeyValue, key string) string {
 		}
 	}
 	return ""
+}
+
+func TestTemporalSpanNamesOperationAndResource(t *testing.T) {
+	tests := []struct {
+		name, wantOp, wantResource string
+	}{
+		{"RunWorkflow:NewsRefresh", "temporal.run_workflow", "NewsRefresh"},
+		{"StartActivity:FetchNews", "temporal.start_activity", "FetchNews"},
+		{"HandleSignal", "", ""}, // not in kind:type form: left as it is
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			before := len(spans.Ended())
+			TemporalSpan(context.Background(), otel.Tracer("test"), tc.name).End()
+			s := spans.Ended()[before]
+			if got := attr(s.Attributes(), "operation.name"); got != tc.wantOp {
+				t.Errorf("operation %q, want %q", got, tc.wantOp)
+			}
+			if got := attr(s.Attributes(), "resource.name"); got != tc.wantResource {
+				t.Errorf("resource %q, want %q", got, tc.wantResource)
+			}
+			if s.Name() != tc.name {
+				t.Errorf("span renamed to %q", s.Name())
+			}
+		})
+	}
 }

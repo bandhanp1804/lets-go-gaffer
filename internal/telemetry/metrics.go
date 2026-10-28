@@ -38,6 +38,8 @@ type LLMCall struct {
 // StartLLM opens a span for a Claude request; the HTTP span of each attempt nests inside it.
 func StartLLM(ctx context.Context, model string) (context.Context, LLMCall) {
 	ctx, span := tracer.Start(ctx, "claude.messages", trace.WithAttributes(
+		operation("claude.messages"),
+		attribute.String("resource.name", model),
 		attribute.String("gen_ai.system", "anthropic"),
 		attribute.String("gen_ai.request.model", model),
 	))

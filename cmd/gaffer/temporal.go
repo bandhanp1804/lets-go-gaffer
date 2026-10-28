@@ -55,7 +55,7 @@ func dialTemporal(ctx context.Context, addr string) (client.Client, error) {
 	// The tracing interceptor carries the caller's trace into the workflow and its activities, so
 	// one trace runs from the click in the browser to the Claude call a workflow makes. Workers made
 	// from this client use it too.
-	tracing, err := temporalotel.NewTracingInterceptor(temporalotel.TracerOptions{})
+	tracing, err := temporalotel.NewTracingInterceptor(temporalotel.TracerOptions{SpanStarter: telemetry.TemporalSpan})
 	if err != nil {
 		return nil, fmt.Errorf("trace Temporal calls: %w", err)
 	}

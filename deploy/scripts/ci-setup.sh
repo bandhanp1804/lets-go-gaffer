@@ -123,7 +123,7 @@ model=$(envvar ANTHROPIC_MODEL .env); [ -z "$model" ] || gh variable set ANTHROP
 setsecret() { [ -n "$2" ] && printf '%s' "$2" | gh secret set "$1" --env production; }
 setsecret AZURE_CLIENT_ID "$DEPLOY_ID"
 for k in ANTHROPIC_API_KEY VOYAGE_API_KEY GAFFER_TEAM_ID NTFY_TOPIC; do setsecret "$k" "$(envvar "$k" .env)" || true; done
-for k in OAUTH_GITHUB_CLIENT_ID OAUTH_GITHUB_CLIENT_SECRET GOOGLE_CLIENT_SECRET MICROSOFT_CLIENT_SECRET GAFFER_OWNERS; do setsecret "$k" "$(envvar "$k" deploy/azure.env)" || true; done
+for k in OAUTH_GITHUB_CLIENT_ID OAUTH_GITHUB_CLIENT_SECRET GOOGLE_CLIENT_SECRET MICROSOFT_CLIENT_SECRET GAFFER_OWNERS DD_API_KEY DD_APP_KEY; do setsecret "$k" "$(envvar "$k" deploy/azure.env)" || true; done
 
 echo "== 4. previews"
 TF=deploy/terraform

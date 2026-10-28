@@ -10,7 +10,8 @@ spec:
     matchLabels: { app: gaffer-web }
   template:
     metadata:
-      labels: { app: gaffer-web }
+      labels:
+        {{- include "gaffer.podLabels" (dict "root" . "name" "gaffer-web") | nindent 8 }}
     spec:
       containers:
         - name: web

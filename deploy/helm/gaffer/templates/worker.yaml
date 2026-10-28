@@ -11,7 +11,8 @@ spec:
     matchLabels: { app: gaffer-worker }
   template:
     metadata:
-      labels: { app: gaffer-worker }
+      labels:
+        {{- include "gaffer.podLabels" (dict "root" . "name" "gaffer-worker") | nindent 8 }}
     spec:
       # Let activities in flight finish on scale-down or rollout.
       terminationGracePeriodSeconds: 60

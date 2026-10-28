@@ -1,0 +1,10 @@
+# Added to values-traefik.yaml by deploy.sh when the Datadog Agent is installed: Traefik starts the
+# trace for each request and sends its span to the agent; the API's spans continue the same trace
+# through the traceparent header.
+tracing:
+  serviceName: traefik
+  otlp:
+    enabled: true
+    http:
+      enabled: true
+      endpoint: http://datadog.datadog.svc.cluster.local:4318/v1/traces

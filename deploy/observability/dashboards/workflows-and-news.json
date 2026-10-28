@@ -1,0 +1,125 @@
+{
+  "title": "Gaffer · Workflows and news",
+  "description": "Managed in the repository (deploy/observability); changes made here are overwritten on deploy. Temporal's own server metrics are on Datadog's built-in Temporal dashboard.",
+  "layout_type": "ordered",
+  "template_variables": [
+    {
+      "name": "env",
+      "prefix": "env",
+      "available_values": [],
+      "default": "prod"
+    }
+  ],
+  "widgets": [
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Workflow runs by type",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:trace.temporal.run_workflow.hits{$env} by {resource_name}.as_count()",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Workflow failures by type",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:trace.temporal.run_workflow.errors{$env} by {resource_name}.as_count()",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Activity p95 duration by type (s)",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "p95:trace.temporal.run_activity{$env} by {resource_name}",
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Activity failed attempts by type (retried by Temporal)",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:trace.temporal.run_activity.errors{$env} by {resource_name}.as_count()",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "News stories per refresh: new and duplicate",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:gaffer.news.stories{$env} by {result}.as_count()",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Feed failures by feed",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:gaffer.news.feed_failures{$env} by {feed}.as_count()",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Alerts stored by inbox",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:gaffer.alerts.sent{$env} by {inbox}.as_count()",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "log_stream",
+        "title": "Worker log",
+        "query": "service:gaffer-worker",
+        "indexes": [],
+        "columns": [
+          "host",
+          "service"
+        ],
+        "show_date_column": true,
+        "show_message_column": true,
+        "message_display": "expanded-md",
+        "sort": {
+          "column": "time",
+          "order": "desc"
+        }
+      }
+    }
+  ]
+}

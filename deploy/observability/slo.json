@@ -1,0 +1,20 @@
+{
+  "name": "[gaffer] API availability",
+  "type": "metric",
+  "description": "Share of API requests that do not fail with a 5xx, over 7 days. Managed in the repository (deploy/observability).",
+  "query": {
+    "numerator": "sum:trace.http.server.request.hits{service:gaffer-api,env:prod}.as_count() - sum:trace.http.server.request.errors{service:gaffer-api,env:prod}.as_count()",
+    "denominator": "sum:trace.http.server.request.hits{service:gaffer-api,env:prod}.as_count()"
+  },
+  "thresholds": [
+    {
+      "timeframe": "7d",
+      "target": 99.0,
+      "warning": 99.5
+    }
+  ],
+  "tags": [
+    "service:gaffer",
+    "managed-by:repo"
+  ]
+}

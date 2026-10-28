@@ -79,6 +79,7 @@ See the [command reference](docs/cli.md) for the rest.
 | [Sign-in](docs/sign-in.md) | GitHub, Google or Microsoft through Dex, the daily limits |
 | [Deploying to Azure](docs/deploy.md) | Terraform, AKS, Helm, costs, stop and start |
 | [Background workflows](docs/temporal.md) | Temporal: schedules, alerts, the briefing, backfills |
+| [Observability](docs/observability.md) | traces, metrics, logs, dashboards and alerts in Datadog |
 | [Development](docs/development.md) | tests, generated types, opt-in live tests, troubleshooting |
 | [Roadmap](docs/roadmap.md) | what is done and what is next |
 

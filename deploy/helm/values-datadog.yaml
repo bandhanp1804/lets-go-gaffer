@@ -1,0 +1,88 @@
+# The Datadog Agent (datadog/datadog 3.263.0), installed into its own namespace by deploy.sh when
+# DD_API_KEY is set. One agent pod per node collects pod logs, kubelet and Kubernetes state, and
+# receives the app's OpenTelemetry traces and metrics; one cluster agent watches the API server.
+# The cluster name and the site come from --set (deploy.sh). docs/observability.md explains it.
+datadog:
+  apiKeyExistingSecret: datadog-secret # key api-key
+  site: us5.datadoghq.com
+  tags: ["project:lets-go-gaffer"]
+  # AKS kubelets serve a certificate the agent cannot verify by default.
+  kubelet:
+    tlsVerify: false
+
+  # Every container's stdout, except the system namespaces, whose lines nobody here reads and
+  # which would use most of the log volume.
+  logs:
+    enabled: true
+    containerCollectAll: true
+  containerExcludeLogs: "kube_namespace:kube-system kube_namespace:datadog"
+
+  # Traces from the app (OpenTelemetry) and from Traefik arrive over OTLP/HTTP. The pods reach the
+  # agent on their own node through the chart's node-local Service (datadog.datadog.svc:4318), so
+  # no host port is needed.
+  apm:
+    portEnabled: false
+  otlp:
+    receiver:
+      protocols:
+        http:
+          enabled: true
+          endpoint: 0.0.0.0:4318
+          useHostPort: false
+        grpc:
+          enabled: false
+    logs:
+      enabled: false # logs come from the container output instead
+
+  # Kubernetes state (deployments, pods, HPAs) through the cluster agent; the orchestrator view
+  # shows the live objects.
+  kubeStateMetricsCore:
+    enabled: true
+  orchestratorExplorer:
+    enabled: true
+
+  # Off: each is a separate Datadog product or costs node memory this cluster does not have.
+  processAgent:
+    enabled: false
+    processCollection: false
+    containerCollection: false
+  networkMonitoring:
+    enabled: false
+  securityAgent:
+    runtime:
+      enabled: false
+    compliance:
+      enabled: false
+  sbom:
+    containerImage:
+      enabled: false
+    host:
+      enabled: false
+  # No generic Prometheus scraping: every such series is a custom metric. Temporal and
+  # cert-manager are read by their Datadog integrations instead (pod annotations).
+  prometheusScrape:
+    enabled: false
+
+agents:
+  containers:
+    agent:
+      resources:
+        requests: { cpu: 50m, memory: 160Mi }
+        limits: { memory: 384Mi }
+    traceAgent:
+      resources:
+        requests: { cpu: 20m, memory: 64Mi }
+        limits: { memory: 192Mi }
+
+clusterAgent:
+  enabled: true
+  replicas: 1
+  resources:
+    requests: { cpu: 20m, memory: 96Mi }
+    limits: { memory: 256Mi }
+  # Pods are configured explicitly (the app chart sets the OTLP endpoint and the service tags), so
+  # nothing needs a mutating webhook.
+  admissionController:
+    enabled: false
+  metricsProvider:
+    enabled: false

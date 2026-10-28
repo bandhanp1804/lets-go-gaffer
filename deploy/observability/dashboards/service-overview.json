@@ -1,0 +1,200 @@
+{
+  "title": "Gaffer · Service overview",
+  "description": "Managed in the repository (deploy/observability); changes made here are overwritten on deploy.",
+  "layout_type": "ordered",
+  "template_variables": [
+    {
+      "name": "env",
+      "prefix": "env",
+      "available_values": [],
+      "default": "prod"
+    }
+  ],
+  "widgets": [
+    {
+      "definition": {
+        "type": "note",
+        "content": "Requests, errors and latency come from the traces (APM), not from custom metrics. One trace runs Traefik → API → Temporal → Claude; open one from **APM → Traces** with `service:gaffer-api`.",
+        "background_color": "white",
+        "font_size": "14",
+        "text_align": "left",
+        "show_tick": false,
+        "has_padding": true
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "API requests by endpoint",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:trace.http.server.request.hits{service:gaffer-api,$env} by {resource_name}.as_count()",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "API errors (5xx) by endpoint",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:trace.http.server.request.errors{service:gaffer-api,$env} by {resource_name}.as_count()",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "API p95 latency by endpoint (s)",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "p95:trace.http.server.request{service:gaffer-api,$env} by {resource_name}",
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Outbound p95 latency by host (s): FPL, feeds, Voyage, Claude",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "p95:trace.http.client.request{$env} by {resource_name}",
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Outbound errors by host",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:trace.http.client.request.errors{$env} by {resource_name}.as_count()",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Memory by deployment (gaffer namespace)",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "avg:kubernetes.memory.usage{kube_namespace:gaffer} by {kube_deployment}",
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "CPU by deployment (gaffer namespace)",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "avg:kubernetes.cpu.usage.total{kube_namespace:gaffer} by {kube_deployment}",
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Container restarts",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:kubernetes.containers.restarts{kube_namespace:gaffer} by {kube_deployment}",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Node memory used (%)",
+        "show_legend": true,
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "display_type": "line",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "usable",
+                "query": "avg:system.mem.pct_usable{*} by {host}"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "100 - usable * 100"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Database pool connections by state",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "max:gaffer.db.pool.connections{$env} by {service,state}",
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Waits for a free database connection",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:gaffer.db.pool.waits{$env} by {service}.as_count()",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "log_stream",
+        "title": "Errors and warnings from the app",
+        "query": "service:(gaffer-api OR gaffer-worker) status:(error OR warn)",
+        "indexes": [],
+        "columns": [
+          "host",
+          "service"
+        ],
+        "show_date_column": true,
+        "show_message_column": true,
+        "message_display": "expanded-md",
+        "sort": {
+          "column": "time",
+          "order": "desc"
+        }
+      }
+    }
+  ]
+}

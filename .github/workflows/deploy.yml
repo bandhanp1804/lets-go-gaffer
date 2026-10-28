@@ -48,6 +48,10 @@ jobs:
       MICROSOFT_CLIENT_ID: ${{ vars.MICROSOFT_CLIENT_ID }}
       MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
       GAFFER_OWNERS: ${{ secrets.GAFFER_OWNERS }}
+      # Datadog (docs/observability.md): the agent's key, and the app key that publishes the
+      # dashboards and monitors.
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
       ACME_EMAIL: ${{ vars.ALERT_EMAIL }}
     steps:
       - uses: actions/checkout@v5
@@ -68,3 +72,5 @@ jobs:
         run: deploy/scripts/deploy.sh infra
       - name: roll out the app
         run: deploy/scripts/deploy.sh app
+      - name: Datadog dashboards and monitors
+        run: deploy/scripts/observability.sh

@@ -115,9 +115,14 @@ done
   kubectl -n "$ns" create secret generic gaffer-secrets --from-literal=GAFFER_DSN="$dsn" --from-literal=GAFFER_DATA_KEY="$key" "${args[@]}" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
+  # Traces and logs go to production's Datadog Agent, filed under env pr-N, when it is installed.
+  local otlp=""
+  kubectl get namespace datadog >/dev/null 2>&1 && otlp=http://datadog.datadog.svc.cluster.local:4318
+
   echo "== app at https://$host"
   helm upgrade --install "gaffer-pr-$n" "$CHART" -n "$ns" \
     --set preview=true --set host="$host" --set image.registry="$acr" --set image.tag="$tag" \
+    --set telemetry.otlpEndpoint="$otlp" \
     --set env.TEMPORAL_ADDRESS="" --set env.GAFFER_NEWS_REFRESH=off \
     --set api.autoscaling.max=2 --set web.autoscaling.max=2 \
     --wait --timeout 10m

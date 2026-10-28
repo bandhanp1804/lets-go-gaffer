@@ -1,0 +1,125 @@
+{
+  "title": "Gaffer · Claude and spend",
+  "description": "Managed in the repository (deploy/observability); changes made here are overwritten on deploy. Spend is estimated in Go from token counts and list prices.",
+  "layout_type": "ordered",
+  "template_variables": [
+    {
+      "name": "env",
+      "prefix": "env",
+      "available_values": [],
+      "default": "prod"
+    }
+  ],
+  "widgets": [
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Estimated Claude spend in the selected window",
+        "precision": 2,
+        "autoscale": false,
+        "requests": [
+          {
+            "q": "sum:gaffer.llm.cost{$env}.as_count()",
+            "aggregator": "sum"
+          }
+        ],
+        "custom_unit": "$"
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Estimated spend per day by model ($)",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:gaffer.llm.cost{$env} by {model}.as_count().rollup(sum, 86400)",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Tokens by kind",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:gaffer.llm.tokens{$env} by {kind}.as_count()",
+            "display_type": "bars"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Prompt cache hit share (%)",
+        "show_legend": true,
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "display_type": "line",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "read",
+                "query": "sum:gaffer.llm.tokens{$env,kind:cache_read}.as_count()"
+              },
+              {
+                "data_source": "metrics",
+                "name": "all",
+                "query": "sum:gaffer.llm.tokens{$env,kind:input}.as_count() + sum:gaffer.llm.tokens{$env,kind:cache_read}.as_count() + sum:gaffer.llm.tokens{$env,kind:cache_write}.as_count()"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "100 * read / all"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Claude call p95 latency by model (s)",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "p95:trace.claude.messages{$env} by {resource_name}",
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Ask p95 latency (s), whole answer",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "p95:trace.http.server.request{service:gaffer-api,$env,resource_name:post_/api/ask}",
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Requests refused by a daily limit, by feature",
+        "show_legend": true,
+        "requests": [
+          {
+            "q": "sum:gaffer.limit.hits{$env} by {feature}.as_count()",
+            "display_type": "bars"
+          }
+        ]
+      }
+    }
+  ]
+}
