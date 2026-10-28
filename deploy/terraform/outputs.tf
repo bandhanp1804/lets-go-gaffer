@@ -37,8 +37,22 @@ output "ingress_ip" {
 }
 
 output "host" {
-  description = "The app's address: a free sslip.io name that resolves to the ingress IP."
-  value       = "gaffer.${replace(azurerm_public_ip.ingress.ip_address, ".", "-")}.sslip.io"
+  description = "The app's address: the domain, or without one a free sslip.io name for the ingress IP."
+  value       = var.domain != "" ? var.domain : local.sslip_host
+}
+
+output "legacy_host" {
+  description = "The sslip.io name the app used before it had a domain: it now redirects there. Empty without a domain."
+  value       = var.domain != "" ? local.sslip_host : ""
+}
+
+locals {
+  sslip_host = "gaffer.${replace(azurerm_public_ip.ingress.ip_address, ".", "-")}.sslip.io"
+}
+
+output "dns_name_servers" {
+  description = "Set these as the domain's name servers at the registrar (empty without a domain)."
+  value       = var.domain == "" ? [] : azurerm_dns_zone.main[0].name_servers
 }
 
 output "dns_name_servers" {

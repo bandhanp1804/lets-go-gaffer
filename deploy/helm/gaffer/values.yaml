@@ -1,5 +1,9 @@
-# The public host name, e.g. gaffer.20-1-2-3.sslip.io. Set on install.
+# The public host name, e.g. letsgogaffer.tech. Set on install.
 host: ""
+
+# The address the app had before (its sslip.io name). Every request to it is redirected,
+# permanently, to the same path on host, so links shared earlier keep working. Empty: none.
+legacyHost: ""
 
 # A pull request preview (deploy/scripts/preview.sh): web and API only, in its own namespace and
 # database, with no background workflows, no certificate issuer and no login routes of its own (it

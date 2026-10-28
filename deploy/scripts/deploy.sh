@@ -56,7 +56,7 @@ app() {
   [ -n "$CI" ] || [ -f deploy/azure.env ] || die "copy deploy/azure.env.example to deploy/azure.env and fill it in"
   init
   local host acr tag pghost pgpass
-  host=$(out host); acr=$(out acr_login_server); pghost=$(out postgres_host); pgpass=$(out postgres_password)
+  host=$(out host); legacy=$(out legacy_host); acr=$(out acr_login_server); pghost=$(out postgres_host); pgpass=$(out postgres_password)
   # In CI the checkout is the commit (tools may touch files like the Terraform lock); locally,
   # uncommitted changes are marked so a dirty image is never mistaken for a commit.
   if [ -n "$CI" ]; then tag=${GITHUB_SHA:0:7}; else tag=$(git rev-parse --short HEAD)$(git diff --quiet || echo -dirty); fi
@@ -168,6 +168,7 @@ app() {
     --set host="$host" --set image.registry="$acr" --set image.tag="$tag" \
     --set "ownerEmails=${owners//,/\\,}" \
     --set telemetry.otlpEndpoint="$otlp" \
+    --set legacyHost="$legacy" \
     --set acmeEmail="$(envvar ACME_EMAIL deploy/azure.env)" \
     --wait --timeout 15m
   status
