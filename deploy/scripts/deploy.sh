@@ -47,6 +47,9 @@ infra() {
   echo "Next: create the GitHub OAuth app (see deploy/azure.env.example) with callback"
   echo "  https://$(out host)/oauth2/callback"
   echo "then fill in deploy/azure.env and run: deploy/scripts/deploy.sh app"
+  local ns
+  ns=$(tf output -json dns_name_servers | tr -d '[]"' | tr ',' ' ')
+  [ -z "$ns" ] || echo "The domain's name servers, to set at the registrar: $ns"
 }
 
 app() {

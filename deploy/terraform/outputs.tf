@@ -40,3 +40,8 @@ output "host" {
   description = "The app's address: a free sslip.io name that resolves to the ingress IP."
   value       = "gaffer.${replace(azurerm_public_ip.ingress.ip_address, ".", "-")}.sslip.io"
 }
+
+output "dns_name_servers" {
+  description = "Set these as the domain's name servers at the registrar (empty without a domain)."
+  value       = var.domain == "" ? [] : azurerm_dns_zone.main[0].name_servers
+}
