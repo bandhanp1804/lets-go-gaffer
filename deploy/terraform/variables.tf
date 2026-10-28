@@ -43,3 +43,15 @@ variable "alert_email" {
   description = "Where budget alerts go."
   type        = string
 }
+
+variable "domain" {
+  description = "The app's own domain, served from an Azure DNS zone. Empty: no zone, and the app keeps its sslip.io name."
+  type        = string
+  default     = "letsgogaffer.tech"
+}
+
+variable "dns_txt" {
+  description = "TXT records at the domain's apex, e.g. Google's site-verification token (public by nature: anyone can look it up)."
+  type        = list(string)
+  default     = []
+}
