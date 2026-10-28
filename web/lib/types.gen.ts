@@ -482,6 +482,19 @@ export interface UserSettingsRequest {
   clear_team?: boolean;
 }
 
+export interface Usage {
+  unlimited: boolean;
+  items: UsageItem[];
+  resets_in: string;
+}
+
+export interface UsageItem {
+  kind: string;
+  label: string;
+  used: number;
+  limit: number;
+}
+
 export interface Alerts {
   alerts: Alert[];
   unread: number;

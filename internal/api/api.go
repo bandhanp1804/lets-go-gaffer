@@ -57,6 +57,13 @@ type SettingsService interface {
 	Viewer(ctx context.Context, user string) (service.Viewer, error)
 }
 
+// Limiter enforces each user's daily budget of the features that spend API credits.
+// *service.Limits satisfies it.
+type Limiter interface {
+	Take(ctx context.Context, user, kind string) error
+	Usage(ctx context.Context, user string) (service.UsageView, error)
+}
+
 // Conversation is one assistant conversation. *assistant.Session satisfies it.
 type Conversation interface {
 	Ask(ctx context.Context, question string, onText func(string)) (assistant.Answer, error)
@@ -69,6 +76,7 @@ type Config struct {
 	News            NewsRefresher       // nil turns the news refresh endpoints off
 	Inbox           Inbox               // nil turns the alerts, watchlist and health endpoints off
 	Settings        SettingsService     // nil turns saved settings off
+	Limits          Limiter             // nil: no daily limits
 	// UserHeaders name the signed-in user, in order of preference, as set by the login proxy.
 	// Empty means no proxy: there is one local user. Set them only behind the proxy.
 	UserHeaders    []string
@@ -143,6 +151,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	mux.HandleFunc("GET /api/news", s.read(s.news))
 	mux.HandleFunc("GET /api/news/refresh", s.newsRefreshStatus)
 	mux.HandleFunc("POST /api/news/refresh", s.newsRefresh)
+	mux.HandleFunc("GET /api/usage", s.read(s.usage))
 	mux.HandleFunc("GET /api/settings", s.read(s.settings))
 	mux.HandleFunc("POST /api/settings", s.updateSettings)
 	mux.HandleFunc("GET /api/alerts", s.read(s.alerts))

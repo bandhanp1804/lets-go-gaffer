@@ -974,3 +974,60 @@ func TestSubsEndpoint(t *testing.T) {
 		t.Errorf("GET: %d", w.Code)
 	}
 }
+
+// limiter refuses the kinds in full and records who took what.
+type limiter struct {
+	full  map[string]bool
+	taken []string // "user kind"
+}
+
+func (l *limiter) Take(_ context.Context, user, kind string) error {
+	l.taken = append(l.taken, user+" "+kind)
+	if l.full[kind] {
+		return &service.LimitError{Kind: kind, Limit: 15}
+	}
+	return nil
+}
+func (l *limiter) Usage(_ context.Context, user string) (service.UsageView, error) {
+	return service.UsageView{Items: []service.UsageItemView{{Kind: "ask", Used: 15, Limit: 15}}}, nil
+}
+
+func TestDailyLimits(t *testing.T) {
+	l := &limiter{full: map[string]bool{service.LimitAsk: true, service.LimitSearch: true, service.LimitRefresh: true}}
+	r := newRig(t, func(c *api.Config, _ *rig) {
+		c.Limits, c.UserHeaders = l, []string{"X-Auth-Request-Email"}
+		c.News = &refresher{}
+	})
+	as := map[string]string{"X-Auth-Request-Email": "Visitor@Example.com"}
+
+	tests := []struct{ method, path, body string }{
+		{"POST", "/api/ask", `{"question":"captain?"}`},
+		{"GET", "/api/news?q=saka", ""},
+		{"POST", "/api/news/refresh", "{}"},
+	}
+	for _, tt := range tests {
+		w := r.do(tt.method, tt.path, tt.body, as)
+		if w.Code != 429 || !strings.Contains(w.Body.String(), `"code":"limit_reached"`) || !strings.Contains(w.Body.String(), "resets at midnight UTC") {
+			t.Errorf("%s %s: %d %s", tt.method, tt.path, w.Code, w.Body)
+		}
+	}
+	if len(r.convs) != 0 {
+		t.Error("a refused question must not start a conversation")
+	}
+	if len(l.taken) != 3 || l.taken[0] != "visitor@example.com ask" || l.taken[1] != "visitor@example.com search" || l.taken[2] != "visitor@example.com refresh" {
+		t.Errorf("taken = %v", l.taken)
+	}
+	if w := r.do("GET", "/api/usage", "", as); w.Code != 200 || !strings.Contains(w.Body.String(), `"used":15`) {
+		t.Errorf("usage: %d %s", w.Code, w.Body)
+	}
+	if w := r.do("GET", "/api/team", "", as); w.Code != 200 {
+		t.Errorf("features without a limit still work: %d", w.Code)
+	}
+}
+
+func TestNoLimiterMeansUnlimited(t *testing.T) {
+	r := newRig(t, nil)
+	if w := r.do("GET", "/api/usage", "", nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"unlimited":true`) {
+		t.Errorf("%d %s", w.Code, w.Body)
+	}
+}

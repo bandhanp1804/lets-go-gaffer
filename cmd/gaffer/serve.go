@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -115,6 +116,11 @@ func runServe(ctx context.Context, w io.Writer, args []string) error {
 		}
 		cfg.Settings = &service.Settings{Store: st.store, Box: box}
 	}
+	limits, err := dailyLimits(st.store)
+	if err != nil {
+		return err
+	}
+	cfg.Limits = limits
 	if o.public {
 		// The login proxy names the user; the ingress strips these headers from what the
 		// browser sends, so only the proxy can set them.
@@ -236,4 +242,30 @@ func startNewsRefresh(ctx context.Context, w io.Writer, st stack) *news.Refreshe
 		fmt.Fprintf(w, "News refreshes every %s (GAFFER_NEWS_REFRESH=off to stop).\n", every)
 	}
 	return r
+}
+
+// Default daily limits per signed-in user, for the features that spend API credits.
+var defaultLimits = map[string]struct {
+	env string
+	n   int
+}{
+	service.LimitAsk:     {"GAFFER_LIMIT_ASK", 15},
+	service.LimitSearch:  {"GAFFER_LIMIT_SEARCH", 40},
+	service.LimitRefresh: {"GAFFER_LIMIT_REFRESH", 3},
+}
+
+// dailyLimits reads GAFFER_OWNERS (never limited) and the GAFFER_LIMIT_* settings (0 turns one off).
+func dailyLimits(store service.UsageStore) (*service.Limits, error) {
+	l := &service.Limits{Store: store, Owners: service.ParseOwners(os.Getenv("GAFFER_OWNERS")), Daily: map[string]int{}}
+	for kind, d := range defaultLimits {
+		l.Daily[kind] = d.n
+		if v := strings.TrimSpace(os.Getenv(d.env)); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 {
+				return nil, fmt.Errorf("%s must be a whole number, 0 or more, got %q", d.env, v)
+			}
+			l.Daily[kind] = n
+		}
+	}
+	return l, nil
 }
