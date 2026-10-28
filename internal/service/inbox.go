@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/db"
@@ -12,11 +13,11 @@ import (
 
 // InboxStore is what the inbox reads and writes. *db.Store satisfies it.
 type InboxStore interface {
-	ListAlerts(ctx context.Context, limit int) ([]db.Alert, int, error)
-	MarkAlertsRead(ctx context.Context, upTo int64) error
-	Watch(ctx context.Context, playerID int) error
-	Unwatch(ctx context.Context, playerID int) error
-	Watchlist(ctx context.Context) ([]int, error)
+	ListAlerts(ctx context.Context, user string, limit int) ([]db.Alert, int, error)
+	MarkAlertsRead(ctx context.Context, user string, upTo int64) error
+	Watch(ctx context.Context, user string, playerID int) error
+	Unwatch(ctx context.Context, user string, playerID int) (int, error)
+	Watchlist(ctx context.Context, user string) ([]int, error)
 	EvalRuns(ctx context.Context, limit int) ([]db.EvalRun, error)
 	BacktestRuns(ctx context.Context, model string, limit int) ([]db.BacktestRun, error)
 	ListPlayers(ctx context.Context) ([]fpl.Player, error)
@@ -37,6 +38,18 @@ type Inbox struct {
 	Watches    WatchRunner // nil without Temporal
 	TemporalUI string      // the workflow server's web UI, empty without Temporal
 	Now        func() time.Time
+	// IsOwner says whether a user runs the site. Owners share one inbox and watchlist (and only
+	// their alerts reach the phone); everyone else has their own. Nil treats everyone as an owner,
+	// as on the owner's own computer.
+	IsOwner func(user string) bool
+}
+
+// inbox is whose alerts and watchlist a user sees: "" for the owners' shared ones.
+func (i *Inbox) inbox(user string) string {
+	if i.IsOwner == nil || i.IsOwner(user) {
+		return ""
+	}
+	return strings.ToLower(user)
 }
 
 // AlertView is one alert.
@@ -108,13 +121,16 @@ func (i *Inbox) now() time.Time {
 	return time.Now()
 }
 
-// Alerts returns the newest alerts.
-func (i *Inbox) Alerts(ctx context.Context) (AlertsView, error) {
-	list, unread, err := i.Store.ListAlerts(ctx, inboxLimit)
+// Alerts returns the newest alerts in the user's inbox.
+func (i *Inbox) Alerts(ctx context.Context, user string) (AlertsView, error) {
+	list, unread, err := i.Store.ListAlerts(ctx, i.inbox(user), inboxLimit)
 	if err != nil {
 		return AlertsView{}, err
 	}
-	v := AlertsView{Alerts: make([]AlertView, 0, len(list)), Unread: unread, Live: i.Watches != nil, TemporalUI: i.TemporalUI}
+	v := AlertsView{Alerts: make([]AlertView, 0, len(list)), Unread: unread, Live: i.Watches != nil}
+	if i.inbox(user) == "" {
+		v.TemporalUI = i.TemporalUI // the Temporal UI is the owners' (the ingress lets only them in)
+	}
 	now := i.now()
 	for _, a := range list {
 		v.Alerts = append(v.Alerts, AlertView{ID: a.ID, Kind: a.Kind, Title: a.Title, Body: a.Body, URL: a.URL,
@@ -123,17 +139,17 @@ func (i *Inbox) Alerts(ctx context.Context) (AlertsView, error) {
 	return v, nil
 }
 
-// MarkRead marks every alert up to and including upTo as read.
-func (i *Inbox) MarkRead(ctx context.Context, upTo int64) error {
+// MarkRead marks every alert in the user's inbox up to and including upTo as read.
+func (i *Inbox) MarkRead(ctx context.Context, user string, upTo int64) error {
 	if upTo < 1 {
 		return badInput("up_to must be an alert id")
 	}
-	return i.Store.MarkAlertsRead(ctx, upTo)
+	return i.Store.MarkAlertsRead(ctx, i.inbox(user), upTo)
 }
 
-// Watchlist returns the watched players.
-func (i *Inbox) Watchlist(ctx context.Context) (WatchlistView, error) {
-	ids, err := i.Store.Watchlist(ctx)
+// Watchlist returns the players the user watches.
+func (i *Inbox) Watchlist(ctx context.Context, user string) (WatchlistView, error) {
+	ids, err := i.Store.Watchlist(ctx, i.inbox(user))
 	if err != nil {
 		return WatchlistView{}, err
 	}
@@ -150,8 +166,9 @@ func (i *Inbox) Watchlist(ctx context.Context) (WatchlistView, error) {
 	return v, nil
 }
 
-// SetWatch watches a player, or stops watching him, and starts or stops his background watch.
-func (i *Inbox) SetWatch(ctx context.Context, playerID int, on bool) (WatchlistView, error) {
+// SetWatch adds a player to the user's watchlist or takes him off it. His background watch starts
+// with his first watcher and stops when nobody watches him any more.
+func (i *Inbox) SetWatch(ctx context.Context, user string, playerID int, on bool) (WatchlistView, error) {
 	players, _, err := i.players(ctx)
 	if err != nil {
 		return WatchlistView{}, err
@@ -160,26 +177,28 @@ func (i *Inbox) SetWatch(ctx context.Context, playerID int, on bool) (WatchlistV
 	if !ok {
 		return WatchlistView{}, badInput("no player has id %d", playerID)
 	}
+	box := i.inbox(user)
 	if on {
-		if err := i.Store.Watch(ctx, playerID); err != nil {
+		if err := i.Store.Watch(ctx, box, playerID); err != nil {
 			return WatchlistView{}, err
 		}
-		if i.Watches != nil {
+		if i.Watches != nil { // starting a watch that is already running leaves it as it is
 			if err := i.Watches.Watch(ctx, playerID, p.WebName); err != nil {
 				return WatchlistView{}, err
 			}
 		}
 	} else {
-		if i.Watches != nil {
+		left, err := i.Store.Unwatch(ctx, box, playerID)
+		if err != nil {
+			return WatchlistView{}, err
+		}
+		if i.Watches != nil && left == 0 {
 			if err := i.Watches.Unwatch(ctx, playerID); err != nil {
 				return WatchlistView{}, err
 			}
 		}
-		if err := i.Store.Unwatch(ctx, playerID); err != nil {
-			return WatchlistView{}, err
-		}
 	}
-	return i.Watchlist(ctx)
+	return i.Watchlist(ctx, user)
 }
 
 // Health returns the eval and backtest history.

@@ -725,23 +725,27 @@ func TestNewsRefreshRefusesAForeignOrigin(t *testing.T) {
 	}
 }
 
-// inbox is an Inbox that records what it was asked.
+// inbox is an Inbox that records what it was asked, and by whom.
 type inbox struct {
 	readTo  int64
+	users   []string // whose inbox each call was for
 	watched map[int]bool
 }
 
-func (i *inbox) Alerts(context.Context) (service.AlertsView, error) {
+func (i *inbox) Alerts(_ context.Context, user string) (service.AlertsView, error) {
+	i.users = append(i.users, user)
 	return service.AlertsView{Alerts: []service.AlertView{{ID: 3, Title: "Palmer: suspended"}}, Unread: 1, Live: true}, nil
 }
-func (i *inbox) MarkRead(_ context.Context, upTo int64) error {
+func (i *inbox) MarkRead(_ context.Context, user string, upTo int64) error {
+	i.users = append(i.users, user)
 	if upTo < 1 {
 		return &service.InputError{Msg: "up_to must be an alert id"}
 	}
 	i.readTo = upTo
 	return nil
 }
-func (i *inbox) Watchlist(context.Context) (service.WatchlistView, error) {
+func (i *inbox) Watchlist(_ context.Context, user string) (service.WatchlistView, error) {
+	i.users = append(i.users, user)
 	v := service.WatchlistView{}
 	for id, on := range i.watched {
 		if on {
@@ -750,9 +754,9 @@ func (i *inbox) Watchlist(context.Context) (service.WatchlistView, error) {
 	}
 	return v, nil
 }
-func (i *inbox) SetWatch(ctx context.Context, id int, on bool) (service.WatchlistView, error) {
+func (i *inbox) SetWatch(ctx context.Context, user string, id int, on bool) (service.WatchlistView, error) {
 	i.watched[id] = on
-	return i.Watchlist(ctx)
+	return i.Watchlist(ctx, user)
 }
 func (i *inbox) Health(context.Context) (service.HealthView, error) {
 	return service.HealthView{Evals: []service.EvalRunView{{PassRate: 0.96}}}, nil
@@ -1034,7 +1038,7 @@ func TestNoLimiterMeansUnlimited(t *testing.T) {
 	}
 }
 
-func TestAlertsAndWatchlistAreForOwnersOnly(t *testing.T) {
+func TestVisitorsHaveTheirOwnAlertsAndWatchlistButNotTheModelStats(t *testing.T) {
 	in := &inbox{watched: map[int]bool{}}
 	r := newRig(t, func(c *api.Config, _ *rig) {
 		c.Inbox, c.Limits, c.UserHeaders = in, &limiter{}, []string{"X-Auth-Request-Email"}
@@ -1048,17 +1052,22 @@ func TestAlertsAndWatchlistAreForOwnersOnly(t *testing.T) {
 		{"GET", "/api/watchlist", ""},
 		{"POST", "/api/watchlist", `{"player_id": 4, "watch": true}`},
 	} {
-		if w := r.do(tt.method, tt.path, tt.body, visitor); w.Code != 403 || !strings.Contains(w.Body.String(), `"code":"owner_only"`) {
+		if w := r.do(tt.method, tt.path, tt.body, visitor); w.Code != 200 {
 			t.Errorf("visitor %s %s: %d %s", tt.method, tt.path, w.Code, w.Body)
 		}
-		if w := r.do(tt.method, tt.path, tt.body, owner); w.Code != 200 {
-			t.Errorf("owner %s %s: %d %s", tt.method, tt.path, w.Code, w.Body)
+	}
+	for _, u := range in.users {
+		if u != "visitor@example.com" {
+			t.Errorf("every call was for the visitor's own inbox, got %q", u)
 		}
 	}
-	if in.watched[4] != true || in.readTo != 3 {
-		t.Error("only the owner's requests changed anything")
-	}
-	if w := r.do("GET", "/api/health/runs", "", visitor); w.Code != 200 {
-		t.Errorf("model health stays public: %d", w.Code)
+
+	for _, path := range []string{"/api/backtest", "/api/health/runs"} {
+		if w := r.do("GET", path, "", visitor); w.Code != 403 || !strings.Contains(w.Body.String(), `"code":"owner_only"`) {
+			t.Errorf("visitor %s: %d %s", path, w.Code, w.Body)
+		}
+		if w := r.do("GET", path, "", owner); w.Code != 200 {
+			t.Errorf("owner %s: %d %s", path, w.Code, w.Body)
+		}
 	}
 }

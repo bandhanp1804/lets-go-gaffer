@@ -14,8 +14,10 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/db"
 )
 
-// Message is one notification. PlayerID is 0 when it is about no one player.
+// Message is one notification. User is whose inbox it goes to; "" is the owners', and only the
+// owners' are pushed to a phone. PlayerID is 0 when it is about no one player.
 type Message struct {
+	User     string
 	Kind     string // "watch", "briefing", "health"
 	Title    string
 	Body     string
@@ -37,7 +39,7 @@ type AlertStore interface {
 type Inbox struct{ Store AlertStore }
 
 func (i Inbox) Notify(ctx context.Context, m Message) error {
-	_, err := i.Store.AddAlert(ctx, db.Alert{Kind: m.Kind, Title: m.Title, Body: m.Body, URL: m.URL, PlayerID: m.PlayerID})
+	_, err := i.Store.AddAlert(ctx, db.Alert{User: m.User, Kind: m.Kind, Title: m.Title, Body: m.Body, URL: m.URL, PlayerID: m.PlayerID})
 	return err
 }
 
@@ -104,7 +106,8 @@ func tag(kind string) string {
 	return "bell"
 }
 
-// Multi sends to the inbox first and then to every other notifier. The inbox is the record: if
+// Multi sends to the inbox first and then, for the owners' messages only, to every other notifier
+// (the phone push is the owner's own topic, not a visitor's). The inbox is the record: if
 // it fails nothing else is tried, so a retry cannot push a message the app never stored. A failed
 // push is returned but the stored alert stays.
 type Multi struct {
@@ -115,6 +118,9 @@ type Multi struct {
 func (m Multi) Notify(ctx context.Context, msg Message) error {
 	if err := m.Inbox.Notify(ctx, msg); err != nil {
 		return fmt.Errorf("store alert: %w", err)
+	}
+	if msg.User != "" {
+		return nil
 	}
 	var errs []error
 	for _, p := range m.Pushes {

@@ -121,6 +121,7 @@ func runServe(ctx context.Context, w io.Writer, args []string) error {
 		return err
 	}
 	cfg.Limits = limits
+	inbox.IsOwner = limits.IsOwner // owners share an inbox; everyone else has their own
 	// Daily counts are kept 30 days, as the privacy policy says. The pruning stops, and is waited
 	// for, before the database pool closes: this defer runs before closeSvc's.
 	pruneCtx, stopPrune := context.WithCancel(ctx)

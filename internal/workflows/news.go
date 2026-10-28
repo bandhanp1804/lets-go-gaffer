@@ -153,7 +153,7 @@ func (a *Activities) RefreshPlayers(ctx context.Context) (PlayersRefreshed, erro
 	if err != nil {
 		return PlayersRefreshed{}, err
 	}
-	watched, err := a.Store.Watchlist(ctx)
+	watched, err := a.Store.WatchedPlayers(ctx)
 	if err != nil {
 		return PlayersRefreshed{}, err
 	}
@@ -202,7 +202,7 @@ func (a *Activities) PrepareNews(ctx context.Context, results [][]news.Item) (Pr
 		news.LinkAll(news.NewLinker(players, teams), todo)
 	}
 	p.Todo = todo
-	if p.Watched, err = a.Store.Watchlist(ctx); err != nil {
+	if p.Watched, err = a.Store.WatchedPlayers(ctx); err != nil {
 		return Prepared{}, err
 	}
 	return p, nil
