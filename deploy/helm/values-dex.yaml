@@ -1,5 +1,5 @@
-# Dex (dex/dex 0.26.0, Dex 2.46.0): the sign-in hub behind oauth2-proxy, offering GitHub and
-# Entra External ID (email code or Google) on one page. Its config holds secrets, so
+# Dex (dex/dex 0.26.0, Dex 2.46.0): the sign-in hub behind oauth2-proxy, offering GitHub, Google
+# and Microsoft on one page. Its config holds secrets, so
 # deploy/scripts/deploy.sh writes it straight into the dex-config Secret; nothing secret is here.
 # docs/sign-in.md explains the whole flow.
 configSecret:

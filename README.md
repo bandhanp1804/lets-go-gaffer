@@ -76,7 +76,7 @@ See the [command reference](docs/cli.md) for the rest.
 | [Web UI](docs/web-ui.md) | the screens, choosing a team, design notes |
 | [The assistant](docs/assistant.md) | its tools, the checks on what it says, and how it is evaluated |
 | [How the numbers are made](docs/model.md) | the expected-points model, its backtest, lineup, transfers, chips, points |
-| [Sign-in](docs/sign-in.md) | GitHub, email code or Google (Dex + Entra External ID), the daily limits |
+| [Sign-in](docs/sign-in.md) | GitHub, Google or Microsoft through Dex, the daily limits |
 | [Deploying to Azure](docs/deploy.md) | Terraform, AKS, Helm, costs, stop and start |
 | [Background workflows](docs/temporal.md) | Temporal: schedules, alerts, the briefing, backfills |
 | [Development](docs/development.md) | tests, generated types, opt-in live tests, troubleshooting |
