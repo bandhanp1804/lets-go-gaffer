@@ -3,7 +3,7 @@
 The whole app runs on Azure Kubernetes Service, provisioned with Terraform and installed with Helm, behind a sign-in (GitHub, Google or Microsoft: [sign-in.md](sign-in.md)). Every part is a Kubernetes deployment, and the web app, API and worker scale on CPU.
 
 ```
-Browser ─https─▶ Traefik (one load balancer, sslip.io name, Let's Encrypt certificate)
+Browser ─https─▶ Traefik (one load balancer, letsgogaffer.tech, Let's Encrypt certificate)
                  └─ oauth2-proxy ─▶ Dex (GitHub, Google or Microsoft)
                      ├─ /          → web     Next.js, 1–3 pods
                      ├─ /api       → api     gaffer serve, 1–3 pods, sticky cookie
@@ -64,7 +64,7 @@ The app keys live in the `production` environment's secrets; the script copies t
 
 Every pull request from a branch of this repository gets a preview, so reviewers can try a feature before it merges:
 
-- **Address:** `https://pr-N.gaffer.<ip>.sslip.io`, posted as a comment on the PR and on the run page, rebuilt on every push.
+- **Address:** `https://pr-N.letsgogaffer.tech`, posted as a comment on the PR and on the run page, rebuilt on every push.
 - **Login:** the same sign-in as production (GitHub, Google or Microsoft), with the same daily limits. The login cookie covers the previews' subdomains, so one sign-in works for all of them.
 - **Data:** a new preview starts from a copy of production's database, without anyone's saved settings, alerts or watchlist. It has its own encryption key, so no production token is ever readable in a preview.
 - **Runs:** the web app and the API only, in the PR's own namespace on the production cluster. There is no worker, so no scheduled news, alerts, briefing or eval; the **Refresh news** button still works.
@@ -94,4 +94,5 @@ Secrets never pass through Terraform state or Git. The database password is gene
 - **Sticky API pods.** An Ask conversation lives in one API pod's memory, so a cookie keeps each browser on one pod. A pod that scales away ends its conversations; the page starts a new one.
 - **A small database.** B1ms allows about 50 connections: the app's pools are capped at 5 each (`pool_max_conns` in the DSN) and Temporal's at 3 per store. Migrations take an advisory lock, so pods starting together never race.
 - **Saved settings.** Each user's team and FPL token are encrypted (AES-256-GCM) with `GAFFER_DATA_KEY`, which `deploy.sh` generates once into the `gaffer-secrets` Secret and reuses on every deploy. The database holds only ciphertext, bound to the user and field so it cannot be moved between rows. The ingress strips identity headers from incoming requests before the login check sets them, so nobody can pose as another user.
-- **Fixed address.** The ingress IP is a Terraform resource, so stopping and starting the cluster keeps the sslip.io name and the GitHub callback valid.
+- **Fixed address.** The ingress IP is a Terraform resource, so stopping and starting the cluster keeps the DNS records and the sign-in callbacks valid.
+- **Domain.** `letsgogaffer.tech` is served from an Azure DNS zone in Terraform ([dns.tf](../deploy/terraform/dns.tf), about $0.50 a month): an apex record and a wildcard for the previews, both at the ingress IP, and TXT records for verification. The registrar only delegates to the zone's name servers (`terraform output dns_name_servers`). The old sslip.io name redirects to the domain (`legacyHost` in the chart), so links shared earlier keep working.

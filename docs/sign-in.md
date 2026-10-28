@@ -19,28 +19,28 @@ browser ─▶ oauth2-proxy ──OIDC──▶ Dex  (https://<host>/dex: a page
 
 ## One-time setup (yours, in the browser)
 
-These steps create identities and secrets, so they are done by you, not by scripts. Keep the values marked **→ save** for `deploy/azure.env`. The host below is `gaffer.52-162-179-134.sslip.io`; use yours if it differs (`terraform -chdir=deploy/terraform output -raw host`).
+These steps create identities and secrets, so they are done by you, not by scripts. Keep the values marked **→ save** for `deploy/azure.env`. The host below is `letsgogaffer.tech`; use yours if it differs (`terraform -chdir=deploy/terraform output -raw host`).
 
 ### 1. Google
 
 1. In the [Google Cloud console](https://console.cloud.google.com), create a project (for example `lets-go-gaffer`) and open it.
-2. **APIs & Services** → **OAuth consent screen** (Google Auth Platform): **External**, app name `Let's Go Gaffer`, your email as support and developer contact. Under **Authorized domains** add `sslip.io`. Scopes: only the default `openid`, `email` and `profile`. **Publish** the app (in testing mode only listed test users can sign in).
-3. **Credentials** → **Create credentials** → **OAuth client ID** → **Web application** → **Authorized redirect URIs**: `https://gaffer.52-162-179-134.sslip.io/dex/callback` → **Create**.
+2. **APIs & Services** → **OAuth consent screen** (Google Auth Platform): **External**, app name `Let's Go Gaffer`, your email as support and developer contact. Under **Authorized domains** add `letsgogaffer.tech`. Scopes: only the default `openid`, `email` and `profile`. **Publish** the app (in testing mode only listed test users can sign in).
+3. **Credentials** → **Create credentials** → **OAuth client ID** → **Web application** → **Authorized redirect URIs**: `https://letsgogaffer.tech/dex/callback` → **Create**.
 4. Copy the client ID and secret. **→ save as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`**
 
-If Google will not accept `sslip.io` as an authorized domain, Google sign-in needs a domain you own (about $10 a year); GitHub and Microsoft work without one.
+**Verifying the domain** (needed for Google's branding check and to drop the "unverified app" warning): in [Google Search Console](https://search.google.com/search-console), add a **Domain** property for `letsgogaffer.tech` and copy the `google-site-verification=...` TXT value it shows. Add it to `dns_txt` in [variables.tf](../deploy/terraform/variables.tf) through a PR; the token is public by nature, since anyone can read a domain's TXT records. After the deploy, click **Verify**. The app's home, privacy and terms pages are `https://letsgogaffer.tech/`, `/privacy` and `/terms`.
 
 ### 2. Microsoft
 
 1. In the [Microsoft Entra admin center](https://entra.microsoft.com) (your usual directory), **Entra ID** → **App registrations** → **New registration**.
-2. Name `Let's Go Gaffer`; **Supported account types**: **Accounts in any organizational directory and personal Microsoft accounts**; **Redirect URI**: **Web**, `https://gaffer.52-162-179-134.sslip.io/dex/callback` → **Register**.
+2. Name `Let's Go Gaffer`; **Supported account types**: **Accounts in any organizational directory and personal Microsoft accounts**; **Redirect URI**: **Web**, `https://letsgogaffer.tech/dex/callback` → **Register**.
 3. Copy the **Application (client) ID**. **→ save as `MICROSOFT_CLIENT_ID`**
 4. **Certificates & secrets** → **New client secret** (24 months) → copy the **Value**. **→ save as `MICROSOFT_CLIENT_SECRET`** (it is shown once)
 5. **API permissions** should already list Microsoft Graph **User.Read** (delegated); nothing else is needed.
 
 ### 3. GitHub: point the existing OAuth app at Dex
 
-GitHub → **Settings** → **Developer settings** → **OAuth Apps** → your app → **Authorization callback URL**: `https://gaffer.52-162-179-134.sslip.io/dex/callback` → **Update**. Sign-in breaks between this change and the deploy finishing, so do it last, right before running Deploy.
+GitHub → **Settings** → **Developer settings** → **OAuth Apps** → your app → **Authorization callback URL**: `https://letsgogaffer.tech/dex/callback` → **Update**. Sign-in breaks between this change and the deploy finishing, so do it last, right before running Deploy.
 
 ### 4. Save the values and deploy
 
@@ -74,3 +74,11 @@ Past the limit the API answers `429` with a plain message, and the Setup page sh
 Visitors get their own **watchlist** and **Alerts** inbox: starring a player sends his news and status changes to that visitor's inbox only (never to the owners' phone). The **Model** page (`/api/backtest`, `/api/health/runs`) is for the owners only: anyone else gets `403 owner_only` and the nav hides it.
 
 The **Temporal UI** (`/temporal`) shows every workflow and its inputs, so it is owners only too, at the ingress: after the usual sign-in, Traefik asks oauth2-proxy again with `allowed_emails` set to `GAFFER_OWNERS`, and anyone else gets `403`. With `GAFFER_OWNERS` empty the route is not served at all. Previews never serve it. Daily counts are deleted after 30 days, as the [privacy policy](../web/app/privacy/page.tsx) says.
+
+## Moving to a new address
+
+The app moved from `gaffer.52-162-179-134.sslip.io` to `letsgogaffer.tech` (the old address now redirects, permanently, to the same page on the new one). A move like that changes the sign-in callback, `https://<host>/dex/callback`, at every provider:
+
+1. **Google** and **Microsoft** accept several redirect URIs: add the new one **before** the deploy, and remove the old one once it works. Nobody is locked out.
+2. **GitHub** takes one callback URL: change it right before running Deploy. GitHub sign-in fails only for the minute or two in between.
+3. Everyone signs in once more afterwards: the login cookie belonged to the old address.
