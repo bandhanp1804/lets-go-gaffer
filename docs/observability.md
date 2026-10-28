@@ -5,13 +5,13 @@ The app sends **OpenTelemetry** traces and metrics to the **Datadog Agent** in t
 ```text
 Browser ─▶ Traefik ── span ─────────────────────────────────────────────┐
              └─▶ gaffer-api   spans named by route; JSON logs with trace ids
-                   ├─▶ FPL, feeds, Voyage, Claude, ntfy   one span per HTTP attempt
+                   ├─▶ FPL, feeds, Voyage, Claude   one span per HTTP attempt
                    └─▶ Temporal ─▶ gaffer-worker   workflow and activity spans, same trace
 gaffer-api, gaffer-worker ── OTLP/HTTP :4318 (node-local Service) ──────┤
 Datadog Agent (DaemonSet) + Cluster Agent (namespace datadog) ◀──────────┘
   ├─ pod logs (JSON parsed), kubelet and Kubernetes state
   ├─ Temporal server and cert-manager, through their Datadog integrations
-  └─▶ Datadog us5: APM, Logs, Metrics, dashboards, monitors ──▶ ntfy webhook ──▶ your phone
+  └─▶ Datadog us5: APM, Logs, Metrics, dashboards, monitors ──▶ email + Datadog mobile app
 ```
 
 ## Why it is built this way
@@ -61,7 +61,7 @@ These are defined in [deploy/observability](../deploy/observability) and publish
   - **Service overview:** requests, errors and p95 by endpoint, outbound latency by host, memory, CPU and restarts, node memory, the database pool, and recent errors.
   - **Claude and spend:** spend, tokens, cache hit share, Claude and Ask latency, and limit hits.
   - **Workflows and news:** workflow runs and failures, activity duration and retries, stories, feed failures, alerts, and the worker log.
-- **Monitors:** these go to the `gaffer-ntfy` webhook, so to the phone, and to Datadog.
+- **Monitors:** these email `DD_NOTIFY` (in the Deploy workflow, the `ALERT_EMAIL` variable that also gets the Azure budget alerts) and show in Datadog. If that address is the one you sign in to Datadog with, the **Datadog mobile app** pushes them to your phone too: install it, sign in, and allow notifications.
 
   | Monitor | Fires when |
   |---|---|
@@ -91,7 +91,7 @@ These are defined in [deploy/observability](../deploy/observability) and publish
    ```
 
 5. Rerun `deploy/scripts/ci-setup.sh` to copy them into GitHub, then run **Deploy**.
-6. **Integrations.** In Datadog, open **Integrations** and install **Temporal**, **cert-manager**, **Kubernetes** and **Webhooks**. This adds their dashboards; the agent already collects their data.
+6. **Integrations.** In Datadog, open **Integrations** and install **Temporal**, **cert-manager** and **Kubernetes**. This adds their dashboards; the agent already collects their data.
 
 ## Running it locally
 
