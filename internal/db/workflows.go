@@ -7,9 +7,11 @@ import (
 	"time"
 )
 
-// Alert is one message for the manager. PlayerID is 0 when it is about no one player.
+// Alert is one message. User is whose inbox it is in; "" is the owners' shared inbox. PlayerID is
+// 0 when it is about no one player.
 type Alert struct {
 	ID        int64
+	User      string
 	Kind      string // "watch", "briefing", "health"
 	Title     string
 	Body      string
@@ -19,6 +21,14 @@ type Alert struct {
 	Read      bool
 }
 
+// nullable turns "" into SQL NULL, for the owners' alerts.
+func nullable(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // AddAlert stores an alert and returns its id.
 func (s *Store) AddAlert(ctx context.Context, a Alert) (int64, error) {
 	var player *int
@@ -26,18 +36,19 @@ func (s *Store) AddAlert(ctx context.Context, a Alert) (int64, error) {
 		player = &a.PlayerID
 	}
 	var id int64
-	err := s.pool.QueryRow(ctx, `INSERT INTO alerts (kind, title, body, url, player_id)
-		VALUES ($1, $2, $3, $4, $5) RETURNING id`, a.Kind, a.Title, a.Body, a.URL, player).Scan(&id)
+	err := s.pool.QueryRow(ctx, `INSERT INTO alerts (user_id, kind, title, body, url, player_id)
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, nullable(a.User), a.Kind, a.Title, a.Body, a.URL, player).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("add alert: %w", err)
 	}
 	return id, nil
 }
 
-// ListAlerts returns the newest alerts, up to limit, and how many alerts in all are unread.
-func (s *Store) ListAlerts(ctx context.Context, limit int) ([]Alert, int, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, kind, title, body, url, COALESCE(player_id, 0), created_at, read_at IS NOT NULL
-		FROM alerts ORDER BY created_at DESC, id DESC LIMIT $1`, limit)
+// ListAlerts returns the newest alerts in user's inbox ("" for the owners'), up to limit, and how
+// many in that inbox are unread.
+func (s *Store) ListAlerts(ctx context.Context, user string, limit int) ([]Alert, int, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, COALESCE(user_id, ''), kind, title, body, url, COALESCE(player_id, 0), created_at, read_at IS NOT NULL
+		FROM alerts WHERE user_id IS NOT DISTINCT FROM $1 ORDER BY created_at DESC, id DESC LIMIT $2`, nullable(user), limit)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list alerts: %w", err)
 	}
@@ -45,7 +56,7 @@ func (s *Store) ListAlerts(ctx context.Context, limit int) ([]Alert, int, error)
 	var out []Alert
 	for rows.Next() {
 		var a Alert
-		if err := rows.Scan(&a.ID, &a.Kind, &a.Title, &a.Body, &a.URL, &a.PlayerID, &a.CreatedAt, &a.Read); err != nil {
+		if err := rows.Scan(&a.ID, &a.User, &a.Kind, &a.Title, &a.Body, &a.URL, &a.PlayerID, &a.CreatedAt, &a.Read); err != nil {
 			return nil, 0, fmt.Errorf("scan alert: %w", err)
 		}
 		out = append(out, a)
@@ -54,40 +65,73 @@ func (s *Store) ListAlerts(ctx context.Context, limit int) ([]Alert, int, error)
 		return nil, 0, fmt.Errorf("list alerts: %w", err)
 	}
 	var unread int
-	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM alerts WHERE read_at IS NULL`).Scan(&unread); err != nil {
+	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM alerts WHERE user_id IS NOT DISTINCT FROM $1 AND read_at IS NULL`, nullable(user)).Scan(&unread); err != nil {
 		return nil, 0, fmt.Errorf("count unread alerts: %w", err)
 	}
 	return out, unread, nil
 }
 
-// MarkAlertsRead marks every alert up to and including id as read. Alerts that arrive after
-// the page was drawn have higher ids, so they stay unread.
-func (s *Store) MarkAlertsRead(ctx context.Context, upTo int64) error {
-	if _, err := s.pool.Exec(ctx, `UPDATE alerts SET read_at = now() WHERE id <= $1 AND read_at IS NULL`, upTo); err != nil {
+// MarkAlertsRead marks every alert in user's inbox up to and including id as read. Alerts that
+// arrive after the page was drawn have higher ids, so they stay unread.
+func (s *Store) MarkAlertsRead(ctx context.Context, user string, upTo int64) error {
+	if _, err := s.pool.Exec(ctx, `UPDATE alerts SET read_at = now()
+		WHERE user_id IS NOT DISTINCT FROM $1 AND id <= $2 AND read_at IS NULL`, nullable(user), upTo); err != nil {
 		return fmt.Errorf("mark alerts read: %w", err)
 	}
 	return nil
 }
 
-// Watch adds a player to the watchlist; watching twice is not an error.
-func (s *Store) Watch(ctx context.Context, playerID int) error {
-	if _, err := s.pool.Exec(ctx, `INSERT INTO watchlist (player_id) VALUES ($1) ON CONFLICT DO NOTHING`, playerID); err != nil {
+// Watch adds a player to user's watchlist ("" for the owners'); watching twice is not an error.
+func (s *Store) Watch(ctx context.Context, user string, playerID int) error {
+	if _, err := s.pool.Exec(ctx, `INSERT INTO watchlist (user_id, player_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, user, playerID); err != nil {
 		return fmt.Errorf("watch player %d: %w", playerID, err)
 	}
 	return nil
 }
 
-// Unwatch removes a player from the watchlist; removing one not on it is not an error.
-func (s *Store) Unwatch(ctx context.Context, playerID int) error {
-	if _, err := s.pool.Exec(ctx, `DELETE FROM watchlist WHERE player_id = $1`, playerID); err != nil {
-		return fmt.Errorf("unwatch player %d: %w", playerID, err)
+// Unwatch removes a player from user's watchlist and says how many users still watch him;
+// removing one not on it is not an error.
+func (s *Store) Unwatch(ctx context.Context, user string, playerID int) (int, error) {
+	if _, err := s.pool.Exec(ctx, `DELETE FROM watchlist WHERE user_id = $1 AND player_id = $2`, user, playerID); err != nil {
+		return 0, fmt.Errorf("unwatch player %d: %w", playerID, err)
 	}
-	return nil
+	var left int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM watchlist WHERE player_id = $1`, playerID).Scan(&left); err != nil {
+		return 0, fmt.Errorf("count watchers of player %d: %w", playerID, err)
+	}
+	return left, nil
 }
 
-// Watchlist returns the watched players' ids, in the order they were added.
-func (s *Store) Watchlist(ctx context.Context) ([]int, error) {
-	rows, err := s.pool.Query(ctx, `SELECT player_id FROM watchlist ORDER BY added_at, player_id`)
+// Watchlist returns the players user watches, in the order they were added.
+func (s *Store) Watchlist(ctx context.Context, user string) ([]int, error) {
+	return s.ints(ctx, `SELECT player_id FROM watchlist WHERE user_id = $1 ORDER BY added_at, player_id`, user)
+}
+
+// WatchedPlayers returns every player anyone watches, once each.
+func (s *Store) WatchedPlayers(ctx context.Context) ([]int, error) {
+	return s.ints(ctx, `SELECT DISTINCT player_id FROM watchlist ORDER BY player_id`)
+}
+
+// Watchers returns the users who watch a player ("" for the owners).
+func (s *Store) Watchers(ctx context.Context, playerID int) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT user_id FROM watchlist WHERE player_id = $1 ORDER BY user_id`, playerID)
+	if err != nil {
+		return nil, fmt.Errorf("read watchers of player %d: %w", playerID, err)
+	}
+	defer rows.Close()
+	users := []string{}
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			return nil, fmt.Errorf("scan watcher: %w", err)
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
+func (s *Store) ints(ctx context.Context, q string, args ...any) ([]int, error) {
+	rows, err := s.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read watchlist: %w", err)
 	}

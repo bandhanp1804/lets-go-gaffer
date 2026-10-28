@@ -24,8 +24,8 @@ const links = [
 ];
 
 export function Nav() {
-  // Alerts are the owner's; visitors are not shown the link. An older API without /api/usage
-  // leaves it shown.
+  // The model's statistics are the owners'; visitors are not shown the link. An older API without
+  // /api/usage leaves it shown.
   const usage = useApi<Usage>("/api/usage");
   const owner = usage.data === undefined || usage.data.unlimited;
   const path = usePathname();
@@ -46,7 +46,7 @@ export function Nav() {
         <span className="ball" aria-hidden="true">⚽</span> Let’s Go Gaffer
       </Link>
       <ul>
-        {links.filter((l) => owner || l.href !== "/alerts").map((l) => {
+        {links.filter((l) => owner || l.href !== "/model").map((l) => {
           const active = l.href === "/" ? path === "/" : path.startsWith(l.href);
           return (
             <li key={l.href}>

@@ -71,4 +71,6 @@ Past the limit the API answers `429` with a plain message, and the Setup page sh
 
 ## What visitors can and cannot do
 
-Visitors can use everything except the owner's own features: the **Alerts** inbox and the **watchlist** (whose alerts go to the owner's phone) answer `403 owner_only`, and the page hides them. Model health on the Model page stays public. Daily counts are deleted after 30 days, as the [privacy policy](../web/app/privacy/page.tsx) says.
+Visitors get their own **watchlist** and **Alerts** inbox: starring a player sends his news and status changes to that visitor's inbox only (never to the owners' phone). The **Model** page (`/api/backtest`, `/api/health/runs`) is for the owners only: anyone else gets `403 owner_only` and the nav hides it.
+
+The **Temporal UI** (`/temporal`) shows every workflow and its inputs, so it is owners only too, at the ingress: after the usual sign-in, Traefik asks oauth2-proxy again with `allowed_emails` set to `GAFFER_OWNERS`, and anyone else gets `403`. With `GAFFER_OWNERS` empty the route is not served at all. Previews never serve it. Daily counts are deleted after 30 days, as the [privacy policy](../web/app/privacy/page.tsx) says.

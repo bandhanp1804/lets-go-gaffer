@@ -92,10 +92,10 @@ func runWorker(ctx context.Context, w io.Writer) error {
 	return nil
 }
 
-// restartWatches makes sure every watched player has a running watch, for a watchlist kept while
+// restartWatches makes sure every player anyone watches has a running watch, for a watchlist kept while
 // the worker was away or before Temporal was set up.
 func restartWatches(ctx context.Context, st stack, w workflows.Watcher) error {
-	ids, err := st.store.Watchlist(ctx)
+	ids, err := st.store.WatchedPlayers(ctx)
 	if err != nil {
 		return err
 	}

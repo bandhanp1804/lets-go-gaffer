@@ -240,9 +240,8 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, v)
 }
 
-// errOwnerOnly refuses a visitor the owner's own features: the alerts inbox and the watchlist,
-// whose alerts reach the owner's phone.
-var errOwnerOnly = errors.New("alerts and the watchlist are for the site's owner")
+// errOwnerOnly refuses a visitor the owners' own pages: the model's statistics.
+var errOwnerOnly = errors.New("this is for the site's owners")
 
 // ownerOnly lets the request through only for an owner. Without limits configured there is no
 // login proxy either, so the one user is the owner.
@@ -260,25 +259,22 @@ func (s *Server) alerts(ctx context.Context, _ *http.Request) (any, error) {
 	if s.cfg.Inbox == nil {
 		return nil, errInboxOff
 	}
-	if err := s.ownerOnly(ctx); err != nil {
-		return nil, err
-	}
-	return s.cfg.Inbox.Alerts(ctx)
+	return s.cfg.Inbox.Alerts(ctx, userOf(ctx))
 }
 
 func (s *Server) watchlist(ctx context.Context, _ *http.Request) (any, error) {
 	if s.cfg.Inbox == nil {
 		return nil, errInboxOff
 	}
-	if err := s.ownerOnly(ctx); err != nil {
-		return nil, err
-	}
-	return s.cfg.Inbox.Watchlist(ctx)
+	return s.cfg.Inbox.Watchlist(ctx, userOf(ctx))
 }
 
 func (s *Server) health(ctx context.Context, _ *http.Request) (any, error) {
 	if s.cfg.Inbox == nil {
 		return nil, errInboxOff
+	}
+	if err := s.ownerOnly(ctx); err != nil {
+		return nil, err
 	}
 	return s.cfg.Inbox.Health(ctx)
 }
@@ -300,10 +296,6 @@ func (s *Server) markRead(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, errInboxOff)
 		return
 	}
-	if err := s.ownerOnly(r.Context()); err != nil {
-		s.fail(w, r, err)
-		return
-	}
 	var body struct {
 		UpTo int64 `json:"up_to"`
 	}
@@ -312,7 +304,7 @@ func (s *Server) markRead(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ReadTimeout)
 	defer cancel()
-	if err := s.cfg.Inbox.MarkRead(ctx, body.UpTo); err != nil {
+	if err := s.cfg.Inbox.MarkRead(ctx, userOf(ctx), body.UpTo); err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -325,10 +317,6 @@ func (s *Server) setWatch(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, errInboxOff)
 		return
 	}
-	if err := s.ownerOnly(r.Context()); err != nil {
-		s.fail(w, r, err)
-		return
-	}
 	var body struct {
 		PlayerID int  `json:"player_id"`
 		Watch    bool `json:"watch"`
@@ -338,7 +326,7 @@ func (s *Server) setWatch(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ReadTimeout)
 	defer cancel()
-	v, err := s.cfg.Inbox.SetWatch(ctx, body.PlayerID, body.Watch)
+	v, err := s.cfg.Inbox.SetWatch(ctx, userOf(ctx), body.PlayerID, body.Watch)
 	if err != nil {
 		s.fail(w, r, err)
 		return

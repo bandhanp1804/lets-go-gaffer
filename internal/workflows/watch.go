@@ -95,7 +95,7 @@ func WatchPlayer(ctx workflow.Context, in WatchInput) error {
 }
 
 func alert(ctx, notifyCtx workflow.Context, a *Activities, m notify.Message) {
-	if err := workflow.ExecuteActivity(notifyCtx, a.Notify, m).Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(notifyCtx, a.NotifyWatchers, m).Get(ctx, nil); err != nil {
 		workflow.GetLogger(ctx).Warn("alert not delivered", "title", m.Title, "err", err)
 	}
 }

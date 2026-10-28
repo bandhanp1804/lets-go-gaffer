@@ -7,7 +7,7 @@ Browser ─https─▶ Traefik (one load balancer, sslip.io name, Let's Encrypt 
                  └─ oauth2-proxy ─▶ Dex (GitHub, Google or Microsoft)
                      ├─ /          → web     Next.js, 1–3 pods
                      ├─ /api       → api     gaffer serve, 1–3 pods, sticky cookie
-                     └─ /temporal  → Temporal UI
+                     └─ /temporal  → Temporal UI (owners only: GAFFER_OWNERS)
 worker (gaffer worker, 1–2 pods) and api ─▶ Temporal (official chart) ─▶ Postgres
 everything ─▶ Azure Postgres Flexible Server B1ms on a private subnet (pgvector)
 ```

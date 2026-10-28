@@ -9,6 +9,10 @@ preview: false
 # Where oauth2-proxy runs: production's namespace, also used by previews.
 authNamespace: gaffer
 
+# The owners' emails, comma-separated (GAFFER_OWNERS): only they may open the Temporal UI. Empty
+# means nobody: the /temporal route is then not served at all.
+ownerEmails: ""
+
 image:
   registry: "" # e.g. gaffer1a2b3c.azurecr.io; set on install
   gaffer: gaffer

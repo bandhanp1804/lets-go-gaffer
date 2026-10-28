@@ -27,7 +27,8 @@ type NewsStore interface {
 	ListPlayers(ctx context.Context) ([]fpl.Player, error)
 	ListTeams(ctx context.Context) ([]fpl.Team, error)
 	PlayerStates(ctx context.Context) (map[int]db.PlayerState, error)
-	Watchlist(ctx context.Context) ([]int, error)
+	WatchedPlayers(ctx context.Context) ([]int, error)
+	Watchers(ctx context.Context, playerID int) ([]string, error)
 	UpsertTeams(ctx context.Context, teams []fpl.Team) error
 	UpsertPlayers(ctx context.Context, players []fpl.Player) error
 	news.Store
@@ -93,6 +94,23 @@ type Activities struct {
 // Notify delivers one message: into the inbox, and to the phone when ntfy is set up.
 func (a *Activities) Notify(ctx context.Context, m notify.Message) error {
 	return a.Notifier.Notify(ctx, m)
+}
+
+// NotifyWatchers delivers a message about a player to everyone who watches him, each in their own
+// inbox ("" is the owners', the only one pushed to a phone).
+func (a *Activities) NotifyWatchers(ctx context.Context, m notify.Message) error {
+	users, err := a.Store.Watchers(ctx, m.PlayerID)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, u := range users {
+		m.User = u
+		if err := a.Notifier.Notify(ctx, m); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // permanent marks an error no retry can fix, such as a missing API key.
