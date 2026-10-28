@@ -21,6 +21,9 @@ export default function SignedOut() {
         </div>
         <p className="titlenote">You’re signed out. Sign in again with GitHub, Google or Microsoft. You are still signed in with whichever you used: sign out there too on a shared computer.</p>
       </Hero>
+      <p className="small muted">
+        By signing in you agree to the <a href="/terms">terms of use</a>; see the <a href="/privacy">privacy policy</a> for how your data is handled.
+      </p>
       <ul className="titlefeatures">
         <li>
           <strong>Best XI and captain</strong>

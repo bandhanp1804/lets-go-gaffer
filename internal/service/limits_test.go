@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -90,5 +91,60 @@ func TestLimits_Usage(t *testing.T) {
 	owner, _ := l.Usage(ctx, "owner@example.com")
 	if !owner.Unlimited || len(owner.Items) != 0 {
 		t.Errorf("owner: %+v", owner)
+	}
+}
+
+type pruner struct {
+	mu     sync.Mutex
+	before []time.Time
+}
+
+func (p *pruner) PruneUsage(_ context.Context, before time.Time) (int64, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.before = append(p.before, before)
+	return 0, nil
+}
+
+func TestPruneDailyKeepsThirtyDaysAndStopsWithItsContext(t *testing.T) {
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	p := &pruner{}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		service.PruneDaily(ctx, p, func() time.Time { return now }, 10*time.Millisecond)
+		close(done)
+	}()
+	deadline := time.After(5 * time.Second)
+	for {
+		p.mu.Lock()
+		n := len(p.before)
+		p.mu.Unlock()
+		if n >= 2 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("pruned fewer than twice")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("PruneDaily did not stop when its context ended")
+	}
+	if want := now.Add(-30 * 24 * time.Hour); !p.before[0].Equal(want) {
+		t.Errorf("pruned before %v, want %v", p.before[0], want)
+	}
+}
+
+func TestIsOwner(t *testing.T) {
+	l := limitsRig()
+	for user, want := range map[string]bool{"owner@example.com": true, "OWNER@example.com": true, "local": true, "visitor@example.com": false, "": false} {
+		if got := l.IsOwner(user); got != want {
+			t.Errorf("%q: %v, want %v", user, got, want)
+		}
 	}
 }

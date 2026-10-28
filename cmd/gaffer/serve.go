@@ -121,6 +121,15 @@ func runServe(ctx context.Context, w io.Writer, args []string) error {
 		return err
 	}
 	cfg.Limits = limits
+	// Daily counts are kept 30 days, as the privacy policy says. The pruning stops, and is waited
+	// for, before the database pool closes: this defer runs before closeSvc's.
+	pruneCtx, stopPrune := context.WithCancel(ctx)
+	pruned := make(chan struct{})
+	go func() {
+		defer close(pruned)
+		service.PruneDaily(pruneCtx, st.store, time.Now, 24*time.Hour)
+	}()
+	defer func() { stopPrune(); <-pruned }()
 	if o.public {
 		// The login proxy names the user; the ingress strips these headers from what the
 		// browser sends, so only the proxy can set them.

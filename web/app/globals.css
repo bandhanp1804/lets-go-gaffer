@@ -1613,3 +1613,23 @@ ul.usage li {
   padding: 6px 0;
   border-bottom: 1px solid var(--border);
 }
+
+/* Privacy policy, terms, and the footer that links them */
+.legal {
+  max-width: 760px;
+  line-height: 1.6;
+}
+.legal h2 {
+  margin-top: 28px;
+}
+.legal li {
+  margin: 6px 0;
+}
+.sitefooter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin: 48px 0 24px;
+  font-size: 0.85rem;
+}

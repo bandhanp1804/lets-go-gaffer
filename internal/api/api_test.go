@@ -988,6 +988,8 @@ func (l *limiter) Take(_ context.Context, user, kind string) error {
 	}
 	return nil
 }
+func (l *limiter) IsOwner(user string) bool { return user == "owner@example.com" }
+
 func (l *limiter) Usage(_ context.Context, user string) (service.UsageView, error) {
 	return service.UsageView{Items: []service.UsageItemView{{Kind: "ask", Used: 15, Limit: 15}}}, nil
 }
@@ -1029,5 +1031,34 @@ func TestNoLimiterMeansUnlimited(t *testing.T) {
 	r := newRig(t, nil)
 	if w := r.do("GET", "/api/usage", "", nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"unlimited":true`) {
 		t.Errorf("%d %s", w.Code, w.Body)
+	}
+}
+
+func TestAlertsAndWatchlistAreForOwnersOnly(t *testing.T) {
+	in := &inbox{watched: map[int]bool{}}
+	r := newRig(t, func(c *api.Config, _ *rig) {
+		c.Inbox, c.Limits, c.UserHeaders = in, &limiter{}, []string{"X-Auth-Request-Email"}
+	})
+	visitor := map[string]string{"X-Auth-Request-Email": "visitor@example.com"}
+	owner := map[string]string{"X-Auth-Request-Email": "owner@example.com"}
+
+	for _, tt := range []struct{ method, path, body string }{
+		{"GET", "/api/alerts", ""},
+		{"POST", "/api/alerts/read", `{"up_to": 3}`},
+		{"GET", "/api/watchlist", ""},
+		{"POST", "/api/watchlist", `{"player_id": 4, "watch": true}`},
+	} {
+		if w := r.do(tt.method, tt.path, tt.body, visitor); w.Code != 403 || !strings.Contains(w.Body.String(), `"code":"owner_only"`) {
+			t.Errorf("visitor %s %s: %d %s", tt.method, tt.path, w.Code, w.Body)
+		}
+		if w := r.do(tt.method, tt.path, tt.body, owner); w.Code != 200 {
+			t.Errorf("owner %s %s: %d %s", tt.method, tt.path, w.Code, w.Body)
+		}
+	}
+	if in.watched[4] != true || in.readTo != 3 {
+		t.Error("only the owner's requests changed anything")
+	}
+	if w := r.do("GET", "/api/health/runs", "", visitor); w.Code != 200 {
+		t.Errorf("model health stays public: %d", w.Code)
 	}
 }

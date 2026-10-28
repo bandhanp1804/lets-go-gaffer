@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -72,6 +73,35 @@ func (l *Limits) now() time.Time {
 		return l.Now()
 	}
 	return time.Now()
+}
+
+// IsOwner says whether a user runs the site: an owner, or the local user on the owner's own
+// computer. Owners have no limits and alone see the alerts inbox and the watchlist.
+func (l *Limits) IsOwner(user string) bool { return l.exempt(user) }
+
+// usageKept is how long daily counts are kept; the privacy policy (web/app/privacy) says so.
+const usageKept = 30 * 24 * time.Hour
+
+// UsagePruner deletes old daily counts. *db.Store satisfies it.
+type UsagePruner interface {
+	PruneUsage(ctx context.Context, before time.Time) (int64, error)
+}
+
+// PruneDaily deletes daily counts older than usageKept now and then once a day, until ctx ends.
+// It blocks; run it in a goroutine that the caller stops by cancelling ctx.
+func PruneDaily(ctx context.Context, p UsagePruner, now func() time.Time, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		if _, err := p.PruneUsage(ctx, now().Add(-usageKept)); err != nil && ctx.Err() == nil {
+			slog.Warn("pruning old usage counts failed", "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }
 
 // exempt says whether a user has no limits.
