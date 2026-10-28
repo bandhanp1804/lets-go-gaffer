@@ -3,6 +3,9 @@
 # through the traceparent header.
 tracing:
   serviceName: traefik
+  # Datadog files spans by env; without this Traefik's arrive as env:none, apart from the app's.
+  resourceAttributes:
+    deployment.environment: prod
   otlp:
     enabled: true
     http:
