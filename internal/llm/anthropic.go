@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+
+	"github.com/bandhanpatel/lets-go-gaffer/internal/telemetry"
 )
 
 const (
@@ -87,6 +89,14 @@ type apiRequest struct {
 // delivered. The system prompt and tool list are marked cacheable, so repeated
 // calls with the same prefix are billed at the cheaper cached rate.
 func (a *Anthropic) Stream(ctx context.Context, req Request, onText func(string)) (Response, error) {
+	ctx, call := telemetry.StartLLM(ctx, req.Model)
+	resp, err := a.stream(ctx, req, onText)
+	u := resp.Usage
+	call.End(ctx, telemetry.Tokens{Input: u.InputTokens, Output: u.OutputTokens, CacheRead: u.CacheReadTokens, CacheWrite: u.CacheCreationTokens}, err)
+	return resp, err
+}
+
+func (a *Anthropic) stream(ctx context.Context, req Request, onText func(string)) (Response, error) {
 	switch {
 	case req.Model == "":
 		return Response{}, errors.New("anthropic: a model is required")

@@ -14,11 +14,16 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/db"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/fpl"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/ingest"
+
+	"github.com/bandhanpatel/lets-go-gaffer/internal/telemetry"
 )
 
 const usage = "usage: gaffer sync | gaffer news | gaffer relink | gaffer squad | gaffer search [flags] QUERY | gaffer team [ID] | gaffer lineup [ID] | gaffer transfers [flags] | gaffer ask [-v] QUESTION | gaffer chat | gaffer eval [flags] | gaffer serve [flags] | gaffer worker | gaffer workflow NAME | gaffer backtest    (env: GAFFER_DSN required, GAFFER_MIGRATIONS default ./migrations)"
 
 func main() {
+	// JSON in the cluster, where the Datadog Agent reads it; text on a terminal.
+	slog.SetDefault(telemetry.NewLogger(os.Stderr, os.Getenv("GAFFER_LOG_FORMAT")))
+
 	// Ctrl-C / SIGTERM cancels ctx; workers and the pool unwind before we exit.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
@@ -112,4 +117,20 @@ func runSync(ctx context.Context) error {
 		slog.Warn("player failed", "err", sum.Failed[id])
 	}
 	return err
+}
+
+// startTelemetry sends service's traces and metrics, if there is an OTLP endpoint. The returned
+// function flushes them; it gets its own few seconds, since by then ctx has been cancelled.
+func startTelemetry(ctx context.Context, service string) (flush func(), err error) {
+	shutdown, err := telemetry.Setup(ctx, service)
+	if err != nil {
+		return nil, err
+	}
+	return func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdown(ctx); err != nil {
+			slog.Warn("flush telemetry", "err", err)
+		}
+	}, nil
 }

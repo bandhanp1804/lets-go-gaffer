@@ -21,6 +21,8 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/httpx"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/llm"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/service"
+
+	"github.com/bandhanpatel/lets-go-gaffer/internal/telemetry"
 )
 
 const askUsage = `usage: gaffer ask [-v] QUESTION
@@ -53,7 +55,7 @@ func parseAskArgs(args []string) (question string, verbose bool, err error) {
 
 // newAnthropic is the Claude client, with retries for rate limits and server errors.
 func newAnthropic(key string) (*llm.Anthropic, error) {
-	return llm.NewAnthropic(&http.Client{Transport: httpx.NewRetryTransport(nil, httpx.RetryConfig{
+	return llm.NewAnthropic(&http.Client{Transport: httpx.NewRetryTransport(telemetry.Transport(nil), httpx.RetryConfig{
 		MaxAttempts: 4, BaseDelay: time.Second, MaxDelay: 15 * time.Second,
 	})}, llm.Config{APIKey: key})
 }
@@ -120,7 +122,16 @@ func buildStack(ctx context.Context) (stack, func(), error) {
 
 	teamID := 0
 	fmt.Sscanf(strings.TrimSpace(os.Getenv("GAFFER_TEAM_ID")), "%d", &teamID)
-	return stack{svc: service.New(deps, service.Config{TeamID: teamID}), store: store, embedder: embedder}, pool.Close, nil
+	stopPool, err := telemetry.ObservePool(func() telemetry.PoolStats {
+		s := pool.Stat()
+		return telemetry.PoolStats{Acquired: s.AcquiredConns(), Idle: s.IdleConns(), Max: s.MaxConns(), EmptyAcquires: s.EmptyAcquireCount()}
+	})
+	if err != nil {
+		pool.Close()
+		return stack{}, nil, fmt.Errorf("observe the database pool: %w", err)
+	}
+	closeAll := func() { stopPool(); pool.Close() }
+	return stack{svc: service.New(deps, service.Config{TeamID: teamID}), store: store, embedder: embedder}, closeAll, nil
 }
 
 // buildAssistant is buildService plus Claude. The caller calls the returned function when done.

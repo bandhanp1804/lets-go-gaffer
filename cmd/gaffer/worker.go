@@ -21,6 +21,11 @@ const defaultEvalCron = "0 3 * * *"
 // runWorker runs gaffer's workflows until Ctrl-C: it registers them with Temporal, makes sure the
 // schedules exist, restarts the watches of watched players, and works the task queue.
 func runWorker(ctx context.Context, w io.Writer) error {
+	flush, err := startTelemetry(ctx, "gaffer-worker")
+	if err != nil {
+		return err
+	}
+	defer flush()
 	st, closeStack, err := buildStack(ctx)
 	if err != nil {
 		return err

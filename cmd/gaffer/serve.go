@@ -97,6 +97,11 @@ func runServe(ctx context.Context, w io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
+	flush, err := startTelemetry(ctx, "gaffer-api")
+	if err != nil {
+		return err
+	}
+	defer flush()
 	st, closeSvc, err := buildStack(ctx)
 	if err != nil {
 		return err

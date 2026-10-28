@@ -118,6 +118,6 @@ func logRequests(log *slog.Logger, next http.Handler) http.Handler {
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w}
 		next.ServeHTTP(sw, r)
-		log.Info("request", "method", r.Method, "path", r.URL.Path, "status", sw.status, "took", time.Since(start).Round(time.Millisecond))
+		log.InfoContext(r.Context(), "request", "method", r.Method, "path", r.URL.Path, "status", sw.status, "took", time.Since(start).Round(time.Millisecond))
 	})
 }

@@ -18,6 +18,8 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/assistant"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/news"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/service"
+
+	"github.com/bandhanpatel/lets-go-gaffer/internal/telemetry"
 )
 
 // Service is what the endpoints read. *service.Service satisfies it.
@@ -170,7 +172,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	mux.HandleFunc("POST /api/whatif/subs", s.subs)
 	mux.HandleFunc("POST /api/ask", s.ask)
 
-	s.handler = recoverer(s.log, logRequests(s.log, guard(cfg.AllowedOrigins, cfg.AllowedHosts, s.withViewer(mux))))
+	// The trace starts outermost, so the request log line and everything below carry its ids.
+	s.handler = telemetry.Server(recoverer(s.log, logRequests(s.log, guard(cfg.AllowedOrigins, cfg.AllowedHosts, s.withViewer(telemetry.Routes(mux))))))
 	return s, nil
 }
 
