@@ -108,6 +108,9 @@ func (s *Server) news(ctx context.Context, r *http.Request) (any, error) {
 	if nq.Limit, err = intParam(q.Get("limit")); err != nil {
 		return nil, badParam("limit", err)
 	}
+	if err := s.take(ctx, service.LimitSearch); err != nil {
+		return nil, err
+	}
 	return s.cfg.Service.Search(ctx, nq)
 }
 
@@ -176,6 +179,10 @@ func (s *Server) newsRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ReadTimeout)
 	defer cancel()
+	if err := s.take(ctx, service.LimitRefresh); err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	if _, err := s.cfg.News.Start(ctx); err != nil {
 		s.fail(w, r, err)
 		return
@@ -187,6 +194,22 @@ func (s *Server) newsRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 	st.Running = true // it was just started, or was already going; a list may not show it yet
 	writeJSON(w, http.StatusAccepted, st)
+}
+
+// take counts one use of a limited feature by the request's user.
+func (s *Server) take(ctx context.Context, kind string) error {
+	if s.cfg.Limits == nil {
+		return nil
+	}
+	return s.cfg.Limits.Take(ctx, userOf(ctx), kind)
+}
+
+// usage is the user's daily limits and what is left of them.
+func (s *Server) usage(ctx context.Context, _ *http.Request) (any, error) {
+	if s.cfg.Limits == nil {
+		return service.UsageView{Unlimited: true, Items: []service.UsageItemView{}}, nil
+	}
+	return s.cfg.Limits.Usage(ctx, userOf(ctx))
 }
 
 func (s *Server) settings(ctx context.Context, _ *http.Request) (any, error) {
@@ -396,6 +419,11 @@ func (s *Server) ask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("the question must be between 1 and %d characters", maxQuestion))
 		return
 	}
+	// Counted before the conversation is touched, so a refused question costs nothing and starts nothing.
+	if err := s.take(r.Context(), service.LimitAsk); err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	id, conv, release, err := s.sessions.acquire(req.SessionID, owner(service.ViewerFrom(r.Context())), s.cfg.NewConversation)
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -476,6 +504,8 @@ func askError(ctx context.Context, err error) string {
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	var in *service.InputError
 	switch {
+	case errors.Is(err, service.ErrLimitReached):
+		writeJSON(w, http.StatusTooManyRequests, ErrorBody{Error: err.Error(), Code: "limit_reached"})
 	case errors.Is(err, service.ErrTeamRequired):
 		writeJSON(w, http.StatusBadRequest, ErrorBody{Error: err.Error(), Code: "team_required"})
 	case errors.As(err, &in):

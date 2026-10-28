@@ -1,0 +1,13 @@
+# Dex (dex/dex 0.26.0, Dex 2.46.0): the sign-in hub behind oauth2-proxy, offering GitHub and
+# Entra External ID (email code or Google) on one page. Its config holds secrets, so
+# deploy/scripts/deploy.sh writes it straight into the dex-config Secret; nothing secret is here.
+# docs/sign-in.md explains the whole flow.
+configSecret:
+  create: false
+  name: dex-config
+# Served at https://<host>/dex through the app chart's public ingress, not the chart's own.
+ingress:
+  enabled: false
+resources:
+  requests: { cpu: 10m, memory: 32Mi }
+  limits: { memory: 128Mi }

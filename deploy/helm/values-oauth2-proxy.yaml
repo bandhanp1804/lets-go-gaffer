@@ -1,7 +1,8 @@
-# oauth2-proxy (oauth2-proxy/oauth2-proxy 10.7.1): GitHub login in front of everything.
-# Credentials come from the oauth2-proxy-secrets Secret (client-id, client-secret, cookie-secret),
-# made by deploy/scripts/bootstrap.sh from the GitHub OAuth app. The allowed user and the redirect
-# URL are set with --set on install.
+# oauth2-proxy (oauth2-proxy/oauth2-proxy 10.7.1): the login in front of everything. It signs
+# people in through Dex (GitHub, email code or Google; see docs/sign-in.md), and lets in anyone
+# who signs in: the app's daily limits keep visitors from running up the API bill. Credentials
+# come from the oauth2-proxy-secrets Secret made by deploy/scripts/deploy.sh; Dex's addresses are
+# set with --set on install.
 config:
   existingSecret: oauth2-proxy-secrets
   # A name of our own. The first cookies were scoped to production's host only; sign-out clears
@@ -9,8 +10,14 @@ config:
   # signed in. A new name leaves those behind (they expire on their own).
   cookieName: _gaffer_auth
 extraArgs:
-  provider: github
+  provider: oidc
+  client-id: oauth2-proxy
+  scope: openid email profile
   email-domain: "*"
+  # Browsers go to Dex's public address to sign in; oauth2-proxy itself reaches Dex inside the
+  # cluster (no round trip out through the load balancer), so discovery is off and the
+  # in-cluster token and key endpoints are given directly.
+  skip-oidc-discovery: true
   # Traefik's forwardAuth asks oauth2-proxy about each request: 202 means signed in, anything
   # else (a redirect to GitHub) is sent to the browser as is.
   reverse-proxy: true

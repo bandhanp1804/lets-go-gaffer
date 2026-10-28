@@ -4,10 +4,13 @@ import { useState } from "react";
 import { cleanToken, expiresIn } from "../../lib/identity.ts";
 import { captureSnippet } from "../../lib/snippet.ts";
 import { useTeam } from "../../components/TeamProvider.tsx";
+import type { Usage } from "../../lib/types.gen.ts";
+import { useApi } from "../../lib/useApi.ts";
 
 /** Your saved team and FPL login token: what loads by default on any device you sign in on. */
 export default function Setup() {
   const { settings, identity, ready, saveSettings, openModal } = useTeam();
+  const usage = useApi<Usage>("/api/usage");
   const [teamText, setTeamText] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [tokenText, setTokenText] = useState("");
@@ -164,6 +167,23 @@ export default function Setup() {
       </section>
 
       {message ? <p className={message.ok ? "fieldok" : "fielderror"}>{message.text}</p> : null}
+
+      {usage.data && !usage.data.unlimited ? (
+        <section className="panel">
+          <h2>Today’s allowance</h2>
+          <p className="muted small">The features that spend API credits have a daily limit for each visitor. It resets in {usage.data.resets_in}.</p>
+          <ul className="usage">
+            {usage.data.items.map((i) => (
+              <li key={i.kind}>
+                <span>{i.label}</span>
+                <span className={i.limit > 0 && i.used >= i.limit ? "status-out" : "muted"}>
+                  {i.limit > 0 ? `${Math.max(i.limit - i.used, 0)} of ${i.limit} left` : "unlimited"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </>
   );
 }

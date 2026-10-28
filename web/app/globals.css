@@ -1602,3 +1602,14 @@ ul.watched li {
   letter-spacing: 0.08em;
   color: var(--muted);
 }
+ul.usage {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+}
+ul.usage li {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}

@@ -72,6 +72,7 @@ app() {
   helm repo add jetstack https://charts.jetstack.io >/dev/null
   helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests >/dev/null
   helm repo add temporal https://go.temporal.io/helm-charts >/dev/null
+  helm repo add dex https://charts.dexidp.io >/dev/null
   helm repo update >/dev/null
   helm upgrade --install --force-conflicts traefik traefik/traefik --version 42.1.3 -n traefik --create-namespace \
     -f "$CHARTS/values-traefik.yaml" \
@@ -96,15 +97,26 @@ app() {
   datakey=$(kubectl -n "$NS" get secret gaffer-secrets -o jsonpath='{.data.GAFFER_DATA_KEY}' 2>/dev/null | base64 -d || true)
   [ -n "$datakey" ] || datakey=$(openssl rand -base64 32)
   args+=(--from-literal=GAFFER_DATA_KEY="$datakey")
+  # Who is never limited (docs/sign-in.md#limits).
+  local owners
+  owners=$(envvar GAFFER_OWNERS deploy/azure.env)
+  [ -n "$owners" ] && args+=(--from-literal=GAFFER_OWNERS="$owners")
   kubectl -n "$NS" create secret generic gaffer-secrets "${args[@]}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   kubectl -n "$NS" create secret generic temporal-db --from-literal=password="$pgpass" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-  local cookie
+  # oauth2-proxy signs in through Dex as the client "oauth2-proxy". Its cookie secret and its
+  # secret with Dex are made once and kept, so a redeploy does not sign everyone out.
+  local cookie dexsecret
   cookie=$(kubectl -n "$NS" get secret oauth2-proxy-secrets -o jsonpath='{.data.cookie-secret}' 2>/dev/null | base64 -d || true)
   [ -n "$cookie" ] || cookie=$(openssl rand -base64 32 | head -c 32)
+  dexsecret=$(kubectl -n "$NS" get secret oauth2-proxy-secrets -o jsonpath='{.data.dex-client-secret}' 2>/dev/null | base64 -d || true)
+  [ -n "$dexsecret" ] || dexsecret=$(openssl rand -hex 32)
   kubectl -n "$NS" create secret generic oauth2-proxy-secrets \
-    --from-literal=client-id="$(envvar OAUTH_GITHUB_CLIENT_ID deploy/azure.env)" \
-    --from-literal=client-secret="$(envvar OAUTH_GITHUB_CLIENT_SECRET deploy/azure.env)" \
+    --from-literal=client-id=oauth2-proxy \
+    --from-literal=client-secret="$dexsecret" \
+    --from-literal=dex-client-secret="$dexsecret" \
     --from-literal=cookie-secret="$cookie" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  dex_config "$host" "$dexsecret" | kubectl -n "$NS" create secret generic dex-config --from-file=config.yaml=/dev/stdin \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
   echo "== Temporal"
@@ -113,14 +125,16 @@ app() {
     --set "server.config.persistence.datastores.visibility.sql.connectAddr=$pghost:5432" \
     --wait --timeout 15m
 
-  echo "== GitHub login"
-  # Helm's --set splits on commas, so the commas between usernames are escaped.
-  local users
-  users=$(envvar OAUTH_GITHUB_USERS deploy/azure.env)
-  users=${users//,/\\,}
+  echo "== sign-in: Dex, then oauth2-proxy"
+  helm upgrade --install --force-conflicts dex dex/dex --version 0.26.0 -n "$NS" -f "$CHARTS/values-dex.yaml" \
+    --set-string "podAnnotations.checksum/config=$(dex_config "$host" "$dexsecret" | sha256sum | cut -c1-16)" --wait
+  local dexin="http://dex.$NS.svc.cluster.local:5556/dex"
   helm upgrade --install --force-conflicts oauth2-proxy oauth2-proxy/oauth2-proxy --version 10.7.1 -n "$NS" \
     -f "$CHARTS/values-oauth2-proxy.yaml" \
-    --set "extraArgs.github-user=$users" \
+    --set "extraArgs.oidc-issuer-url=https://$host/dex" \
+    --set "extraArgs.login-url=https://$host/dex/auth" \
+    --set "extraArgs.redeem-url=$dexin/token" \
+    --set "extraArgs.oidc-jwks-url=$dexin/keys" \
     --set "extraArgs.redirect-url=https://$host/oauth2/callback" \
     --set "extraArgs.whitelist-domain=$host\\,.$host" \
     --set "extraArgs.cookie-domain=.$host" \
@@ -132,6 +146,60 @@ app() {
     --set acmeEmail="$(envvar ACME_EMAIL deploy/azure.env)" \
     --wait --timeout 15m
   status
+}
+
+# dex_config HOST CLIENT_SECRET prints Dex's config: GitHub always, and Entra External ID (email
+# code or Google) once its tenant is set up (docs/sign-in.md). It holds secrets, so it only ever
+# goes into the dex-config Secret.
+dex_config() {
+  local host=$1 secret=$2 tenant client csecret
+  tenant=$(envvar ENTRA_TENANT_ID deploy/azure.env)
+  client=$(envvar ENTRA_CLIENT_ID deploy/azure.env)
+  csecret=$(envvar ENTRA_CLIENT_SECRET deploy/azure.env)
+  cat <<EOF
+issuer: https://$host/dex
+storage:
+  type: kubernetes
+  config:
+    inCluster: true
+web:
+  http: 0.0.0.0:5556
+frontend:
+  issuer: Let's Go Gaffer
+  theme: dark
+oauth2:
+  skipApprovalScreen: true
+enablePasswordDB: false
+staticClients:
+  - id: oauth2-proxy
+    name: Let's Go Gaffer
+    secret: $secret
+    redirectURIs: ["https://$host/oauth2/callback"]
+connectors:
+  - type: github
+    id: github
+    name: GitHub
+    config:
+      clientID: $(envvar OAUTH_GITHUB_CLIENT_ID deploy/azure.env)
+      clientSecret: $(envvar OAUTH_GITHUB_CLIENT_SECRET deploy/azure.env)
+      redirectURI: https://$host/dex/callback
+EOF
+  if [ -n "$tenant" ] && [ -n "$client" ] && [ -n "$csecret" ]; then
+    cat <<EOF
+  - type: oidc
+    id: entra
+    name: Email code or Google
+    config:
+      issuer: https://$tenant.ciamlogin.com/$tenant/v2.0
+      clientID: $client
+      clientSecret: $csecret
+      redirectURI: https://$host/dex/callback
+      scopes: [openid, profile, email]
+      # Entra sends no email_verified claim; it verifies the address itself (the one-time code,
+      # or Google's own check), so Dex is told to accept the email as given.
+      insecureSkipEmailVerified: true
+EOF
+  fi
 }
 
 status() {

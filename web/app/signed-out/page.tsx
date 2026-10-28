@@ -16,10 +16,10 @@ export default function SignedOut() {
         <p className="herosub">Your squad, your lineup, your transfers and the latest team news, picked apart by a model that shows its working.</p>
         <div className="ctas">
           <a className="button primary big" href="/">
-            Sign in with GitHub
+            Sign in
           </a>
         </div>
-        <p className="titlenote">You’re signed out. You are still signed in to GitHub itself: sign out there too on a shared computer.</p>
+        <p className="titlenote">You’re signed out. Sign in again with GitHub, an emailed code or Google. If you used GitHub or Google, you are still signed in there: sign out there too on a shared computer.</p>
       </Hero>
       <ul className="titlefeatures">
         <li>

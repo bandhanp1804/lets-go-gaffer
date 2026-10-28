@@ -69,3 +69,20 @@ func TestParseNewsRefresh(t *testing.T) {
 		}
 	}
 }
+
+func TestDailyLimits(t *testing.T) {
+	t.Setenv("GAFFER_OWNERS", "A@x.com, b@x.com")
+	t.Setenv("GAFFER_LIMIT_ASK", "5")
+	t.Setenv("GAFFER_LIMIT_REFRESH", "0")
+	l, err := dailyLimits(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !l.Owners["a@x.com"] || !l.Owners["b@x.com"] || l.Daily["ask"] != 5 || l.Daily["refresh"] != 0 || l.Daily["search"] != 40 {
+		t.Errorf("%+v", l)
+	}
+	t.Setenv("GAFFER_LIMIT_SEARCH", "lots")
+	if _, err := dailyLimits(nil); err == nil || !strings.Contains(err.Error(), "GAFFER_LIMIT_SEARCH") {
+		t.Errorf("bad value: %v", err)
+	}
+}

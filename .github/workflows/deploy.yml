@@ -43,7 +43,10 @@ jobs:
       NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
       OAUTH_GITHUB_CLIENT_ID: ${{ secrets.OAUTH_GITHUB_CLIENT_ID }}
       OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
-      OAUTH_GITHUB_USERS: ${{ vars.OAUTH_GITHUB_USERS }}
+      ENTRA_TENANT_ID: ${{ vars.ENTRA_TENANT_ID }}
+      ENTRA_CLIENT_ID: ${{ vars.ENTRA_CLIENT_ID }}
+      ENTRA_CLIENT_SECRET: ${{ secrets.ENTRA_CLIENT_SECRET }}
+      GAFFER_OWNERS: ${{ secrets.GAFFER_OWNERS }}
       ACME_EMAIL: ${{ vars.ALERT_EMAIL }}
     steps:
       - uses: actions/checkout@v5
