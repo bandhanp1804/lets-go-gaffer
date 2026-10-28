@@ -11,60 +11,83 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/news"
 )
 
-func TestStore_AlertsListNewestFirstAndMarkReadUpToAnID(t *testing.T) {
+func TestStore_AlertsArePerInbox(t *testing.T) {
 	s, _ := newStore(t)
 	ctx := context.Background()
 	withPlayers(t, s, 7)
 
-	first, err := s.AddAlert(ctx, db.Alert{Kind: "watch", Title: "Saka: doubtful", PlayerID: 7, URL: "https://x.test/a"})
+	first, err := s.AddAlert(ctx, db.Alert{Kind: "watch", Title: "Saka: doubtful", PlayerID: 7, URL: "https://x.test/a"}) // the owners'
 	if err != nil {
 		t.Fatal(err)
 	}
 	second, _ := s.AddAlert(ctx, db.Alert{Kind: "health", Title: "Eval at 80%"})
+	visitors, _ := s.AddAlert(ctx, db.Alert{User: "visitor@x.com", Kind: "watch", Title: "Saka in the news", PlayerID: 7})
 
-	list, unread, err := s.ListAlerts(ctx, 10)
-	if err != nil || unread != 2 || len(list) != 2 {
-		t.Fatalf("list=%+v unread=%d err=%v", list, unread, err)
+	owners, unread, err := s.ListAlerts(ctx, "", 10)
+	if err != nil || unread != 2 || len(owners) != 2 || owners[0].ID != second || owners[1].PlayerID != 7 || owners[1].URL != "https://x.test/a" {
+		t.Fatalf("owners' inbox = %+v unread=%d err=%v", owners, unread, err)
 	}
-	if list[0].ID != second || list[1].PlayerID != 7 || list[1].URL != "https://x.test/a" || list[0].PlayerID != 0 {
-		t.Errorf("newest first, fields kept: %+v", list)
+	mine, unread, _ := s.ListAlerts(ctx, "visitor@x.com", 10)
+	if unread != 1 || len(mine) != 1 || mine[0].ID != visitors || mine[0].User != "visitor@x.com" {
+		t.Fatalf("visitor's inbox = %+v unread=%d", mine, unread)
 	}
 
-	if err := s.MarkAlertsRead(ctx, first); err != nil {
+	// Marking read reaches only the inbox it is asked of, even with an id range that spans others.
+	if err := s.MarkAlertsRead(ctx, "visitor@x.com", visitors); err != nil {
 		t.Fatal(err)
 	}
-	list, unread, _ = s.ListAlerts(ctx, 10)
-	if unread != 1 || list[0].Read || !list[1].Read {
-		t.Errorf("only alerts up to the id are read: unread=%d %+v", unread, list)
+	if _, unread, _ := s.ListAlerts(ctx, "", 10); unread != 2 {
+		t.Errorf("the owners' alerts must stay unread: %d", unread)
 	}
-	if one, _, _ := s.ListAlerts(ctx, 1); len(one) != 1 {
+	if err := s.MarkAlertsRead(ctx, "", first); err != nil {
+		t.Fatal(err)
+	}
+	owners, unread, _ = s.ListAlerts(ctx, "", 10)
+	if unread != 1 || owners[0].Read || !owners[1].Read {
+		t.Errorf("only alerts up to the id are read: unread=%d %+v", unread, owners)
+	}
+	if one, _, _ := s.ListAlerts(ctx, "", 1); len(one) != 1 {
 		t.Errorf("limit: %d", len(one))
 	}
 }
 
-func TestStore_WatchlistIsASetInTheOrderPlayersWereAdded(t *testing.T) {
+func TestStore_WatchlistsArePerUser(t *testing.T) {
 	s, _ := newStore(t)
 	ctx := context.Background()
 	withPlayers(t, s, 3, 9)
 
-	for _, id := range []int{9, 3, 9} {
-		if err := s.Watch(ctx, id); err != nil {
+	for _, w := range []struct {
+		user string
+		id   int
+	}{{"", 9}, {"", 3}, {"", 9}, {"visitor@x.com", 9}} {
+		if err := s.Watch(ctx, w.user, w.id); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if got, _ := s.Watchlist(ctx); !slices.Equal(got, []int{9, 3}) {
-		t.Errorf("watchlist = %v, want [9 3]", got)
+	if got, _ := s.Watchlist(ctx, ""); !slices.Equal(got, []int{9, 3}) {
+		t.Errorf("owners' watchlist = %v, want [9 3]", got)
 	}
-	if err := s.Unwatch(ctx, 9); err != nil {
-		t.Fatal(err)
+	if got, _ := s.Watchlist(ctx, "visitor@x.com"); !slices.Equal(got, []int{9}) {
+		t.Errorf("visitor's watchlist = %v", got)
 	}
-	if err := s.Unwatch(ctx, 42); err != nil {
-		t.Errorf("unwatching someone not watched: %v", err)
+	if got, _ := s.WatchedPlayers(ctx); !slices.Equal(got, []int{3, 9}) {
+		t.Errorf("watched by anyone = %v", got)
 	}
-	if got, _ := s.Watchlist(ctx); !slices.Equal(got, []int{3}) {
-		t.Errorf("after unwatch = %v", got)
+	if got, _ := s.Watchers(ctx, 9); !slices.Equal(got, []string{"", "visitor@x.com"}) {
+		t.Errorf("watchers of 9 = %v", got)
 	}
-	if err := s.Watch(ctx, 42); err == nil {
+
+	left, err := s.Unwatch(ctx, "", 9)
+	if err != nil || left != 1 {
+		t.Errorf("after the owners stop watching 9, the visitor still does: left=%d err=%v", left, err)
+	}
+	if left, _ := s.Unwatch(ctx, "visitor@x.com", 9); left != 0 {
+		t.Errorf("nobody watches 9 now: %d", left)
+	}
+	if left, err := s.Unwatch(ctx, "nobody", 42); err != nil || left != 0 {
+		t.Errorf("unwatching someone not watched: %d %v", left, err)
+	}
+	if err := s.Watch(ctx, "", 42); err == nil {
 		t.Error("watching a player who does not exist should fail")
 	}
 }

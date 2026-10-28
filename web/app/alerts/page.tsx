@@ -31,7 +31,7 @@ export default function AlertsPage() {
     <>
       <h1>Alerts</h1>
       <p className="muted">
-        News and status changes for the players you watch, the gameweek briefing a day before each deadline, and warnings when the model or the assistant gets worse.
+        News and status changes for the players you watch, in your own inbox. (The site’s owners also get the gameweek briefing and the model’s health warnings here.)
       </p>
       <Async state={data}>
         {(a) => (

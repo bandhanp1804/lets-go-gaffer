@@ -47,11 +47,6 @@ spec:
           - path: /api
             pathType: Prefix
             backend: { service: { name: gaffer-api, port: { number: 80 } } }
-          {{- if not .Values.preview }}
-          - path: /temporal
-            pathType: Prefix
-            backend: { service: { name: temporal-web, port: { number: 8080 } } }
-          {{- end }}
           - path: /
             pathType: Prefix
             backend: { service: { name: gaffer-web, port: { number: 80 } } }
@@ -128,4 +123,40 @@ spec:
       - http01:
           ingress:
             ingressClassName: traefik
+{{- end }}
+{{- if and (not .Values.preview) (trim .Values.ownerEmails) }}
+---
+# The Temporal UI shows every workflow and its data, so only the owners may open it: after the
+# usual sign-in, oauth2-proxy is asked once more, this time with the owners' emails, and anyone
+# else gets 403.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: owners-only
+spec:
+  forwardAuth:
+    address: http://oauth2-proxy.{{ .Values.authNamespace }}.svc.cluster.local/oauth2/auth?allowed_emails={{ .Values.ownerEmails | nospace | lower | urlquery }}
+    trustForwardHeader: true
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gaffer-temporal
+  labels:
+    {{- include "gaffer.labels" . | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-strip-identity@kubernetescrd,{{ .Release.Namespace }}-github-login@kubernetescrd,{{ .Release.Namespace }}-owners-only@kubernetescrd
+spec:
+  tls:
+    - hosts: [{{ $host | quote }}]
+      secretName: gaffer-tls
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /temporal
+            pathType: Prefix
+            backend: { service: { name: temporal-web, port: { number: 8080 } } }
 {{- end }}

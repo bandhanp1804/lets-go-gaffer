@@ -43,10 +43,10 @@ type NewsRefresher interface {
 
 // Inbox is the alerts, watchlist and model-health history. *service.Inbox satisfies it.
 type Inbox interface {
-	Alerts(ctx context.Context) (service.AlertsView, error)
-	MarkRead(ctx context.Context, upTo int64) error
-	Watchlist(ctx context.Context) (service.WatchlistView, error)
-	SetWatch(ctx context.Context, playerID int, on bool) (service.WatchlistView, error)
+	Alerts(ctx context.Context, user string) (service.AlertsView, error)
+	MarkRead(ctx context.Context, user string, upTo int64) error
+	Watchlist(ctx context.Context, user string) (service.WatchlistView, error)
+	SetWatch(ctx context.Context, user string, playerID int, on bool) (service.WatchlistView, error)
 	Health(ctx context.Context) (service.HealthView, error)
 }
 
@@ -62,7 +62,7 @@ type SettingsService interface {
 type Limiter interface {
 	Take(ctx context.Context, user, kind string) error
 	Usage(ctx context.Context, user string) (service.UsageView, error)
-	// IsOwner says whether the user runs the site: owners alone see the alerts and watchlist.
+	// IsOwner says whether the user runs the site: owners alone see the model's statistics.
 	IsOwner(user string) bool
 }
 
@@ -144,7 +144,12 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	})
 	mux.HandleFunc("GET /api/status", s.read(func(ctx context.Context, r *http.Request) (any, error) { return cfg.Service.Status(ctx) }))
 	mux.HandleFunc("GET /api/squad", s.read(s.squad))
-	mux.HandleFunc("GET /api/backtest", s.read(func(ctx context.Context, r *http.Request) (any, error) { return cfg.Service.Backtest(ctx) }))
+	mux.HandleFunc("GET /api/backtest", s.read(func(ctx context.Context, r *http.Request) (any, error) {
+		if err := s.ownerOnly(ctx); err != nil {
+			return nil, err
+		}
+		return cfg.Service.Backtest(ctx)
+	}))
 	mux.HandleFunc("GET /api/chips", s.read(s.chips))
 	mux.HandleFunc("GET /api/team", s.read(func(ctx context.Context, r *http.Request) (any, error) { return cfg.Service.MyTeam(ctx) }))
 	mux.HandleFunc("GET /api/lineup", s.read(s.lineup))

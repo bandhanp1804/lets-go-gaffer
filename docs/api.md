@@ -19,11 +19,11 @@
 | `POST /api/news/refresh` | Pulls the feeds again and embeds what is new, in the background: it answers `202` at once with the status, and a refresh already running is not started twice. `GET /api/news/refresh` returns `available` (false without a Voyage key), `running`, `every`, `last_finished`, `last_fetched`, `last_new`, `last_failed_feeds` and `last_error`. With Temporal it starts a `NewsRefresh` workflow and reports the newest run, scheduled or clicked. The News page's Refresh button polls it. |
 | `GET /api/usage` | The signed-in user's daily limits: `unlimited` (an owner, or the local user), each limited feature's `used` and `limit`, and `resets_in`. Past a limit, `/api/ask`, `/api/news` and `POST /api/news/refresh` answer `429` with code `limit_reached`. |
 | `GET /api/settings`, `POST /api/settings` | The signed-in user's saved team and token status (never the token): `user`, `team_id`, `token` (`saved`, `expired`, `expires_at`, `expires_in`). POST `{"team_id": 1234567, "token": "...", "clear_token": false, "clear_team": false}`; absent fields stay as they are. `503` without `GAFFER_DATA_KEY`. |
-| `GET /api/alerts` | The newest alerts, `unread`, and `live` (alerts are being produced: Temporal is configured). |
+| `GET /api/alerts` | The signed-in user's newest alerts, `unread`, and `live` (alerts are being produced: Temporal is configured). Each user has their own inbox; the owners share one that also gets the briefing and model-health warnings, and only they get `temporal_ui`. |
 | `POST /api/alerts/read` | `{"up_to": 12}` marks every alert up to that id read. |
-| `GET /api/watchlist`, `POST /api/watchlist` | The watched players; `{"player_id": 4, "watch": true}` stars or unstars one and starts or stops his watch workflow. |
-| `GET /api/health/runs` | The nightly evals and the default model's backtests, newest first. |
-| `GET /api/backtest` | How the scoring model did on played gameweeks, including the out-of-sample check. Cached until new history arrives. |
+| `GET /api/watchlist`, `POST /api/watchlist` | The signed-in user's watched players; `{"player_id": 4, "watch": true}` stars or unstars one. A player's watch workflow runs while anyone watches him, and his alerts go to each watcher's inbox (to the phone only for the owners). |
+| `GET /api/health/runs` | The nightly evals and the default model's backtests, newest first. Owners only (`403 owner_only` for anyone else). |
+| `GET /api/backtest` | How the scoring model did on played gameweeks, including the out-of-sample check. Cached until new history arrives. Owners only. |
 | `POST /api/ask` | `{"question": "...", "session_id": "..."}`, answered as a server-sent-event stream (below). |
 | `GET /api/healthz` | Liveness. |
 

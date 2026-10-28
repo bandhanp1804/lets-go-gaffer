@@ -80,7 +80,7 @@ func TestNewsRefresh_AFailingFeedIsRecordedAndTheRestAreEmbeddedInChunks(t *test
 func TestWatchPlayer_AlertsOnNewsAndOnRealStatusChangesOnly(t *testing.T) {
 	env := newEnv(t)
 	var got []notify.Message
-	env.OnActivity(a.Notify, mock.Anything, mock.Anything).Return(func(_ context.Context, m notify.Message) error {
+	env.OnActivity(a.NotifyWatchers, mock.Anything, mock.Anything).Return(func(_ context.Context, m notify.Message) error {
 		got = append(got, m)
 		return nil
 	})
@@ -110,7 +110,7 @@ func TestWatchPlayer_AlertsOnNewsAndOnRealStatusChangesOnly(t *testing.T) {
 
 func TestWatchPlayer_ContinuesAsNewAfterManyEventsKeepingItsLastStatus(t *testing.T) {
 	env := newEnv(t)
-	env.OnActivity(a.Notify, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity(a.NotifyWatchers, mock.Anything, mock.Anything).Return(nil)
 	env.RegisterDelayedCallback(func() {
 		env.SignalWorkflow(workflows.SignalStatus, workflows.StatusSignal{Status: "injured", News: "Knee"})
 		for range 199 {

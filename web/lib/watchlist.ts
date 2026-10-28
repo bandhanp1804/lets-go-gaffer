@@ -21,7 +21,7 @@ const RETRY_MS = 3000;
 /** The watchlist, shared by every Watch button on a page. */
 export function useWatchlist(): WatchState {
   const [list, setList] = useState<Watchlist>();
-  // An API that does not know the endpoint, or a visitor (the watchlist is the owner's), hides the stars. A failed load (the API was
+  // An API that does not know the endpoint hides the stars. A failed load (the API was
   // restarting, say) keeps them and tries again, so one bad moment does not hide them for good.
   const [available, setAvailable] = useState(true);
   const [error, setError] = useState("");

@@ -104,6 +104,15 @@ func TestMulti(t *testing.T) {
 			t.Errorf("err=%v stored=%d", err, len(store.got))
 		}
 	})
+	t.Run("a visitor's alert is stored for them and never pushed", func(t *testing.T) {
+		store, p := &alerts{}, &push{}
+		visitor := msg
+		visitor.User = "visitor@x.com"
+		err := notify.Multi{Inbox: notify.Inbox{Store: store}, Pushes: []notify.Notifier{p}}.Notify(context.Background(), visitor)
+		if err != nil || len(store.got) != 1 || store.got[0].User != "visitor@x.com" || p.n != 0 {
+			t.Errorf("err=%v stored=%+v pushes=%d", err, store.got, p.n)
+		}
+	})
 	t.Run("nothing is pushed if storing fails", func(t *testing.T) {
 		store, p := &alerts{err: errors.New("db down")}, &push{}
 		err := notify.Multi{Inbox: notify.Inbox{Store: store}, Pushes: []notify.Notifier{p}}.Notify(context.Background(), msg)

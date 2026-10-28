@@ -143,6 +143,7 @@ app() {
   echo "== app"
   helm upgrade --install gaffer "$CHARTS/gaffer" -n "$NS" \
     --set host="$host" --set image.registry="$acr" --set image.tag="$tag" \
+    --set "ownerEmails=${owners//,/\\,}" \
     --set acmeEmail="$(envvar ACME_EMAIL deploy/azure.env)" \
     --wait --timeout 15m
   status

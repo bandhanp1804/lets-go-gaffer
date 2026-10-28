@@ -19,6 +19,7 @@ type store struct {
 	workflows.Store
 	states   map[int]db.PlayerState
 	watched  []int
+	watchers map[int][]string
 	upserted []fpl.Player
 	claimed  map[int]bool
 	released []int
@@ -27,8 +28,11 @@ type store struct {
 }
 
 func (s *store) PlayerStates(context.Context) (map[int]db.PlayerState, error) { return s.states, nil }
-func (s *store) Watchlist(context.Context) ([]int, error)                     { return s.watched, nil }
-func (s *store) UpsertTeams(context.Context, []fpl.Team) error                { return nil }
+func (s *store) WatchedPlayers(context.Context) ([]int, error)                { return s.watched, nil }
+func (s *store) Watchers(_ context.Context, id int) ([]string, error) {
+	return s.watchers[id], nil
+}
+func (s *store) UpsertTeams(context.Context, []fpl.Team) error { return nil }
 func (s *store) UpsertPlayers(_ context.Context, ps []fpl.Player) error {
 	s.upserted = ps
 	return nil
@@ -216,5 +220,20 @@ func TestBacktestOutcome_Dropped(t *testing.T) {
 		if got := tt.o.Dropped(); got != tt.want {
 			t.Errorf("%+v: %v, want %v", tt.o, got, tt.want)
 		}
+	}
+}
+
+func TestNotifyWatchers_EachWatcherGetsTheAlertInTheirOwnInbox(t *testing.T) {
+	n := &notifier{}
+	act := &workflows.Activities{Store: &store{watchers: map[int][]string{7: {"", "visitor@x.com"}}}, Notifier: n}
+
+	if err := act.NotifyWatchers(context.Background(), notify.Message{Kind: "watch", Title: "Saka: doubtful", PlayerID: 7}); err != nil {
+		t.Fatal(err)
+	}
+	if len(n.got) != 2 || n.got[0].User != "" || n.got[1].User != "visitor@x.com" || n.got[1].Title != "Saka: doubtful" {
+		t.Errorf("sent %+v", n.got)
+	}
+	if err := act.NotifyWatchers(context.Background(), notify.Message{PlayerID: 99}); err != nil || len(n.got) != 2 {
+		t.Errorf("a player nobody watches: nothing sent (%v, %d)", err, len(n.got))
 	}
 }
