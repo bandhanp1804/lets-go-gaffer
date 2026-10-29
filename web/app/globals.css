@@ -372,20 +372,43 @@ tr.total td {
   border: 1px solid var(--border);
   font-size: 0.85rem;
 }
+/* The shirt is in the club's colours (--club-* from ClubTag.tsx), with a trim at the hem in its
+   second colour; a club without colours keeps the accent. A goalkeeper's shirt is told apart by
+   its gloves-gold collar. */
 .shirt {
   position: relative;
   display: inline-block;
   min-width: 46px;
   padding: 2px 8px;
   border-radius: 6px 6px 12px 12px;
-  background: var(--accent);
-  color: var(--accent-text);
+  background: var(--club-bg, var(--accent));
+  color: var(--club-text, var(--accent-text));
+  box-shadow:
+    inset 0 -3px 0 var(--club-trim, transparent),
+    0 0 0 1px rgba(0, 0, 0, 0.25);
   font-weight: 700;
   font-size: 0.8rem;
 }
 .pos-GKP .shirt {
-  background: #b8860b;
-  color: #fff;
+  box-shadow:
+    inset 0 -3px 0 var(--club-trim, transparent),
+    inset 0 3px 0 #f5c542,
+    0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+.clubtag {
+  display: inline-block;
+  min-width: 2.6em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.78em;
+  letter-spacing: 0.02em;
+  background: var(--club-bg, var(--surface));
+  color: var(--club-text, var(--text));
+  box-shadow:
+    inset 0 -2px 0 var(--club-trim, transparent),
+    0 0 0 1px var(--border);
 }
 .badge {
   position: absolute;

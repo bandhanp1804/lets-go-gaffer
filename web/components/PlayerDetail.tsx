@@ -3,6 +3,7 @@ import { one } from "../lib/format.ts";
 import { kickoffText, scoreText } from "../lib/kickoff.ts";
 import type { ReactNode } from "react";
 import type { Player, PointsPlayer } from "../lib/types.gen.ts";
+import { ClubTag } from "./ClubTag.tsx";
 
 /**
  * What is known about one player, shown when a card is clicked. With a points line it also shows
@@ -15,7 +16,7 @@ export function PlayerDetail({ p, points, gameweek, actions, onClose }: { p: Pla
       <div className="detailhead">
         <strong>{p.name}</strong>
         <span className="muted">
-          {p.team} · {p.position}
+          <ClubTag code={p.team} /> · {p.position}
         </span>
         <button type="button" className="x" aria-label="Close details" onClick={onClose}>
           ×

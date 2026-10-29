@@ -10,6 +10,7 @@ import { relevance } from "../../lib/relevance.ts";
 import type { NewsSearch } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
 import { useWatchlist } from "../../lib/watchlist.ts";
+import { ClubTag } from "../../components/ClubTag.tsx";
 
 export default function News() {
   const [q, setQ] = useState("");
@@ -55,7 +56,7 @@ export default function News() {
                 <div className="panel playerbox">
                   <strong>{r.player.name}</strong> <WatchButton id={r.player.id} name={r.player.name} watch={watch} />{" "}
                   <span className="muted">
-                    {r.player.team} · {r.player.position} · {r.player.price}
+                    <ClubTag code={r.player.team} /> · {r.player.position} · {r.player.price}
                   </span>
                   <span className={`pill ${r.player.status.startsWith("available") ? "" : "waiting"}`}>FPL: {r.player.status}</span>
                   {r.player.news ? <div className="muted">{r.player.news}</div> : null}
