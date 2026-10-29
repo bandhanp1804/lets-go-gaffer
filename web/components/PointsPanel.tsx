@@ -1,4 +1,5 @@
 import type { Points } from "../lib/types.gen.ts";
+import { ClubTag } from "./ClubTag.tsx";
 
 const signedInt = (n: number): string => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "0");
 
@@ -70,7 +71,9 @@ export function PointsPanel({ p }: { p: Points }) {
                     {pl.subbed_off ? " ↓ subbed off" : ""}
                     {pl.bench ? " (bench)" : ""}
                   </td>
-                  <td>{pl.team}</td>
+                  <td>
+                    <ClubTag code={pl.team} />
+                  </td>
                   <td className="num">{pl.minutes}</td>
                   <td className="num">{pl.points}</td>
                   <td className="num">{pl.multiplier}</td>

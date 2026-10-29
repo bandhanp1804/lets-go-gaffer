@@ -1,4 +1,5 @@
 import { availability } from "../lib/pitch.ts";
+import { clubStyle } from "./ClubTag.tsx";
 import { one } from "../lib/format.ts";
 import type { Player } from "../lib/types.gen.ts";
 
@@ -22,7 +23,7 @@ export function PlayerCard({ p, role, onClick, selected, mark }: Props) {
   const cls = `card pos-${p.position}${selected ? " selected" : ""}${mark ? ` mark-${mark}` : ""}${onClick ? " clickable" : ""}`;
   const body = (
     <>
-      <div className="shirt">
+      <div className="shirt" style={clubStyle(p.team)}>
         {p.team}
         {role ? <span className={`badge role-${role}`}>{role}</span> : null}
         {a !== "ok" ? <span className={`flag flag-${a}`} aria-label={p.status} /> : null}
