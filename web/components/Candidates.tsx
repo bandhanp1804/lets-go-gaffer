@@ -7,6 +7,7 @@ import { one } from "../lib/format.ts";
 import { availability } from "../lib/pitch.ts";
 import type { Player, Players } from "../lib/types.gen.ts";
 import { useApi } from "../lib/useApi.ts";
+import { ClubTag } from "./ClubTag.tsx";
 
 interface Props {
   /** The player being replaced: candidates are of his position. */
@@ -81,7 +82,9 @@ export function Candidates({ out, maxPrice, ownedIds, onPick, onCancel }: Props)
                   {rows.map((p) => (
                     <tr key={p.id}>
                       <td>{p.name}</td>
-                      <td>{p.team}</td>
+                      <td>
+                        <ClubTag code={p.team} />
+                      </td>
                       <td className="num">{p.price}</td>
                       <td className="num">{one(p.xp)}</td>
                       <td className="num">{p.form}</td>

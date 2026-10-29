@@ -10,6 +10,7 @@ import { nextSort, pageLabel, type Sort } from "../../lib/paging.ts";
 import type { Players, Status } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
 import { useWatchlist } from "../../lib/watchlist.ts";
+import { ClubTag } from "../../components/ClubTag.tsx";
 
 interface Filters {
   position: string;
@@ -142,7 +143,9 @@ export default function PlayersPage() {
                         <td>
                           <WatchButton id={p.id} name={p.name} watch={watch} /> {p.name}
                         </td>
-                        <td>{p.team}</td>
+                        <td>
+                          <ClubTag code={p.team} />
+                        </td>
                         <td>{p.position}</td>
                         <td className="num">{p.price}</td>
                         <td className="num">{one(p.xp)}</td>

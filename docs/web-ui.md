@@ -34,6 +34,8 @@ The team id is remembered in this browser. The token lives in `sessionStorage`, 
 
 ## Design notes
 
+- **Club colours.** Each player's shirt on the pitch, and the club tag in tables, is in his club's colours, with a trim in its second colour ([clubs.ts](../web/lib/clubs.ts)). Every text colour is checked against its shirt for WCAG AA contrast in a test. A club not in the table keeps the app's own colours.
+
 - **No CORS and no keys in the browser.** `next.config.mjs` rewrites `/api/*` to the Go server (`GAFFER_API`, default `http://127.0.0.1:8080`), so the browser only talks to its own origin and the API's origin and host guard still applies through the proxy.
 - **Answers are rendered from text, never HTML.** `lib/markdown.ts` turns the assistant's markdown into data and React builds elements from it, so nothing the model (or a news story it read) writes can inject markup or a script link. Only `http(s)` addresses become links.
 - **Few dependencies.** Next, React and TypeScript, pinned exactly. No UI kit, chart library or CSS framework: plain CSS, light and dark.

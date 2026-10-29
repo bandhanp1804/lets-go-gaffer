@@ -8,6 +8,7 @@ import { webURL } from "../../lib/format.ts";
 import type { Alerts } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
 import { useWatchlist, type WatchState } from "../../lib/watchlist.ts";
+import { ClubTag } from "../../components/ClubTag.tsx";
 
 const kindLabel: Record<string, string> = { watch: "Watchlist", briefing: "Briefing", health: "Model health" };
 
@@ -106,7 +107,7 @@ function WatchedList({ watch }: { watch: WatchState }) {
     <ul className="watched">
       {watch.players.map((p) => (
         <li key={p.id}>
-          <WatchButton id={p.id} name={p.name} watch={watch} /> <strong>{p.name}</strong> <span className="muted">{p.team}</span>{" "}
+          <WatchButton id={p.id} name={p.name} watch={watch} /> <strong>{p.name}</strong> <ClubTag code={p.team} />{" "}
           <span className={`pill ${p.status.startsWith("available") ? "" : "waiting"}`}>{p.status}</span>
         </li>
       ))}

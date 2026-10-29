@@ -1,5 +1,6 @@
 import { one } from "../lib/format.ts";
 import type { Lineup } from "../lib/types.gen.ts";
+import { ClubTag } from "./ClubTag.tsx";
 
 interface Props {
   l: Lineup;
@@ -51,7 +52,9 @@ export function CaptainPicker({ l, onCaptain, onVice, onReset }: Props) {
                   {o.name}
                   {o.is_captain ? " (C)" : o.is_vice_captain ? " (V)" : ""}
                 </td>
-                <td>{o.team}</td>
+                <td>
+                  <ClubTag code={o.team} />
+                </td>
                 <td className="num">{one(o.xp)}</td>
                 <td className="num">{one(o.as_captain)}</td>
                 <td className="num">{o.cost > 0 ? `−${one(o.cost)}` : "—"}</td>
