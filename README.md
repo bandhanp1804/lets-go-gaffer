@@ -2,9 +2,27 @@
 
 **Live at [letsgogaffer.tech](https://letsgogaffer.tech)**: sign in with GitHub, Google or Microsoft.
 
+*Unofficial: not affiliated with or endorsed by the Premier League or Fantasy Premier League. "Premier League" and "Fantasy Premier League" are trademarks of The Football Association Premier League Limited.*
+
 A Fantasy Premier League assistant. It shows your squad and how it is scoring, picks your best XI and captain, weighs transfers (including ones you try yourself), says when to play your chips, gathers team news from several outlets, and answers questions in plain English with its numbers checked by code.
 
 **The rule that shapes it: the LLM never does maths or checks rules.** Expected points, lineups, transfers, chips and FPL's squad rules are all worked out in Go. Claude only narrates the results and retrieves news, and what it says is checked against the tools' numbers before you see it.
+
+## Results
+
+**The expected-points model** (`gaffer backtest`, 2026/27 gameweeks 3–8, each predicted only from the gameweeks before it, 669 players):
+
+| Predictor | Rank correlation with actual points (Spearman) ↑ | Mean absolute error (points) ↓ | Average points of its top 20 ↑ |
+|---|---|---|---|
+| Last three games' form (the naive pick) | 0.343 | 2.26 | 3.62 |
+| Season average per gameweek (baseline) | 0.400 | 2.08 | 3.93 |
+| **The model** (recency, minutes, positional prior, fixture difficulty) | **0.516** | **1.89** | **4.41** |
+
+It beats the form scorer in all 6 gameweeks. Tuned only on earlier weeks and scored on the next one it never saw, it averages 0.499 against the form scorer's 0.338 ([how it works](docs/model.md)).
+
+**The assistant:** 22 eval cases, run nightly against Claude Haiku 5.5. Each checks that it called the right tools and gave the expected answer, and that it invented no numbers, citations or clubs (the grounding checks), made no failed tool calls, and finished within 5 tool rounds. 22 of 22 passed in the latest recorded runs, October 2026 ([the assistant](docs/assistant.md)).
+
+**The service:** the API's availability SLO is 99% of requests without a server error over 7 days, with a Datadog monitor that alerts when the error budget burns fast ([observability](docs/observability.md)).
 
 ## What is in here
 

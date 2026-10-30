@@ -8,6 +8,10 @@
 *.so
 *.dylib
 
+# Built binaries: build into bin/ (go build -o bin/gaffer ./cmd/gaffer), never the repository root
+/bin/
+/gaffer
+
 # Test binary, built with `go test -c`
 *.test
 
