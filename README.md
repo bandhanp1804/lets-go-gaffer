@@ -1,12 +1,29 @@
-# lets-go-gaffer
+# Let's Go Gaffer
 
-A Fantasy Premier League assistant for one manager. It shows your squad and how it is scoring, picks your best XI and captain, weighs transfers (including ones you try yourself), says when to play your chips, and answers questions in plain English with its numbers checked by code.
+**Live at [letsgogaffer.tech](https://letsgogaffer.tech)**: sign in with GitHub, Google or Microsoft.
 
-Go does all the computing and rule checking; an LLM only narrates and retrieves news. Pure-Go packages, a Postgres + pgvector store, a Claude-powered assistant, and a Next.js web app.
+A Fantasy Premier League assistant. It shows your squad and how it is scoring, picks your best XI and captain, weighs transfers (including ones you try yourself), says when to play your chips, gathers team news from several outlets, and answers questions in plain English with its numbers checked by code.
+
+**The rule that shapes it: the LLM never does maths or checks rules.** Expected points, lineups, transfers, chips and FPL's squad rules are all worked out in Go. Claude only narrates the results and retrieves news, and what it says is checked against the tools' numbers before you see it.
+
+## What is in here
+
+| Area | What it shows |
+|---|---|
+| **Go backend** | A stdlib-first HTTP API, an expected-points model backtested on gameweeks it never saw, a lineup and transfer optimizer, and table-driven tests throughout. |
+| **Retrieval (RAG)** | News from BBC, Sky, the Guardian and more, embedded with Voyage into Postgres + pgvector, and searched by meaning and narrowed to the player asked about. |
+| **The assistant** | Claude with tool use and streaming answers, with an eval suite run nightly. |
+| **Workflows** | Temporal: scheduled news pulls, per-player watch workflows that alert whoever starred a player, a gameweek briefing, and resumable backfills. |
+| **Web** | Next.js, with types generated from the Go structs. |
+| **Infrastructure** | Terraform on Azure: AKS with autoscaling, managed Postgres, and DNS. Helm, Traefik, cert-manager, and sign-in through Dex and oauth2-proxy, with per-user daily limits. |
+| **Delivery** | GitHub Actions with OIDC (no stored cloud keys), a Terraform plan on each pull request, a preview environment per pull request (torn down on merge), and manual deploys from `main`. |
+| **Observability** | OpenTelemetry traces and metrics from Go to Datadog, logs tied to traces, and dashboards, monitors and an SLO as code. |
+
+The [architecture](docs/architecture.md) and [deployment](docs/deploy.md) docs explain the choices.
 
 ## Start the app
 
-**You need:** Go 1.23+, Docker, and Node 20.9+ (Node 23.6+ to run the web tests).
+**You need:** Go 1.26+, Docker, and Node 20.9+ (Node 23.6+ to run the web tests).
 
 **1. Start the database** (Postgres with pgvector on port 5433, and the Temporal dev server for the optional background workflows):
 
@@ -82,6 +99,7 @@ See the [command reference](docs/cli.md) for the rest.
 | [Observability](docs/observability.md) | traces, metrics, logs, dashboards and alerts in Datadog |
 | [Development](docs/development.md) | tests, generated types, opt-in live tests, troubleshooting |
 | [Roadmap](docs/roadmap.md) | what is done and what is next |
+| [Security](SECURITY.md) | how to report a vulnerability, and how secrets are kept out of the repository |
 
 ## License
 
