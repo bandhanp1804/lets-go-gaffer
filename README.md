@@ -117,6 +117,7 @@ See the [command reference](docs/cli.md) for the rest.
 | [Observability](docs/observability.md) | traces, metrics, logs, dashboards and alerts in Datadog |
 | [Development](docs/development.md) | tests, generated types, opt-in live tests, troubleshooting |
 | [Roadmap](docs/roadmap.md) | what is done and what is next |
+| [Contributing](CONTRIBUTING.md) | the project's rules, the checks to run, and how pull requests are reviewed |
 | [Security](SECURITY.md) | how to report a vulnerability, and how secrets are kept out of the repository |
 
 ## License
