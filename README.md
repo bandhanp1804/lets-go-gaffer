@@ -24,7 +24,16 @@ It beats the form scorer in all 6 gameweeks. Tuned only on earlier weeks and sco
 
 **The assistant:** 22 eval cases, run nightly against Claude Haiku 5.5. Each checks that it called the right tools and gave the expected answer, and that it invented no numbers, citations or clubs (the grounding checks), made no failed tool calls, and finished within 5 tool rounds. 22 of 22 passed in the latest recorded runs, October 2026 ([the assistant](docs/assistant.md)).
 
-**The service:** the API's availability SLO is 99% of requests without a server error over 7 days, with a Datadog monitor that alerts when the error budget burns fast ([observability](docs/observability.md)).
+**The service** (Datadog APM, from tracing going live on 28 October 2026 to the 30th; about 60 API requests, so a small sample):
+
+| Measure | Value |
+|---|---|
+| API latency, every endpoint but Ask | p50 5 ms, p95 0.20 s |
+| Ask, a whole streamed answer from Claude | p95 5.8 s (4 questions) |
+| Server errors | 0 |
+| Availability SLO | 99% of requests over 7 days, with an alert when the error budget burns fast |
+
+See [observability](docs/observability.md) for how these are measured.
 
 ## What is in here
 
