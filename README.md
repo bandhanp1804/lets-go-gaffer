@@ -4,6 +4,8 @@
 
 *Unofficial: not affiliated with or endorsed by the Premier League or Fantasy Premier League. "Premier League" and "Fantasy Premier League" are trademarks of The Football Association Premier League Limited.*
 
+[![The Let's Go Gaffer home page: a pitch-styled hero with "Sign in to start", above cards for the best XI, transfers, Ask the Gaffer and team news](docs/images/app.png)](https://letsgogaffer.tech)
+
 A Fantasy Premier League assistant. It shows your squad and how it is scoring, picks your best XI and captain, weighs transfers (including ones you try yourself), says when to play your chips, gathers team news from several outlets, and answers questions in plain English with its numbers checked by code.
 
 **The rule that shapes it: the LLM never does maths or checks rules.** Expected points, lineups, transfers, chips and FPL's squad rules are all worked out in Go. Claude only narrates the results and retrieves news, and what it says is checked against the tools' numbers before you see it.
@@ -22,7 +24,16 @@ It beats the form scorer in all 6 gameweeks. Tuned only on earlier weeks and sco
 
 **The assistant:** 22 eval cases, run nightly against Claude Haiku 5.5. Each checks that it called the right tools and gave the expected answer, and that it invented no numbers, citations or clubs (the grounding checks), made no failed tool calls, and finished within 5 tool rounds. 22 of 22 passed in the latest recorded runs, October 2026 ([the assistant](docs/assistant.md)).
 
-**The service:** the API's availability SLO is 99% of requests without a server error over 7 days, with a Datadog monitor that alerts when the error budget burns fast ([observability](docs/observability.md)).
+**The service** (Datadog APM, from tracing going live on 28 October 2026 to the 30th; about 60 API requests, so a small sample):
+
+| Measure | Value |
+|---|---|
+| API latency, every endpoint but Ask | p50 5 ms, p95 0.20 s |
+| Ask, a whole streamed answer from Claude | p95 5.8 s (4 questions) |
+| Server errors | 0 |
+| Availability SLO | 99% of requests over 7 days, with an alert when the error budget burns fast |
+
+See [observability](docs/observability.md) for how these are measured.
 
 ## What is in here
 
@@ -117,6 +128,7 @@ See the [command reference](docs/cli.md) for the rest.
 | [Observability](docs/observability.md) | traces, metrics, logs, dashboards and alerts in Datadog |
 | [Development](docs/development.md) | tests, generated types, opt-in live tests, troubleshooting |
 | [Roadmap](docs/roadmap.md) | what is done and what is next |
+| [Contributing](CONTRIBUTING.md) | the project's rules, the checks to run, and how pull requests are reviewed |
 | [Security](SECURITY.md) | how to report a vulnerability, and how secrets are kept out of the repository |
 
 ## License
