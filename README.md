@@ -4,6 +4,8 @@
 
 *Unofficial: not affiliated with or endorsed by the Premier League or Fantasy Premier League. "Premier League" and "Fantasy Premier League" are trademarks of The Football Association Premier League Limited.*
 
+[![The Let's Go Gaffer home page: a pitch-styled hero with "Sign in to start", above cards for the best XI, transfers, Ask the Gaffer and team news](docs/images/app.png)](https://letsgogaffer.tech)
+
 A Fantasy Premier League assistant. It shows your squad and how it is scoring, picks your best XI and captain, weighs transfers (including ones you try yourself), says when to play your chips, gathers team news from several outlets, and answers questions in plain English with its numbers checked by code.
 
 **The rule that shapes it: the LLM never does maths or checks rules.** Expected points, lineups, transfers, chips and FPL's squad rules are all worked out in Go. Claude only narrates the results and retrieves news, and what it says is checked against the tools' numbers before you see it.
