@@ -187,13 +187,21 @@ resource "azurerm_consumption_budget_subscription" "main" {
     start_date = formatdate("YYYY-MM-01'T'00:00:00Z", timestamp())
   }
 
+  # Emails at half, most and all of the budget actually spent, and as soon as Azure forecasts the
+  # month will go over: that one arrives days earlier, while there is still time to stop the
+  # cluster (deploy/scripts/stop.sh).
   dynamic "notification" {
-    for_each = [50, 80]
+    for_each = [
+      { threshold = 50, type = "Actual" },
+      { threshold = 80, type = "Actual" },
+      { threshold = 100, type = "Actual" },
+      { threshold = 100, type = "Forecasted" },
+    ]
     content {
       enabled        = true
-      threshold      = notification.value
+      threshold      = notification.value.threshold
       operator       = "GreaterThanOrEqualTo"
-      threshold_type = "Actual"
+      threshold_type = notification.value.type
       contact_emails = [var.alert_email]
     }
   }

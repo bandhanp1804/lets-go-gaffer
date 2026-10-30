@@ -1,6 +1,6 @@
 # Command-line reference
 
-All commands read `.env` (see [configuration.md](configuration.md)). Run them as `go run ./cmd/gaffer <command>`, or build once with `go build -o gaffer ./cmd/gaffer`.
+All commands read `.env` (see [configuration.md](configuration.md)). Run them as `go run ./cmd/gaffer <command>`, or build once with `go build -o bin/gaffer ./cmd/gaffer` and run `bin/gaffer <command>` (`bin/` is gitignored).
 
 | Command | What it does |
 |---|---|
