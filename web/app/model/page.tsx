@@ -154,24 +154,26 @@ function ModelHealth({ h }: { h: Health }) {
           {h.evals.length === 0 ? (
             <p className="muted small">No run yet.</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th className="num">Passed</th>
-                  <th>Failing</th>
-                </tr>
-              </thead>
-              <tbody>
-                {h.evals.map((e, i) => (
-                  <tr key={i} className={e.pass_rate < 0.9 ? "status-out" : undefined}>
-                    <td>{e.age} ago</td>
-                    <td className="num">{Math.round(e.pass_rate * 100)}%</td>
-                    <td className="small">{e.failing.length > 0 ? e.failing.join(", ") : "none"}</td>
+            <div className="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th className="num">Passed</th>
+                    <th>Failing</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {h.evals.map((e, i) => (
+                    <tr key={i} className={e.pass_rate < 0.9 ? "status-out" : undefined}>
+                      <td>{e.age} ago</td>
+                      <td className="num">{Math.round(e.pass_rate * 100)}%</td>
+                      <td className="small">{e.failing.length > 0 ? e.failing.join(", ") : "none"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
         <div>
@@ -179,26 +181,28 @@ function ModelHealth({ h }: { h: Health }) {
           {h.backtests.length === 0 ? (
             <p className="muted small">No run yet.</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Through</th>
-                  <th className="num">Spearman</th>
-                  <th className="num">Error</th>
-                  <th>When</th>
-                </tr>
-              </thead>
-              <tbody>
-                {h.backtests.map((b, i) => (
-                  <tr key={i}>
-                    <td>GW{b.through_gameweek}</td>
-                    <td className="num">{three(b.spearman)}</td>
-                    <td className="num">{two(b.mae)}</td>
-                    <td>{b.age} ago</td>
+            <div className="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Through</th>
+                    <th className="num">Spearman</th>
+                    <th className="num">Error</th>
+                    <th>When</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {h.backtests.map((b, i) => (
+                    <tr key={i}>
+                      <td>GW{b.through_gameweek}</td>
+                      <td className="num">{three(b.spearman)}</td>
+                      <td className="num">{two(b.mae)}</td>
+                      <td>{b.age} ago</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

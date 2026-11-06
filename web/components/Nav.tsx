@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { isPublicPath, signInURL } from "../lib/session.ts";
 import { canSignOut, signOutURL } from "../lib/signout.ts";
 import type { Usage } from "../lib/types.gen.ts";
@@ -33,6 +34,18 @@ export function Nav() {
   const path = usePathname();
   const { identity, ready, live, openModal, settings } = useTeam();
   const session = useSession();
+  // On a narrow screen the links fold into a menu (see .navtoggle in globals.css). It closes when
+  // a page is chosen, and on Escape.
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => setMenuOpen(false), [path]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
   // The pages served without a login show only the way in until the browser is known to be
   // signed in: every other link would only ask for the login.
   if (isPublicPath(path) && session !== "in") {
@@ -49,12 +62,17 @@ export function Nav() {
       </nav>
     );
   }
+  const signOut = canSignOut(settings?.user) ? (
+    <a className="signout" href={signOutURL(window.location.host)} title={`Signed in as ${settings?.user}`}>
+      Sign out
+    </a>
+  ) : null;
   return (
-    <nav className="nav" aria-label="Main">
+    <nav className={menuOpen ? "nav open" : "nav"} aria-label="Main">
       <Link href="/" className="brand">
-        <span className="ball" aria-hidden="true">⚽</span> Let’s Go Gaffer
+        <span className="ball" aria-hidden="true">⚽</span> <span className="brandname">Let’s Go Gaffer</span>
       </Link>
-      <ul>
+      <ul id="navlinks">
         {links.filter((l) => owner || l.href !== "/model").map((l) => {
           const active = l.href === "/" ? path === "/" : path.startsWith(l.href);
           return (
@@ -66,16 +84,16 @@ export function Nav() {
             </li>
           );
         })}
+        {signOut ? <li className="navsignout">{signOut}</li> : null}
       </ul>
       <button type="button" className="teamchip" onClick={openModal} aria-haspopup="dialog">
         {!ready ? "…" : identity.teamId === null ? "Pick your team" : `Team ${identity.teamId}`}
         {ready && identity.teamId !== null ? <span className={live ? "tag live" : "tag"}>{live ? "live" : "public"}</span> : null}
       </button>
-      {canSignOut(settings?.user) ? (
-        <a className="signout" href={signOutURL(window.location.host)} title={`Signed in as ${settings?.user}`}>
-          Sign out
-        </a>
-      ) : null}
+      <button type="button" className="navtoggle" aria-expanded={menuOpen} aria-controls="navlinks" onClick={() => setMenuOpen((o) => !o)}>
+        {menuOpen ? "Close" : "Menu"}
+      </button>
+      {signOut}
     </nav>
   );
 }

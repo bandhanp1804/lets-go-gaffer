@@ -105,12 +105,13 @@ code {
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  gap: 16px;
+  flex-wrap: wrap; /* a window too narrow for every link wraps them to a second line, never sideways */
+  gap: 8px 16px;
   padding: 8px 16px;
-  overflow-x: auto;
 }
 .nav ul {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   list-style: none;
   margin: 0;
@@ -666,8 +667,6 @@ th button.sort:focus-visible {
 }
 .teamchip {
   margin-left: auto;
-  position: sticky; /* stays in view when the links scroll sideways on a narrow screen */
-  right: 0;
   background: var(--surface);
   white-space: nowrap;
   display: inline-flex;
@@ -1342,7 +1341,7 @@ tr.benchrow td {
 /* chip planner */
 .chipgrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: 12px;
 }
 .chipcard header {
@@ -1636,6 +1635,95 @@ ul.watched li {
   margin-left: auto;
   font-weight: 700;
   color: var(--accent);
+}
+
+/* The menu button and the sign-out entry inside the list exist for narrow screens only. */
+.navtoggle,
+.nav li.navsignout {
+  display: none;
+}
+
+/* Phones and narrow windows: the logo, the team and a Menu button on one line; the pages fold
+   into a panel under the bar, two to a row, with Sign out at the end. */
+@media (max-width: 900px) {
+  .nav {
+    flex-wrap: nowrap;
+    gap: 10px;
+    padding: 8px 12px;
+  }
+  .nav ul {
+    display: none;
+  }
+  .nav.open ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    padding: 10px 12px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  }
+  .nav li a {
+    padding: 10px 12px; /* a comfortable tap target */
+  }
+  .nav li.navsignout {
+    display: block;
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+    padding: 10px 12px 0;
+  }
+  .nav li.navsignout .signout {
+    margin-left: 0;
+  }
+  .nav > .signout {
+    display: none;
+  }
+  .navtoggle {
+    display: inline-flex;
+    flex-shrink: 0;
+    padding: 6px 12px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .teamchip {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+@media (max-width: 420px) {
+  .brand .brandname {
+    display: none; /* the ball alone, so the team and the menu fit */
+  }
+}
+
+/* Tables on a phone: tighter cells, and a fade at the right edge that says there is more to
+   scroll to. */
+@media (max-width: 600px) {
+  th,
+  td {
+    padding: 6px 8px;
+  }
+  table {
+    font-size: 0.88rem;
+  }
+  .tablewrap {
+    background:
+      linear-gradient(to left, var(--surface), var(--surface)) left / 24px 100% no-repeat local,
+      linear-gradient(to left, transparent, var(--surface)) right / 24px 100% no-repeat local,
+      linear-gradient(to left, rgba(0, 0, 0, 0.14), transparent) right / 14px 100% no-repeat scroll,
+      var(--surface);
+  }
 }
 
 /* Substitutions in What if */

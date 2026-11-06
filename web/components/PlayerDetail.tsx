@@ -82,28 +82,30 @@ function Breakdown({ pl, gameweek }: { pl: PointsPlayer; gameweek?: number }) {
             </span>
           </div>
           {m.stats.length > 0 ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>Statistic</th>
-                  <th className="num">Value</th>
-                  <th className="num">Points</th>
-                </tr>
-              </thead>
-              <tbody>
-                {m.stats.map((r) => (
-                  <tr key={r.label}>
-                    <td>{r.label}</td>
-                    <td className="num">{r.value}</td>
-                    <td className="num">{r.points} pts</td>
+            <div className="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Statistic</th>
+                    <th className="num">Value</th>
+                    <th className="num">Points</th>
                   </tr>
-                ))}
-                <tr className="total">
-                  <td colSpan={2}>Total</td>
-                  <td className="num">{m.points} pts</td>
-                </tr>
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {m.stats.map((r) => (
+                    <tr key={r.label}>
+                      <td>{r.label}</td>
+                      <td className="num">{r.value}</td>
+                      <td className="num">{r.points} pts</td>
+                    </tr>
+                  ))}
+                  <tr className="total">
+                    <td colSpan={2}>Total</td>
+                    <td className="num">{m.points} pts</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           ) : (
             <p className="muted small">{m.status === "Not started" ? "Not played yet." : "Nothing scored."}</p>
           )}
