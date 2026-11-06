@@ -1637,73 +1637,128 @@ ul.watched li {
   color: var(--accent);
 }
 
-/* The menu button and the sign-out entry inside the list exist for narrow screens only. */
-.navtoggle,
-.nav li.navsignout {
+/* The phone navigation (TabBar.tsx), after the FPL app: the main pages as tabs along the bottom
+   and the rest in a panel that More opens from the bottom. Hidden on wider screens. */
+.tabbar,
+.moresheet,
+.moreshade {
   display: none;
 }
 
-/* Phones and narrow windows: the logo, the team and a Menu button on one line; the pages fold
-   into a panel under the bar, two to a row, with Sign out at the end. */
 @media (max-width: 900px) {
+  :root {
+    --tabbar-h: 60px;
+  }
+  /* The top bar keeps only the logo and the team; the pages move to the tab bar. */
   .nav {
     flex-wrap: nowrap;
     gap: 10px;
     padding: 8px 12px;
   }
-  .nav ul {
-    display: none;
-  }
-  .nav.open ul {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    padding: 10px 12px 14px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
-  }
-  .nav li a {
-    padding: 10px 12px; /* a comfortable tap target */
-  }
-  .nav li.navsignout {
-    display: block;
-    grid-column: 1 / -1;
-    border-top: 1px solid var(--border);
-    margin-top: 4px;
-    padding: 10px 12px 0;
-  }
-  .nav li.navsignout .signout {
-    margin-left: 0;
-  }
+  .nav ul,
   .nav > .signout {
     display: none;
-  }
-  .navtoggle {
-    display: inline-flex;
-    flex-shrink: 0;
-    padding: 6px 12px;
-    font: inherit;
-    font-weight: 600;
-    color: var(--text);
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    cursor: pointer;
   }
   .teamchip {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* Room at the bottom of every page for the bar, and for the iPhone home indicator under it. */
+  main {
+    padding-bottom: calc(var(--tabbar-h) + 40px + env(safe-area-inset-bottom));
+  }
+  .askbar {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  }
+
+  .tabbar {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .tabbar a,
+  .tabbar button {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    font: inherit;
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-decoration: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tabbar .active {
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .tabbar .unread {
+    position: absolute;
+    top: 6px;
+    left: calc(50% + 6px);
+  }
+
+  .moreshade {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    background: rgba(0, 0, 0, 0.35);
+  }
+  .moresheet {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+    z-index: 28;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 14px 12px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.25);
+  }
+  .moresheet a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 10px;
+    color: var(--text);
+    text-decoration: none;
+    background: var(--surface-2);
+  }
+  .moresheet a.active {
+    color: var(--accent-text);
+    background: var(--accent);
+  }
+  .moresheet .moresignout {
+    grid-column: 1 / -1;
+    background: none;
+    color: var(--muted);
+  }
 }
 @media (max-width: 420px) {
   .brand .brandname {
-    display: none; /* the ball alone, so the team and the menu fit */
+    display: none; /* the ball alone, so the team chip fits */
   }
 }
 
