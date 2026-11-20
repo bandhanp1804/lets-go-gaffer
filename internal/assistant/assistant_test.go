@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -520,7 +521,7 @@ func TestAsk_ToolCallsSeeTheViewerOfTheRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(b.seen) != 1 || b.seen[0] != want {
+	if len(b.seen) != 1 || !reflect.DeepEqual(b.seen[0], want) {
 		t.Errorf("the tool saw %+v, want %+v", b.seen, want)
 	}
 }

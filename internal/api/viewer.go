@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/bandhanpatel/lets-go-gaffer/internal/myteam"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/service"
 )
 
@@ -19,7 +21,13 @@ import (
 const (
 	teamHeader  = "X-Gaffer-Team"
 	tokenHeader = "X-Gaffer-Token"
+	// madeHeader carries transfers the manager made since the last deadline, which FPL keeps
+	// private: player ids as "sold>bought", comma-separated ("101>201,113>206").
+	madeHeader = "X-Gaffer-Made"
 )
+
+// maxMade is the most entered transfers a request may carry: a whole squad's worth.
+const maxMade = 15
 
 // viewerFrom reads the team and token headers. The token is validated without being
 // echoed anywhere: an error says the header is malformed, never what it held.
@@ -42,7 +50,35 @@ func viewerFrom(r *http.Request) (service.Viewer, error) {
 		}
 		v.Token = token
 	}
+	if raw := strings.TrimSpace(r.Header.Get(madeHeader)); raw != "" {
+		made, err := madeFrom(raw)
+		if err != nil {
+			return v, err
+		}
+		v.Made = made
+	}
 	return v, nil
+}
+
+// madeFrom reads the entered transfers. Only player ids are accepted, so what reaches the
+// service is unambiguous; the service then checks them against the squad and FPL's rules.
+func madeFrom(raw string) ([]myteam.SwapSpec, error) {
+	bad := &service.InputError{Msg: `the transfers you entered are malformed: each should be the ids of the player sold and the player bought, like "101>201"`}
+	made, err := myteam.ParseSwaps([]string{raw})
+	if err != nil {
+		return nil, bad
+	}
+	if len(made) > maxMade {
+		return nil, &service.InputError{Msg: fmt.Sprintf("at most %d entered transfers are allowed", maxMade)}
+	}
+	for _, m := range made {
+		for _, id := range []string{m.Out, m.In} {
+			if n, err := strconv.Atoi(id); err != nil || n < 1 {
+				return nil, bad
+			}
+		}
+	}
+	return made, nil
 }
 
 // localUser is the one user of a server without a login proxy: the manager on their own machine.
@@ -97,6 +133,8 @@ func (s *Server) withViewer(next http.Handler) http.Handler {
 				s.fail(w, r, err)
 				return
 			case v.TeamID == 0:
+				// The saved team and token, with the transfers this request says were made.
+				saved.Made = v.Made
 				v = saved
 			case v.TeamID == saved.TeamID:
 				v.Token = saved.Token

@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/bandhanpatel/lets-go-gaffer/internal/api"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/myteam"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/service"
 )
 
@@ -25,6 +27,7 @@ func TestViewerHeadersReachTheService(t *testing.T) {
 		{"team and a bare token", map[string]string{"X-Gaffer-Team": "42", "X-Gaffer-Token": jwt}, service.Viewer{TeamID: 42, Token: "Bearer " + jwt}},
 		{"a token pasted with Bearer", map[string]string{"X-Gaffer-Token": "Bearer " + jwt}, service.Viewer{Token: "Bearer " + jwt}},
 		{"lower-case bearer and stray spaces", map[string]string{"X-Gaffer-Token": "  bearer   " + jwt + " "}, service.Viewer{Token: "Bearer " + jwt}},
+		{"entered transfers", map[string]string{"X-Gaffer-Made": "101>201, 113>206"}, service.Viewer{Made: []myteam.SwapSpec{{Out: "101", In: "201"}, {Out: "113", In: "206"}}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -32,7 +35,7 @@ func TestViewerHeadersReachTheService(t *testing.T) {
 
 			w := r.do("GET", "/api/team", "", tt.hdr)
 
-			if w.Code != 200 || r.svc.viewer != tt.want {
+			if w.Code != 200 || !reflect.DeepEqual(r.svc.viewer, tt.want) {
 				t.Errorf("status %d viewer %+v, want %+v", w.Code, r.svc.viewer, tt.want)
 			}
 		})
@@ -48,6 +51,10 @@ func TestMalformedViewerHeadersAre400AndNeverEchoTheToken(t *testing.T) {
 		{"X-Gaffer-Token": "has spaces inside it"},
 		{"X-Gaffer-Token": "<script>alert(1)</script>"},
 		{"X-Gaffer-Token": strings.Repeat("a", 5000)},
+		{"X-Gaffer-Made": "Haaland>Isak"},                 // names: only ids are accepted
+		{"X-Gaffer-Made": "101-201"},                      // not sold>bought
+		{"X-Gaffer-Made": "0>201"},                        // not a player id
+		{"X-Gaffer-Made": strings.Repeat("101>201,", 16)}, // more than a squad
 	}
 	for _, h := range bad {
 		r := newRig(t, nil)
@@ -105,7 +112,7 @@ func TestACustomHeaderFromAnotherOriginIsRefusedBeforeItCanDoAnything(t *testing
 
 	w := r.do("GET", "/api/team", "", map[string]string{"Origin": "https://evil.example", "X-Gaffer-Team": "42", "X-Gaffer-Token": jwt})
 
-	if w.Code != http.StatusForbidden || r.svc.viewer != (service.Viewer{}) {
+	if w.Code != http.StatusForbidden || !reflect.DeepEqual(r.svc.viewer, service.Viewer{}) {
 		t.Errorf("status %d, service saw %+v", w.Code, r.svc.viewer)
 	}
 }

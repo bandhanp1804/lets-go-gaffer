@@ -5,6 +5,7 @@ import { Async } from "../../components/Async.tsx";
 import { PlayerDetail } from "../../components/PlayerDetail.tsx";
 import { PointsPanel } from "../../components/PointsPanel.tsx";
 import { Notes } from "../../components/Notes.tsx";
+import { PrivateTransfersNote, sourceLabel } from "../../components/PrivateTransfers.tsx";
 import { Pitch } from "../../components/Pitch.tsx";
 import type { MyTeam, Player } from "../../lib/types.gen.ts";
 import { useApi } from "../../lib/useApi.ts";
@@ -22,7 +23,7 @@ export default function Team() {
               {t.team_name} <span className="muted">· {t.manager}</span>
             </p>
             <div className="chips">
-              <span className={`chip ${t.source === "live" ? "good" : "warn"}`}>{t.source === "live" ? "Live from FPL" : "Public data"}</span>
+              <span className={`chip ${t.source === "live" ? "good" : "warn"}`}>{sourceLabel(t.source, t.squad_as_of)}</span>
               <span className="chip">As of {t.squad_as_of}</span>
               <span className="chip">Bank {t.bank}</span>
               <span className="chip">{t.free_transfers_left} free transfer{t.free_transfers_left === 1 ? "" : "s"}</span>
@@ -31,6 +32,7 @@ export default function Team() {
                 <span className="chip" key={c} title="a chip you can still play">chip: {c}</span>
               ))}
             </div>
+            <PrivateTransfersNote source={t.source} gameweek={t.gameweek} />
             {t.points ? <PointsPanel p={t.points} /> : null}
             <Notes notes={t.notes} />
             <p className="muted">Click a player for details and where his points came from.</p>

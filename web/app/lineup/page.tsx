@@ -6,6 +6,7 @@ import { CaptainPicker } from "../../components/CaptainPicker.tsx";
 import { ChipPlanner } from "../../components/ChipPlanner.tsx";
 import { PlayerDetail } from "../../components/PlayerDetail.tsx";
 import { Notes } from "../../components/Notes.tsx";
+import { PrivateTransfersNote, sourceLabel } from "../../components/PrivateTransfers.tsx";
 import { Pitch } from "../../components/Pitch.tsx";
 import { one, signed, two } from "../../lib/format.ts";
 import { query } from "../../lib/api.ts";
@@ -33,9 +34,10 @@ export default function LineupPage() {
               GW{l.gameweek}: <strong>{l.formation}</strong>, {one(l.expected_points)} expected points with the captain counted twice.
             </p>
             <div className="chips">
-              <span className={`chip ${l.source === "live" ? "good" : "warn"}`}>{l.source === "live" ? "Live from FPL" : "Public data"}</span>
+              <span className={`chip ${l.source === "live" ? "good" : "warn"}`}>{sourceLabel(l.source, l.squad_as_of)}</span>
               <span className="chip">Squad as of {l.squad_as_of}</span>
             </div>
+            <PrivateTransfersNote source={l.source} gameweek={l.gameweek} />
             <Notes notes={l.notes} />
 
             {l.close_calls.length > 0 || l.captain_lead_over_vice < 0.3 ? (

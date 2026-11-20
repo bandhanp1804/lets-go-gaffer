@@ -1865,3 +1865,29 @@ ul.usage li {
   margin: 48px 0 24px;
   font-size: 0.85rem;
 }
+
+/* Why recent transfers may be missing (PrivateTransfers.tsx), and recording them on What if */
+.privatenote {
+  margin: 10px 0;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--gold);
+  background: var(--surface);
+  font-size: 0.92rem;
+}
+.privatenote button.link {
+  font-size: inherit;
+}
+.madecta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  border-color: var(--gold);
+}
+.madecta p {
+  margin: 0;
+  flex: 1 1 280px;
+}

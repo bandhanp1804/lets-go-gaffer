@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Async } from "../../components/Async.tsx";
 import { Notes } from "../../components/Notes.tsx";
+import { PrivateTransfersNote, sourceLabel } from "../../components/PrivateTransfers.tsx";
 import { one, signed } from "../../lib/format.ts";
 import { query } from "../../lib/api.ts";
 import type { Transfers } from "../../lib/types.gen.ts";
@@ -55,8 +56,9 @@ export default function TransfersPage() {
               <span className="chip">Bank {t.bank}</span>
               <span className="chip">Gain counted over {t.horizon_gameweeks} gameweeks</span>
               {t.wildcard ? <span className="chip good">Wildcard: no points hit</span> : null}
-              <span className="chip">Squad as of {t.squad_as_of}</span>
+              <span className={`chip ${t.source === "live" ? "good" : "warn"}`}>{sourceLabel(t.source, t.squad_as_of)}</span>
             </div>
+            <PrivateTransfersNote source={t.source} gameweek={t.gameweek} />
             <Notes notes={t.notes} />
             {t.suggestions.length === 0 ? (
               <div className="panel">

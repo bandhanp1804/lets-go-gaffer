@@ -88,7 +88,7 @@ func (s *Service) ChipsFor(ctx context.Context, req ChipsRequest) (ChipsView, er
 	if err != nil {
 		return ChipsView{}, err
 	}
-	e := s.entryFor(newSquadKey(team, token))
+	e := s.entryFor(newSquadKey(team, token, ViewerFrom(ctx).Made))
 	e.cmu.Lock()
 	defer e.cmu.Unlock()
 	if e.chips == nil || s.deps.Now().Sub(e.chipsAt) >= chipsCacheTTL {

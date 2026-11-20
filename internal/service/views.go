@@ -36,7 +36,7 @@ type MyTeamView struct {
 	Manager        string       `json:"manager"`
 	TeamName       string       `json:"team_name"`
 	Gameweek       int          `json:"gameweek"`    // the gameweek being picked for
-	Source         string       `json:"source"`      // "live" or "public"
+	Source         string       `json:"source"`      // "live", "entered" (public plus the transfers the manager entered) or "public"
 	AsOf           string       `json:"squad_as_of"` // when the squad is from, to be quoted as written
 	Starting       []PlayerView `json:"starting"`
 	Bench          []PlayerView `json:"bench"`
