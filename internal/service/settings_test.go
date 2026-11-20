@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -119,7 +120,7 @@ func TestSettings_RowsCannotBeReadAcrossUsersOrWithAnotherKey(t *testing.T) {
 
 	// Mallory's row given Alice's ciphertext: it does not open as Mallory's.
 	st.rows["mallory"] = st.rows["alice"]
-	if v, err := s.Viewer(ctx, "mallory"); err != nil || v != (service.Viewer{}) {
+	if v, err := s.Viewer(ctx, "mallory"); err != nil || !reflect.DeepEqual(v, service.Viewer{}) {
 		t.Errorf("mallory got %+v (%v): a copied row must not open", v, err)
 	}
 

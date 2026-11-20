@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/bandhanpatel/lets-go-gaffer/internal/api"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/assistant"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/llm"
+	"github.com/bandhanpatel/lets-go-gaffer/internal/myteam"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/news"
 	"github.com/bandhanpatel/lets-go-gaffer/internal/service"
 )
@@ -913,6 +915,8 @@ func TestSavedSettingsChooseTheSquad(t *testing.T) {
 		{"a token sent: it is used as is", nil, map[string]string{"X-Gaffer-Team": "999", "X-Gaffer-Token": "Bearer a.b.c"}, service.Viewer{TeamID: 999, Token: "Bearer a.b.c"}},
 		{"behind the proxy with no user: nothing saved applies", []string{"X-Auth-Request-User"}, nil, service.Viewer{}},
 		{"a user header without a proxy is ignored", nil, map[string]string{"X-Auth-Request-User": "bob"}, service.Viewer{TeamID: 111, Token: savedToken}},
+		{"entered transfers sent with nothing else: kept alongside the saved team", nil, map[string]string{"X-Gaffer-Made": "101>201"},
+			service.Viewer{TeamID: 111, Token: savedToken, Made: []myteam.SwapSpec{{Out: "101", In: "201"}}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -926,7 +930,7 @@ func TestSavedSettingsChooseTheSquad(t *testing.T) {
 			if w := r.do("GET", "/api/team", "", tt.hdr); w.Code != 200 {
 				t.Fatalf("%d %s", w.Code, w.Body)
 			}
-			if r.svc.viewer != tt.want {
+			if !reflect.DeepEqual(r.svc.viewer, tt.want) {
 				t.Errorf("viewer = %+v, want %+v", r.svc.viewer, tt.want)
 			}
 		})

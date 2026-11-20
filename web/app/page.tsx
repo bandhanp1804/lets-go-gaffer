@@ -5,6 +5,7 @@ import { Async } from "../components/Async.tsx";
 import { Hero } from "../components/Hero.tsx";
 import { Landing } from "../components/Landing.tsx";
 import { Notes } from "../components/Notes.tsx";
+import { sourceLabel } from "../components/PrivateTransfers.tsx";
 import { useTeam } from "../components/TeamProvider.tsx";
 import { one, signed } from "../lib/format.ts";
 import type { Lineup, Status } from "../lib/types.gen.ts";
@@ -99,8 +100,8 @@ function AppHome() {
                   )}
                 </p>
                 <p className="muted">
-                  {l.source === "live" ? "Live from FPL" : "Public data"} · squad as of {l.squad_as_of}.{" "}
-                  {l.source !== "live" ? "Add your login token (Load my team → Live squad) to include transfers made since the deadline." : null}
+                  {sourceLabel(l.source, l.squad_as_of)} · squad as of {l.squad_as_of}.{" "}
+                  {l.source === "public" ? "FPL keeps transfers made since the deadline private: add your login token (Load my team → Live squad), or enter them on What if, to include them." : null}
                 </p>
                 <Link href="/lineup">See the full lineup →</Link>
               </div>

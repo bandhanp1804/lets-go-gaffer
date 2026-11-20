@@ -3,7 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getJSON, postJSON } from "../lib/api.ts";
 import { headersFor, loadIdentity, noIdentity, saveIdentity, type Identity } from "../lib/identity.ts";
-import type { UserSettings, UserSettingsRequest } from "../lib/types.gen.ts";
+import { addMade, currentMade, loadMade, madeHeader, saveMade, type MadeRecord, type MadeTransfer } from "../lib/made.ts";
+import type { Status, UserSettings, UserSettingsRequest } from "../lib/types.gen.ts";
 
 interface TeamState {
   identity: Identity;
@@ -25,6 +26,14 @@ interface TeamState {
   modalOpen: boolean;
   openModal: () => void;
   closeModal: () => void;
+  /**
+   * Transfers the manager says they made since the last deadline (FPL keeps them private until
+   * the next one). Sent with every request while the squad is not live, so every page uses them.
+   */
+  made: MadeTransfer[];
+  recordMade: (gameweek: number, moves: MadeTransfer[]) => void;
+  removeMade: (out: number) => void;
+  clearMade: () => void;
 }
 
 const Ctx = createContext<TeamState | null>(null);
@@ -34,6 +43,23 @@ export function TeamProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [ready, setReady] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [madeRec, setMadeRec] = useState<MadeRecord | null>(null);
+  const [gameweek, setGameweek] = useState<number | null>(null);
+
+  // The entered transfers, and the gameweek being picked for: once its deadline passes, FPL's
+  // public squad shows them itself, so the ones entered for it are dropped.
+  useEffect(() => {
+    setMadeRec(loadMade());
+    const ctl = new AbortController();
+    getJSON<Status>("/api/status", ctl.signal)
+      .then((s) => setGameweek(s.gameweek))
+      .catch(() => {});
+    return () => ctl.abort();
+  }, []);
+  const updateMade = useCallback((rec: MadeRecord | null) => {
+    setMadeRec(rec);
+    saveMade(rec);
+  }, []);
 
   const apply = useCallback((s: UserSettings) => {
     setSettings(s);
@@ -93,12 +119,33 @@ export function TeamProvider({ children }: { children: ReactNode }) {
   const closeModal = useCallback(() => setModalOpen(false), []);
 
   const live = settings !== null ? settings.token.saved && !settings.token.expired : identity.token !== "";
+  const made = useMemo(() => currentMade(madeRec, identity.teamId, gameweek), [madeRec, identity.teamId, gameweek]);
+  const recordMade = useCallback(
+    (gw: number, moves: MadeTransfer[]) => {
+      if (identity.teamId === null) return;
+      updateMade({ teamId: identity.teamId, gameweek: gw, moves: addMade(currentMade(madeRec, identity.teamId, gw), moves) });
+    },
+    [identity.teamId, madeRec, updateMade],
+  );
+  const removeMade = useCallback(
+    (out: number) => {
+      if (madeRec !== null) updateMade({ ...madeRec, moves: madeRec.moves.filter((m) => m.out !== out) });
+    },
+    [madeRec, updateMade],
+  );
+  const clearMade = useCallback(() => updateMade(null), [updateMade]);
+  const headers = useMemo(() => {
+    // With server settings the API looks the team and token up itself; only the entered
+    // transfers are sent. A live squad already has them, so they are not sent with one.
+    const h: Record<string, string> = settings !== null ? {} : headersFor(identity);
+    if (made.length > 0 && !live) h["X-Gaffer-Made"] = madeHeader(made);
+    return h;
+  }, [settings, identity, made, live]);
   const value = useMemo<TeamState>(
     () => ({
       identity,
       ready,
-      // With server settings the API looks the team and token up itself; nothing is sent.
-      headers: settings !== null ? {} : headersFor(identity),
+      headers,
       live,
       settings,
       setIdentity,
@@ -107,8 +154,12 @@ export function TeamProvider({ children }: { children: ReactNode }) {
       modalOpen,
       openModal,
       closeModal,
+      made,
+      recordMade,
+      removeMade,
+      clearMade,
     }),
-    [identity, ready, settings, live, setIdentity, saveSettings, clear, modalOpen, openModal, closeModal],
+    [identity, ready, headers, settings, live, setIdentity, saveSettings, clear, modalOpen, openModal, closeModal, made, recordMade, removeMade, clearMade],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -155,6 +155,7 @@ type squadSnap struct {
 	team  myteam.Team
 	fin   myteam.Finances
 	live  bool
+	made  []myteam.Change // transfers the manager entered, applied to the public squad
 	notes []string
 }
 
@@ -237,13 +238,14 @@ func (s *Service) squadSnapshot(ctx context.Context) (*baseSnap, *squadSnap, err
 	}
 	// One entry per manager and token: a new token is a new key, so a squad read without it
 	// (public data) is not served for the rest of the cache window after the manager logs in.
-	e := s.entryFor(newSquadKey(team, token))
+	made := ViewerFrom(ctx).Made
+	e := s.entryFor(newSquadKey(team, token, made))
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.snap != nil && s.deps.Now().Sub(e.at) < snapshotTTL {
 		return base, e.snap, nil
 	}
-	snap, err := s.loadSquad(ctx, base, team, token)
+	snap, err := s.loadSquad(ctx, base, team, token, made)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -252,8 +254,9 @@ func (s *Service) squadSnapshot(ctx context.Context) (*baseSnap, *squadSnap, err
 }
 
 // loadSquad reads one manager's squad: the live one when the token works, the public one
-// otherwise, with notes saying which and why.
-func (s *Service) loadSquad(ctx context.Context, base *baseSnap, teamID int, token string) (*squadSnap, error) {
+// otherwise, with notes saying which and why. Transfers the manager entered are applied to the
+// public one only: a live squad already has them.
+func (s *Service) loadSquad(ctx context.Context, base *baseSnap, teamID int, token string, made []myteam.SwapSpec) (*squadSnap, error) {
 	public, err := myteam.Load(ctx, s.deps.FPL, teamID, base.players)
 	var se *httpx.StatusError
 	if errors.As(err, &se) && se.StatusCode == http.StatusNotFound {
@@ -274,6 +277,9 @@ func (s *Service) loadSquad(ctx context.Context, base *baseSnap, teamID int, tok
 			return nil, err
 		}
 		snap.team, snap.fin, snap.live = team, fin, true
+		if len(made) > 0 {
+			snap.notes = append(snap.notes, "The transfers you entered are not applied: the live squad already includes every transfer you have made.")
+		}
 		return snap, nil
 	}
 	ids := make([]int, len(public.Squad.Players))
@@ -289,10 +295,62 @@ func (s *Service) loadSquad(ctx context.Context, base *baseSnap, teamID int, tok
 		return nil, err
 	}
 	snap.team, snap.fin = public, fin
-	snap.notes = append(snap.notes, fmt.Sprintf(
-		"This squad is as of the GW%d deadline: FPL hides transfers made since. Anything the manager has changed since then is not reflected.",
-		public.Event))
+	pending, applied := pendingTransfers(public.Squad.Players, made)
+	if len(pending) == 0 {
+		snap.notes = append(snap.notes, fmt.Sprintf(
+			"This squad is as of the GW%d deadline: FPL keeps transfers made since then private until the next deadline, so they are not reflected. Add your login token (Live squad), or enter the transfers you have made, to include them.",
+			public.Event))
+		if applied > 0 {
+			snap.notes = append(snap.notes, "The transfers you entered are already in FPL's squad, so they are not applied again.")
+		}
+		return snap, nil
+	}
+	if err := s.applyMade(snap, base, pending); err != nil {
+		return nil, err
+	}
 	return snap, nil
+}
+
+// pendingTransfers drops the entered transfers that FPL's public squad already shows (after
+// the deadline they were made for): the one sold is gone from it and the one bought is in it.
+// It returns the rest and how many it dropped.
+func pendingTransfers(squad []fpl.Player, made []myteam.SwapSpec) ([]myteam.SwapSpec, int) {
+	owned := make(map[string]bool, len(squad))
+	for _, p := range squad {
+		owned[strconv.Itoa(p.ID)] = true
+	}
+	var pending []myteam.SwapSpec
+	for _, m := range made {
+		if !owned[m.Out] && owned[m.In] {
+			continue
+		}
+		pending = append(pending, m)
+	}
+	return pending, len(made) - len(pending)
+}
+
+// applyMade applies transfers the manager entered to a public squad, with FPL's rules checked
+// in Go: the player sold must be theirs, the squad must keep its shape and the three-per-club
+// limit, and the bank cannot go below zero. A transfer that breaks a rule is refused with the
+// reason, rather than shown as a squad FPL would never have allowed.
+func (s *Service) applyMade(snap *squadSnap, base *baseSnap, made []myteam.SwapSpec) error {
+	changes, err := myteam.ResolveSwaps(snap.team.Squad.Players, base.players, made)
+	if err != nil {
+		return badInput("The transfers you entered do not fit your squad: %v. Remove them on the What if page and enter them again.", err)
+	}
+	team, err := myteam.Apply(snap.team, changes)
+	if err != nil {
+		return badInput("The transfers you entered do not fit your squad: %v. Remove them on the What if page and enter them again.", err)
+	}
+	fin := myteam.ApplyFinances(snap.fin, changes)
+	if fin.Bank < 0 {
+		return badInput("The transfers you entered would leave you %s over budget, which FPL does not allow: remove them on the What if page and enter them again.", formatMoney(-fin.Bank))
+	}
+	snap.team, snap.fin, snap.made = team, fin, changes
+	snap.notes = append(snap.notes, fmt.Sprintf(
+		"This is your squad as of the GW%d deadline plus the %d transfer%s you entered (%s). FPL keeps transfers private until the next deadline, so these are your word, not FPL's: they are checked against FPL's rules, not against your account.",
+		team.Event, len(changes), plural(len(changes), "", "s"), myteam.DescribeChanges(changes)))
+	return nil
 }
 
 // tryLive reads the live squad if there is a token. It never fails: it returns nil and a
@@ -321,9 +379,14 @@ func (s *Service) tryLive(ctx context.Context, teamID int, token string) (*fpl.M
 	return live, note
 }
 
+// source says where a squad came from: "live" (read with the manager's token), "entered"
+// (the public squad plus transfers the manager entered) or "public".
 func (s *Service) source(sq *squadSnap) string {
-	if sq.live {
+	switch {
+	case sq.live:
 		return "live"
+	case len(sq.made) > 0:
+		return "entered"
 	}
 	return "public"
 }
@@ -334,6 +397,9 @@ func (s *Service) source(sq *squadSnap) string {
 func (s *Service) asOf(sq *squadSnap) string {
 	if sq.live {
 		return "now (live from FPL)"
+	}
+	if len(sq.made) > 0 {
+		return fmt.Sprintf("the GW%d deadline, plus the transfers you entered", sq.team.Event)
 	}
 	return fmt.Sprintf("the GW%d deadline", sq.team.Event)
 }

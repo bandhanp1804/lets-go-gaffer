@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/bandhanpatel/lets-go-gaffer/internal/myteam"
 )
 
 // Viewer is whose squad a request is about. It travels in the request's context so that
@@ -16,6 +19,10 @@ import (
 type Viewer struct {
 	TeamID int    // 0 means the team the server is configured with
 	Token  string // empty means no live squad
+	// Made is the transfers the manager says they have made since the last deadline. FPL keeps
+	// those private until the next deadline, so without a token this is the only way to see
+	// them; they are applied to the public squad, checked against FPL's rules, never to a live one.
+	Made []myteam.SwapSpec
 }
 
 type viewerKey struct{}
@@ -57,18 +64,29 @@ func (s *Service) who(ctx context.Context) (team int, token string, err error) {
 	return team, "", nil
 }
 
-// squadKey identifies one cached squad. The token is hashed, so the cache never holds one.
+// squadKey identifies one cached squad. The token is hashed, so the cache never holds one. The
+// transfers a manager entered are part of it: the squad with them is a different squad.
 type squadKey struct {
 	team  int
 	token [sha256.Size]byte
+	made  string
 }
 
-func newSquadKey(team int, token string) squadKey {
-	k := squadKey{team: team}
+func newSquadKey(team int, token string, made []myteam.SwapSpec) squadKey {
+	k := squadKey{team: team, made: madeKey(made)}
 	if token != "" {
 		k.token = sha256.Sum256([]byte(token))
 	}
 	return k
+}
+
+// madeKey writes entered transfers the way they arrive, "101>201,113>206".
+func madeKey(made []myteam.SwapSpec) string {
+	parts := make([]string, len(made))
+	for i, m := range made {
+		parts[i] = m.Out + ">" + m.In
+	}
+	return strings.Join(parts, ",")
 }
 
 // squadEntry is one cached squad. Its own lock means two requests for the same squad

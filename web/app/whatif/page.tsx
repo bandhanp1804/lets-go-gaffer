@@ -6,8 +6,10 @@ import { Async } from "../../components/Async.tsx";
 import { Candidates } from "../../components/Candidates.tsx";
 import { Notes } from "../../components/Notes.tsx";
 import { Pitch } from "../../components/Pitch.tsx";
+import { EnteredTransfers, PrivateTransfersNote, sourceLabel } from "../../components/PrivateTransfers.tsx";
 import type { Mark } from "../../components/PlayerCard.tsx";
 import { SubsResult } from "../../components/SubsResult.tsx";
+import { useTeam } from "../../components/TeamProvider.tsx";
 import { WhatIfResult } from "../../components/WhatIfResult.tsx";
 import { clickForSubs, noSubs, subsMarks, subsRequest, type SubsDraft } from "../../lib/subs.ts";
 import type { MyTeam, Player, Subs } from "../../lib/types.gen.ts";
@@ -78,6 +80,7 @@ function SubsBuilder({ t }: { t: MyTeam }) {
 function Builder() {
   const params = useSearchParams();
   const team = useApi<MyTeam>("/api/team");
+  const { recordMade } = useTeam();
   const [mode, setMode] = useState<"transfers" | "subs">(() => (params.get("mode") === "subs" ? "subs" : "transfers"));
   const [moves, setMoves] = useState<DraftMove[]>(() => movesFromParam(params.get("moves")));
   const [horizon, setHorizon] = useState(() => intParam(params.get("horizon"), 1, 10) ?? 4);
@@ -122,6 +125,7 @@ function Builder() {
         The rules and the points are checked here, and nothing is sent to FPL.
       </p>
 
+      <EnteredTransfers />
       <Async state={team}>
         {(t) => (
           <>
@@ -130,8 +134,9 @@ function Builder() {
               <span className="chip">
                 {t.free_transfers_left} free transfer{t.free_transfers_left === 1 ? "" : "s"}
               </span>
-              <span className={`chip ${t.source === "live" ? "good" : "warn"}`}>{t.source === "live" ? "Live from FPL" : `Public data, as of ${t.squad_as_of}`}</span>
+              <span className={`chip ${t.source === "live" ? "good" : "warn"}`}>{sourceLabel(t.source, t.squad_as_of)}</span>
             </div>
+            <PrivateTransfersNote source={t.source} gameweek={t.gameweek} onWhatIf />
             <Notes notes={t.notes} />
 
             {mode === "subs" ? (
@@ -214,6 +219,28 @@ function Builder() {
               {result.data ? (
                 <div className={result.loading ? "dim" : undefined}>
                   <WhatIfResult v={result.data} />
+                  {result.data.valid && t.source !== "live" && moves.length > 0 && moves.every((m) => m.in !== null) ? (
+                    <div className="panel madecta">
+                      <p>
+                        Already made these transfers on FPL? Record them, and every page uses your squad with them until the GW{t.gameweek} deadline, when FPL shows them
+                        itself.
+                      </p>
+                      <button
+                        type="button"
+                        className="primary"
+                        onClick={() => {
+                          recordMade(
+                            t.gameweek,
+                            moves.map((m) => ({ out: m.out, in: m.in as number, outName: byId.get(m.out)?.name ?? `player ${m.out}`, inName: byId.get(m.in as number)?.name ?? `player ${m.in}` })),
+                          );
+                          setMoves([]);
+                          setEditing(null);
+                        }}
+                      >
+                        I’ve made these on FPL
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ) : result.loading ? (
                 <p className="muted">Weighing the plan…</p>
